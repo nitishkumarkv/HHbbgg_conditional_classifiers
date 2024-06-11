@@ -6,4 +6,7 @@
 micromamba env create -f env.yml
 ```
 
-test
+Execute this to activate the environment:
+```
+micromamba activate HHbbgg_classifier
+```
