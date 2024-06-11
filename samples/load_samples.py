@@ -20,6 +20,7 @@ with open("output.txt", "w") as file: # you can save the filed in a txt file
 
 print(fileds)
 print(events.pt)
+events['pt']
 
 
 # example of event selection
