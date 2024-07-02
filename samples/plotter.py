@@ -4,20 +4,27 @@ import matplotlib.pyplot as plt
 import mplhep as hep # this is a package that helps to plot in CMS style. mplhep = MatPlotLib for High Energy Physics
 from pathlib import Path
 import argparse
+import json
 
 
 def load_parquet_files(NTuples_path):
 
     # List of MC samples
-    MC_samples = ["GGJets", "GJetPt40", "GluGluHToGG", "VBFHToGG", "VHToGG", "ttHToGG", "GluGluToHH"]
-    MC_array_dict = {}  # create empty dictionary in which you can add the different samples loaded
-    # you can read more about the dictionaries in python
+    MC_samples = ["GluGluToHH", "ttHToGG", "GGJets"]
+    selected_MC_samples = ["GJetPt40", "GJetPt20To40"]
+    MC_array_dict = {"GJetPt20": []}
+
+    for MC in selected_MC_samples:
+        MC_data = ak.from_parquet(f'{NTuples_path}/{MC}/nominal')
+        MC_array_dict["GJetPt20"].append(MC_data)
+        print(f'INFO: Loaded data from {NTuples_path}/{MC}/nominal')
 
     for MC in MC_samples:
+        if len(MC_array_dict)<20:
         # load the MC parquet files and add them to the MC_array_dict
-        MC_array_dict[MC] = ak.from_parquet(f'{NTuples_path}/{MC}/nominal')
-        print(f'INFO: Loaded and selected VBF enriched events from {NTuples_path}/{MC}/nominal')
-
+            MC_array_dict[MC] = ak.from_parquet(f'{NTuples_path}/{MC}/nominal')
+            print(f'INFO: Loaded and selected VBF enriched events from {NTuples_path}/{MC}/nominal')
+    MC_array_dict["GJetPt20"] = ak.concatenate(MC_array_dict["GJetPt20"], axis=0)
     return MC_array_dict
 
 
@@ -25,6 +32,7 @@ def plot_variables(config, NTuples_path, outpath):
 
     # get data and MC arrays
     MC_arr = load_parquet_files(NTuples_path)
+    print(MC_arr)
 
     # get the histograms and plot it
     for var in config.keys():
@@ -36,10 +44,33 @@ def plot_variables(config, NTuples_path, outpath):
         MC_hists = {}
         MC_edges = {}
         for MC in MC_arr.keys():
+            #if MC_arr.keys() != "GJetPt40" and if MC_arr.keys() != "GJetPt20To40":
             weight = np.asarray(MC_arr[MC].weight) # get the weights for each event
-            MC_hists[MC], MC_edges[MC] = np.histogram(MC_arr[MC][var_config["name"]], bins=binning, weights=weight, density=True)
+            
             # check more about the np.histogram and its arguments
-
+            if var_config["type"] == "quotient":
+                # Extract arrays and calculate the quotient of the two variables
+                variable1 = np.asarray(MC_arr[MC][var_config["var1"]])
+                variable2 = np.asarray(MC_arr[MC][var_config["var2"]])
+                quotient = variable1 / variable2
+                data_to_plot = quotient
+            elif var_config["type"] == "difference":
+                variable1 = np.asarray(MC_arr[MC][var_config["var1"]])
+                variable2 = np.asarray(MC_arr[MC][var_config["var2"]])
+                difference = variable1-variable2
+                data_to_plot = difference
+            elif var_config["type"] == "chisquared":
+                mw=80.3
+                mt=173.5
+                mjj = np.asarray(MC_arr[MC][var_config["var1"]])
+                mbjj = np.asarray(MC_arr[MC][var_config["var2"]])
+                chisquared = ((mw-mjj)/(0.1*mw))**2+((mt-mbjj)/(0.1*mt))**2
+                data_to_plot = chisquared
+            else:
+                # Extract the single variable
+                data_to_plot = np.asarray(MC_arr[MC][var_config["name"]])
+            
+            MC_hists[MC], MC_edges[MC] = np.histogram(data_to_plot, bins=binning, weights=weight, density=True)
             hep.histplot((MC_hists[MC], MC_edges[MC]), histtype='step', label=MC)
 
         # set other plotting configs
@@ -58,26 +89,6 @@ def plot_variables(config, NTuples_path, outpath):
         print(f"INFO: Histogram saved for {var} in {outpath}")
         plt.clf()
 
-# define the variable to plot
-var_dict = {
-    "diphoton_pt": {
-        "name": "pt", # this is the variable name in the samples
-        "xlabel": "$\\mathrm{p}_{T}^{\\gamma\\gamma}$ [GeV]",
-        "ylabel": "Events per bin",
-        "hist_range": [0, 500],
-        "n_bins": 40,
-        "plot_range": [0, 500]
-    },
-    "diphoton_mass": {
-        "name": "mass",
-        "xlabel": "$m_{j_1j_2}$ [GeV]",
-        "ylabel": "Events per bin",
-        "hist_range": [100, 200],
-        "n_bins": 40,
-        "plot_range": [100, 200]
-    }
-}
-
 # call the plotting function
 samples_path = "/net/scratch_cms3a/kasaraguppe/public/HHbbgg_samples/"
-plot_variables(var_dict, samples_path, "plots")
+plot_variables(json.load(open("variables.json")), samples_path, "plots")
