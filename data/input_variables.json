@@ -1,0 +1,8 @@
+{
+        "mlp": [
+            "pt",
+            "eta",
+            "phi",
+            "weight"
+        ]
+}
