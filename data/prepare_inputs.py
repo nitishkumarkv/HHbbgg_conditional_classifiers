@@ -1,5 +1,7 @@
 import awkward as ak
+import numpy as np
 import json
+import os
 from typing import Any, Dict, List, Optional
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -11,7 +13,7 @@ class PrepareInputs:
         self
         ) -> None:
         self.model_type = "mlp"
-        self.input_var_json = "input_variables.json"
+        self.input_var_json = os.path.join(os.path.dirname(__file__), "input_variables.json")
         self.sample_to_class = {
             "GGJets": "is_non_resonant_bkg",
             "GJetPt20To40": "is_non_resonant_bkg",
@@ -24,7 +26,8 @@ class PrepareInputs:
 
     def load_vars(self, path):
         print(path)
-        vals = json.load(open(path))
+        with open(path) as f:
+            vals = json.load(f)
         return vals
 
     def load_parquet(self, path, N_files=-1):
@@ -41,6 +44,10 @@ class PrepareInputs:
 
         # add more variables to the events here
         # events["varable"] = variable # the variable has to be calculated from the existing variables in events
+        log_vars = ["pt"]  # Beispiel Variablennamen ersetzen
+        for var in log_vars:
+            if var in events.fields:
+                events[var] = np.log(events[var])
 
         events["weight"] = ak.ones_like(events.pt)  # now adding dummy weight. This has to be ubdated
 
@@ -88,4 +95,4 @@ class PrepareInputs:
 
 
 out = PrepareInputs()
-out.prep_input("/net/scratch_cms3a/kasaraguppe/public/HHbbgg_samples/", "/net/scratch_cms3a/kasaraguppe/public/HHbbgg_samples/training_inputs")
+out.prep_input("/net/scratch_cms3a/kasaraguppe/public/HHbbgg_samples/", "/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/models")

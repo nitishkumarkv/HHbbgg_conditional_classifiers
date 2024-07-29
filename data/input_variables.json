@@ -3,6 +3,7 @@
             "pt",
             "eta",
             "phi",
+            "mass",
             "weight"
         ]
 }

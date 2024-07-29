@@ -9,12 +9,12 @@ class MLP(nn.Module):
 
         # Input layer
         layers.append(nn.Linear(input_size, num_nodes))
-        layers.append(nn.ReLU())
+        layers.append(nn.ELU())
 
         # Hidden layers
         for _ in range(num_layers - 1):
             layers.append(nn.Linear(num_nodes, num_nodes))
-            layers.append(nn.ReLU())
+            layers.append(nn.ELU())
 
         # Output layer
         layers.append(nn.Linear(num_nodes, output_size))
