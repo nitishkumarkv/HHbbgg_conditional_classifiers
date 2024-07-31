@@ -4,6 +4,7 @@
             "eta",
             "phi",
             "mass",
+            "pholead_PtOverM",
             "weight"
         ]
 }

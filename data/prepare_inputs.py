@@ -6,6 +6,8 @@ from typing import Any, Dict, List, Optional
 import pyarrow as pa
 import pyarrow.parquet as pq
 import glob
+import mplhep as hep
+import matplotlib.pyplot as plt
 
 
 class PrepareInputs:
@@ -44,14 +46,32 @@ class PrepareInputs:
 
         # add more variables to the events here
         # events["varable"] = variable # the variable has to be calculated from the existing variables in events
-        log_vars = ["pt"]  # Beispiel Variablennamen ersetzen
-        for var in log_vars:
-            if var in events.fields:
+        for var in events.fields:
+            if 'pt' in var:
                 events[var] = np.log(events[var])
 
-        events["weight"] = ak.ones_like(events.pt)  # now adding dummy weight. This has to be ubdated
-
+        #events["weight"] = ak.ones_like(events.pt)
+        
         return events
+    
+    def plot_pt_variables(self, comb_inputs, vars_for_training):
+        for var in vars_for_training:
+            if 'pt' in var or 'Pt' in var:
+                plt.figure()
+                for cls in self.classes:
+                    class_events = comb_inputs[comb_inputs[cls] == 1]
+                    data_to_plot = class_events[var]
+                    binning = np.linspace(0, 10, 41)
+                    Hist, Edges = np.histogram(ak.to_numpy(data_to_plot), bins=binning, density=True)
+                    hep.histplot((Hist, Edges), histtype='step', label=f'{cls}')
+                plt.xlabel(f"{var}")
+                plt.ylabel("Events per bin")
+                plt.xlim([0, 10])
+                plt.ylim(bottom=0)
+                plt.legend()
+                hep.cms.label("Private work", data=False, year="2022", com=13.6)
+                plt.savefig(f'/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/data/{var}_plot.png')
+                plt.clf()
 
     def prep_input(self, samples_path, out_path) -> ak.Array:
 
@@ -82,6 +102,25 @@ class PrepareInputs:
             print(f"INFO: Number of events in {samples}: {len(events)}")
 
         comb_inputs = ak.concatenate(comb_inputs, axis=0)
+
+        self.plot_pt_variables(comb_inputs, vars_for_training)
+
+        # Calculate class weights
+        class_counts = {}
+        for cls in self.classes:
+            class_counts[cls] = ak.sum(getattr(comb_inputs, cls))
+        print(f"INFO: Class counts: {class_counts}")
+    
+        class_weights = {cls: 1.0 / class_counts[cls] for cls in self.classes}
+        print(f"INFO: Class weights: {class_weights}")
+
+        # Apply class weights
+        weight_array = np.zeros(len(events.pt), dtype=np.float64)
+        for cls, weight in class_weights.items():
+            weight_array += weight * ak.to_numpy(events[cls])
+
+        # Add weight array to events
+        events["weight"] = ak.Array(weight_array)
 
         print("\n", f"INFO: Number of events in is_non_resonant_bkg: {sum(comb_inputs.is_non_resonant_bkg)}")
         print(f" INFO: Number of events in is_ttH_bkg: {sum(comb_inputs.is_ttH_bkg)}")
