@@ -98,29 +98,31 @@ y_test = torch.tensor(y_test, dtype=torch.float32).to(device)
 y_val = torch.tensor(y_val, dtype=torch.float32).to(device)
 
 #calculate weights
+classes=np.unique(y, axis=0)
+rev_counts=[]
+for entry in classes:
+    count=np.sum(np.all(y == entry, axis=1))
+    rev_counts.append(count)
+class_counts=rev_counts[::-1]
 
-#the next five lines will be changed
-weights=ak.ones_like(classes)
-class_counts={}
-for cls in classes:
-    class_counts[cls]=np.sum(np.all(y == cls, axis=1))
-print(class_counts)
-    
-
+weights=[]
+for count in class_counts:
+    weights.append(1/count)
+weights=torch.tensor(weights, dtype=torch.float32).to(device)
 
 #loss function, optimization function
-loss_fn = nn.CrossEntropyLoss()
+loss_fn = nn.CrossEntropyLoss(weight=weights)
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 #prepare model and training parameters
-n_epochs = 5
+n_epochs = 15
 batch_size = 32
 batches_per_epoch = len(X_train) // batch_size
 
 best_acc = - np.inf   # init to negative infinity
 best_loss = np.inf
 best_weights = None
-patience = 15
+patience = 10
 counter = 0
 
 train_loss_hist = []
