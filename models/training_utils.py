@@ -11,6 +11,7 @@ import tqdm
 import copy
 from sklearn.model_selection import train_test_split
 from sklearn import preprocessing
+from sklearn.preprocessing import StandardScaler
 
 # the MLP model is already imported
 # define all other things that are required for training:
@@ -39,50 +40,54 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print('INFO: Used device is', device)
 model.to(device)
 
-# Remove default values
-processed_vars = []
-for var in vars_for_training:
-    var_array = ak.to_numpy(inputs[var])
-    var_array = var_array[var_array > -998]
-    processed_vars.append(var_array)
-
 # Stack the processed variables into a feature matrix
+classes=["is_non_resonant_bkg", "is_ttH_bkg", "is_GluGluToHH_sig", "is_VBFToHH_sig"]
 X = np.column_stack([ak.to_numpy(inputs[var]) for var in vars_for_training])
-y = np.column_stack([ak.to_numpy(inputs[cls]) for cls in ["is_non_resonant_bkg", "is_ttH_bkg", "is_GluGluToHH_sig", "is_VBFToHH_sig"]])
-
-# Ensure the labels correspond to the filtered features
-mask = np.all(np.column_stack([ak.to_numpy(inputs[var]) for var in vars_for_training]) > -998, axis=1)
-y = y[mask]
+y = np.column_stack([ak.to_numpy(inputs[cls]) for cls in classes])
 
 X_tensor = torch.tensor(X, dtype=torch.float32).to(device)
-print(X_tensor)
 y_tensor = torch.tensor(y, dtype=torch.float32).to(device)
 
-#standardization
-scaler = preprocessing.StandardScaler().fit(X_tensor.cpu().numpy())
-X_scaled = scaler.transform(X_tensor.cpu().numpy())
-X_scaled = torch.tensor(X_scaled, dtype=torch.float32).to(device)
-
-#check standardization
-for entry in X_scaled.mean(axis=0):
-    if entry < 1.0*10**(-6):
-        mean_calc = 'correct'
+def standardize_tensor(X_tensor, threshold=-998, device='cpu'):
+    #convert to numpy 
+    X_np = X_tensor.cpu().numpy()
+    # create mask
+    valid_mask = X_np > threshold
+    #copy array
+    X_for_stnd = np.copy(X_np)
+    #replace default values with nan
+    X_for_stnd[~valid_mask] = np.nan
+    # create list to check standardization
+    mean=[]
+    std=[]
+    #standardize each column
+    for col in range(X_np.shape[1]):
+        #prepare column
+        col_data = X_for_stnd[:, col].reshape(-1, 1)
+        valid_col_data = col_data[~np.isnan(col_data)]
+        #standrardize
+        scaler = StandardScaler()
+        col_data_scaled = scaler.fit_transform(valid_col_data.reshape(-1, 1)).flatten()
+        X_for_stnd[~np.isnan(X_for_stnd[:, col]), col] = col_data_scaled
+        #check if standradization works
+        if np.mean(col_data_scaled) < 1.0*10**(-6) and np.mean(col_data_scaled) > -1.0*10**(-6):
+            mean.append(0)
+        if np.std(col_data_scaled) < 1.0001 and np.std(col_data_scaled) > 0.9999:
+            std.append(0)
+    if np.sum(mean) == 0 and np.sum(std) == 0:
+        print('INFO: Standardization works')
     else:
-        mean_calc = 'incorrect'
+        print('INFO: Standardization not correct')
+    #convert array to original shape and create tensor
+    X_scaled = np.where(np.isnan(X_for_stnd), -999, X_for_stnd)
+    X_scaled_tensor = torch.tensor(X_scaled, dtype=torch.float32).to(X_tensor.device)
 
-for entry in X_scaled.std(axis=0):
-    if entry == 1.0000:
-        std_calc = 'correct'
-    else:
-        std_calc = 'incorrect'
+    return X_scaled_tensor
 
-if mean_calc == 'correct' and std_calc == 'correct':
-    print('INFO: standardization works')
-else:
-    print('INFO: standardization not correct')
+X_scaled_tensor = standardize_tensor(X_tensor, device=device)
 
 #seperate and randomize
-X_train, X_test_val, y_train, y_test_val = train_test_split(X_scaled.cpu().numpy(), y_tensor.cpu().numpy(), train_size=0.6, shuffle=True)
+X_train, X_test_val, y_train, y_test_val = train_test_split(X_scaled_tensor.cpu().numpy(), y_tensor.cpu().numpy(), train_size=0.6, shuffle=True)
 X_test, X_val, y_test, y_val = train_test_split(X_test_val, y_test_val, train_size=0.5, shuffle=True)
 
 X_train = torch.tensor(X_train, dtype=torch.float32).to(device)
@@ -92,12 +97,23 @@ y_train = torch.tensor(y_train, dtype=torch.float32).to(device)
 y_test = torch.tensor(y_test, dtype=torch.float32).to(device)
 y_val = torch.tensor(y_val, dtype=torch.float32).to(device)
 
+#calculate weights
+
+#the next five lines will be changed
+weights=ak.ones_like(classes)
+class_counts={}
+for cls in classes:
+    class_counts[cls]=np.sum(np.all(y == cls, axis=1))
+print(class_counts)
+    
+
+
 #loss function, optimization function
 loss_fn = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 #prepare model and training parameters
-n_epochs = 25
+n_epochs = 5
 batch_size = 32
 batches_per_epoch = len(X_train) // batch_size
 

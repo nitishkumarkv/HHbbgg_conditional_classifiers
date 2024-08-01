@@ -46,12 +46,13 @@ class PrepareInputs:
 
         # add more variables to the events here
         # events["varable"] = variable # the variable has to be calculated from the existing variables in events
+       
         for var in events.fields:
             if 'pt' in var:
                 events[var] = np.log(events[var])
 
-        #events["weight"] = ak.ones_like(events.pt)
-        
+        events["weight"] = ak.ones_like(events.pt)
+         
         return events
     
     def plot_pt_variables(self, comb_inputs, vars_for_training):
@@ -104,23 +105,6 @@ class PrepareInputs:
         comb_inputs = ak.concatenate(comb_inputs, axis=0)
 
         self.plot_pt_variables(comb_inputs, vars_for_training)
-
-        # Calculate class weights
-        class_counts = {}
-        for cls in self.classes:
-            class_counts[cls] = ak.sum(getattr(comb_inputs, cls))
-        print(f"INFO: Class counts: {class_counts}")
-    
-        class_weights = {cls: 1.0 / class_counts[cls] for cls in self.classes}
-        print(f"INFO: Class weights: {class_weights}")
-
-        # Apply class weights
-        weight_array = np.zeros(len(events.pt), dtype=np.float64)
-        for cls, weight in class_weights.items():
-            weight_array += weight * ak.to_numpy(events[cls])
-
-        # Add weight array to events
-        events["weight"] = ak.Array(weight_array)
 
         print("\n", f"INFO: Number of events in is_non_resonant_bkg: {sum(comb_inputs.is_non_resonant_bkg)}")
         print(f" INFO: Number of events in is_ttH_bkg: {sum(comb_inputs.is_ttH_bkg)}")
