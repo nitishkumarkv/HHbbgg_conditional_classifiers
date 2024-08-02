@@ -3,6 +3,7 @@ from mlp import MLP
 import awkward as ak
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -12,21 +13,28 @@ import copy
 from sklearn.model_selection import train_test_split
 from sklearn import preprocessing
 from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import confusion_matrix,classification_report
 
 # the MLP model is already imported
 # define all other things that are required for training:
 # take the inputs, apply standardization, separate and randomize inputs into training/test sets, optimization function, loss function, backpropagation and weight updation, etc.
 
-input_file = '/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/models/dummy_input_for_mlp.parquet'
-inputs = ak.from_parquet(input_file)
+tensors_for_training = torch.load('/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/models/tensors_for_training', weights_only=True)
 
-# load variables from json file
-input_var_json = "/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/data/input_variables.json"
-with open(input_var_json) as f:
-    vars_for_training = json.load(f)["mlp"]
+X_train = tensors_for_training['X_train']
+X_val = tensors_for_training['X_val']
+X_test = tensors_for_training['X_test']
+y_train = tensors_for_training['y_train']
+y_val = tensors_for_training['y_val']
+y_test = tensors_for_training['y_test']
+n_inputs = tensors_for_training['n_inputs']
+weights = tensors_for_training['weights'] * 1000000
+print(weights)
+
+classes=["non resonant bkg", "ttH bkg", "GluGluToHH sig", "VBFToHH sig"]
 
 # set parameters
-input_size = len(vars_for_training)
+input_size = n_inputs
 num_layers = 3
 num_nodes = 512
 output_size = 4
@@ -39,76 +47,6 @@ model = MLP(input_size, num_layers, num_nodes, output_size, act_fn)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print('INFO: Used device is', device)
 model.to(device)
-
-# Stack the processed variables into a feature matrix
-classes=["is_non_resonant_bkg", "is_ttH_bkg", "is_GluGluToHH_sig", "is_VBFToHH_sig"]
-X = np.column_stack([ak.to_numpy(inputs[var]) for var in vars_for_training])
-y = np.column_stack([ak.to_numpy(inputs[cls]) for cls in classes])
-
-X_tensor = torch.tensor(X, dtype=torch.float32).to(device)
-y_tensor = torch.tensor(y, dtype=torch.float32).to(device)
-
-def standardize_tensor(X_tensor, threshold=-998, device='cpu'):
-    #convert to numpy 
-    X_np = X_tensor.cpu().numpy()
-    # create mask
-    valid_mask = X_np > threshold
-    #copy array
-    X_for_stnd = np.copy(X_np)
-    #replace default values with nan
-    X_for_stnd[~valid_mask] = np.nan
-    # create list to check standardization
-    mean=[]
-    std=[]
-    #standardize each column
-    for col in range(X_np.shape[1]):
-        #prepare column
-        col_data = X_for_stnd[:, col].reshape(-1, 1)
-        valid_col_data = col_data[~np.isnan(col_data)]
-        #standrardize
-        scaler = StandardScaler()
-        col_data_scaled = scaler.fit_transform(valid_col_data.reshape(-1, 1)).flatten()
-        X_for_stnd[~np.isnan(X_for_stnd[:, col]), col] = col_data_scaled
-        #check if standradization works
-        if np.mean(col_data_scaled) < 1.0*10**(-6) and np.mean(col_data_scaled) > -1.0*10**(-6):
-            mean.append(0)
-        if np.std(col_data_scaled) < 1.0001 and np.std(col_data_scaled) > 0.9999:
-            std.append(0)
-    if np.sum(mean) == 0 and np.sum(std) == 0:
-        print('INFO: Standardization works')
-    else:
-        print('INFO: Standardization not correct')
-    #convert array to original shape and create tensor
-    X_scaled = np.where(np.isnan(X_for_stnd), -999, X_for_stnd)
-    X_scaled_tensor = torch.tensor(X_scaled, dtype=torch.float32).to(X_tensor.device)
-
-    return X_scaled_tensor
-
-X_scaled_tensor = standardize_tensor(X_tensor, device=device)
-
-#seperate and randomize
-X_train, X_test_val, y_train, y_test_val = train_test_split(X_scaled_tensor.cpu().numpy(), y_tensor.cpu().numpy(), train_size=0.6, shuffle=True)
-X_test, X_val, y_test, y_val = train_test_split(X_test_val, y_test_val, train_size=0.5, shuffle=True)
-
-X_train = torch.tensor(X_train, dtype=torch.float32).to(device)
-X_test = torch.tensor(X_test, dtype=torch.float32).to(device)
-X_val = torch.tensor(X_val, dtype=torch.float32).to(device)
-y_train = torch.tensor(y_train, dtype=torch.float32).to(device)
-y_test = torch.tensor(y_test, dtype=torch.float32).to(device)
-y_val = torch.tensor(y_val, dtype=torch.float32).to(device)
-
-#calculate weights
-classes=np.unique(y, axis=0)
-rev_counts=[]
-for entry in classes:
-    count=np.sum(np.all(y == entry, axis=1))
-    rev_counts.append(count)
-class_counts=rev_counts[::-1]
-
-weights=[]
-for count in class_counts:
-    weights.append(1/count)
-weights=torch.tensor(weights, dtype=torch.float32).to(device)
 
 #loss function, optimization function
 loss_fn = nn.CrossEntropyLoss(weight=weights)
@@ -132,8 +70,8 @@ val_acc_hist = []
 
 #training loop
 for epoch in range(n_epochs):
-    epoch_loss = []
-    epoch_acc = []
+    batch_loss = []
+    batch_acc = []
 
     model.train()
     with tqdm.trange(batches_per_epoch, unit="batch", mininterval=0) as bar:
@@ -154,12 +92,14 @@ for epoch in range(n_epochs):
             optimizer.step()
             # compute and store metrics
             acc = (torch.argmax(y_pred, 1) == torch.argmax(y_batch, 1)).float().mean()
-            epoch_loss.append(float(loss))
-            epoch_acc.append(float(acc))
+
+            batch_loss.append(float(loss))
+            batch_acc.append(float(acc))
             bar.set_postfix(
                 loss=float(loss),
                 acc=float(acc)
             )
+
     #evaluation
     model.eval()
 
@@ -170,8 +110,8 @@ for epoch in range(n_epochs):
     ce = float(ce)
     acc = float(acc)
 
-    train_loss_hist.append(np.mean(epoch_loss))
-    train_acc_hist.append(np.mean(epoch_acc))
+    train_loss_hist.append(np.mean(batch_loss))
+    train_acc_hist.append(np.mean(batch_acc))
     val_loss_hist.append(ce)
     val_acc_hist.append(acc)
 
@@ -179,11 +119,25 @@ for epoch in range(n_epochs):
     if acc > best_acc:
         best_acc = acc
         best_weights = copy.deepcopy(model.state_dict())
+        
+        #create cm for best model state
+        # Convert tensors to numpy arrays for confusion matrix calculation
+        y_pred_np = torch.argmax(y_pred, 1).cpu().numpy()
+        y_val_np = torch.argmax(y_val, 1).cpu().numpy()
+        cm = confusion_matrix(y_val_np, y_pred_np, normalize='true')
+        # Plot confusion matrix
+        plt.figure(figsize=(10, 7))
+        sns.heatmap(cm, annot=True, fmt='.2g', cmap='Blues', 
+                    xticklabels=classes, yticklabels=classes)
+        plt.xlabel('Predicted Labels')
+        plt.ylabel('True Labels')
+        plt.title('Confusion Matrix')
+        plt.savefig('/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/models/cm_plot')
+        plt.clf()
     
     #early stopping
     if ce < best_loss:
         best_loss = ce
-        best_weights = copy.deepcopy(model.state_dict())
         counter = 0
     else:
         counter += 1 
@@ -195,6 +149,7 @@ for epoch in range(n_epochs):
 
 #load the best state of the model
 model.load_state_dict(best_weights)
+#torch.save(model, '/net/scratch_cms3a/seiler/public')
 
 #plot loss function
 plt.plot(train_loss_hist, label="train")
