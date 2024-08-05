@@ -8,7 +8,8 @@ import pyarrow.parquet as pq
 import glob
 import mplhep as hep
 import matplotlib.pyplot as plt
-
+import pandas as pd
+import pickle
 
 class PrepareInputs:
     def __init__(
@@ -35,26 +36,23 @@ class PrepareInputs:
     def load_parquet(self, path, N_files=-1):
 
         file_list = glob.glob(path + '*.parquet')
-        file_list = file_list[:N_files]
+        file_list_ = file_list[:N_files]
 
-        events = ak.from_parquet(file_list)
+        events = ak.from_parquet(file_list_)
         print(f"INFO: loaded parquet files from the path {path}")
 
+        sum_genw_beforesel = sum(float(pq.read_table(file).schema.metadata[b'sum_genw_presel']) for file in file_list)
+
+        return events, sum_genw_beforesel
+
+    def add_var(self, events):
+
+        # add variables
+        events["diphoton_PtOverM_ggjj"] = events.pt / events.HHbbggCandidate_mass
+        events["dijet_PtOverM_ggjj"] = events.dijet_pt / events.HHbbggCandidate_mass
+
         return events
 
-    def add_var(self, events: ak.Array) -> ak.Array:
-
-        # add more variables to the events here
-        # events["varable"] = variable # the variable has to be calculated from the existing variables in events
-       
-        for var in events.fields:
-            if 'pt' in var:
-                events[var] = np.log(events[var])
-
-        events["weight"] = ak.ones_like(events.pt)
-         
-        return events
-    
     def plot_pt_variables(self, comb_inputs, vars_for_training):
         for var in vars_for_training:
             if 'pt' in var or 'Pt' in var:
@@ -74,48 +72,151 @@ class PrepareInputs:
                 plt.savefig(f'/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/data/{var}_plot.png')
                 plt.clf()
 
-    def prep_input(self, samples_path, out_path) -> ak.Array:
+    def get_relative_xsec_weight(self, events, sum_genw_beforesel, sample_type):
+
+        dict_xsec = {
+            "GGJets": 88.75e3,
+            "GJetPt20To40": 242.5e3,
+            "GJetPt40": 919.1e3,
+            "ttHToGG": 0.5700e3 * 0.00227,  # cross sectio of ttH * BR(HToGG)
+            "GluGluToHH": 0.0311e3 * 0.00227 * 0.582 * 2,  # cross sectio of GluGluToHH * BR(HToGG) * BR(HToGG) * 2 for two combination ### have to recheck if this is correct. 
+            "VBFToHH": 0.00173e3 * 0.00227 * 0.582 * 2  # cross sectio of VBFToHH * BR(HToGG) * BR(HTobb) * 2 for two combination ### have to recheck if this is correct.
+        }
+        events["rel_xsec_weight"] = (events.weight / sum_genw_beforesel) * dict_xsec[sample_type]
+
+        return events
+
+    def get_weights_for_training(self, y_train, rel_w_train):
+
+        class_weights_for_training = ak.zeros_like(rel_w_train)
+
+        for i in range(y_train.shape[1]):
+
+            cls_bool = (y_train[:, i] == 1)
+            abs_rel_xsec_weight_for_class = abs(rel_w_train) * cls_bool
+            class_weights_for_training = class_weights_for_training + (abs_rel_xsec_weight_for_class / np.sum(abs_rel_xsec_weight_for_class))
+
+        for i in range(y_train.shape[1]):
+            print(f"(number of events: sum of class_weights_for_training) for class number {i+1} = ({sum(y_train[:, i])}: {sum(class_weights_for_training[y_train[:, i] == 1])})")
+
+        return class_weights_for_training
+
+    def train_test_split(self, X, Y, relative_weights, train_ratio=0.6):
+
+        from sklearn.model_selection import train_test_split
+
+        X_train, X_test_val, y_train, y_test_val, rel_w_train, rel_w_test_val = train_test_split(X, Y, relative_weights, train_size=train_ratio, shuffle=True, random_state=42)
+        X_val, X_test, y_val, y_test, rel_w_val, rel_w_test = train_test_split(X_test_val, y_test_val, rel_w_test_val, train_size=0.5, shuffle=True, random_state=42)
+
+        return X_train, X_val, X_test, y_train, y_val, y_test, rel_w_train, rel_w_val, rel_w_test
+
+    def standardize(self, X, mean, std):
+        return (X - mean) / std
+
+    def prep_input_for_mlp(self, samples_path, out_path, fill_nan = -999):
+
+        os.makedirs(out_path)
 
         comb_inputs = []
 
         for samples in self.sample_to_class.keys():
 
-            events = self.load_parquet(f"{samples_path}/{samples}/nominal/", -1)
-
-            # add more variables as required
-            events = self.add_var(events)
+            events, sum_genw_beforesel = self.load_parquet(f"{samples_path}/{samples}/nominal/", -1)
 
             # get only valid events, cuts not applied in HiggsDNA
             events = events[(events.mass > 100) | (events.mass < 180)]
+            events = events[(events.dijet_mass > 70) | (events.dijet_mass < 190)]
 
-            # pad zero for objects not present
+            # add more variables
+            events = self.add_var(events)
 
-            # get only the variables required for training
-            vars_for_training = self.load_vars(self.input_var_json)[self.model_type]
-            events = events[vars_for_training]
+            # get relative weights according to cross section of the process
+            events = self.get_relative_xsec_weight(events, sum_genw_beforesel, samples)
 
             # add the bools for each class
             for cls in self.classes:  # first intialize everything to zero
-                events[cls] = ak.zeros_like(events.pt)
+                events[cls] = ak.zeros_like(events.eta)
 
             events[self.sample_to_class[samples]] = ak.ones_like(events.pt) # one-hot encoded
             comb_inputs.append(events)
+
             print(f"INFO: Number of events in {samples}: {len(events)}")
 
         comb_inputs = ak.concatenate(comb_inputs, axis=0)
 
-        self.plot_pt_variables(comb_inputs, vars_for_training)
+        comb_inputs = pd.DataFrame(ak.to_list(comb_inputs))
 
-        print("\n", f"INFO: Number of events in is_non_resonant_bkg: {sum(comb_inputs.is_non_resonant_bkg)}")
-        print(f" INFO: Number of events in is_ttH_bkg: {sum(comb_inputs.is_ttH_bkg)}")
-        print(f" INFO: Number of events in is_GluGluToHH_sig: {sum(comb_inputs.is_GluGluToHH_sig)}")
-        print(f" INFO: Number of events in is_VBFToHH_sig: {sum(comb_inputs.is_VBFToHH_sig)}")
+        for cls in self.classes:
+            print("\n", f"INFO: Number of events in {cls}: {sum(comb_inputs[cls])}")
 
-        arrow_table = ak.to_arrow_table(comb_inputs)
-        pq.write_table(arrow_table, f'{out_path}/dummy_input_for_{self.model_type}.parquet')
+        # get the variables required for training
+        vars_config = self.load_vars(self.input_var_json)[self.model_type]
+        vars_for_training = vars_config["vars"]
+        vars_for_log = vars_config["vars_for_log_transform"]
 
-        return comb_inputs
+        X = comb_inputs[vars_for_training]
+        Y = comb_inputs[[cls for cls in self.classes]]
+        relative_weights = comb_inputs["rel_xsec_weight"]
 
+        # perform log transformation for variables if needed
+        for var in vars_for_log:
+            X[var] = np.log(X[var])
 
-out = PrepareInputs()
-out.prep_input("/net/scratch_cms3a/kasaraguppe/public/HHbbgg_samples/", "/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/models")
+        X = X.values
+        Y = Y.values
+        relative_weights = relative_weights.values
+
+        # mask -999.0 to nan
+        mask = (X < -998.0)
+        X[mask] = np.nan
+
+        X_train, X_val, X_test, y_train, y_val, y_test, rel_w_train, rel_w_val, rel_w_test = self.train_test_split(X, Y, relative_weights)
+
+        # get mean according to training data set
+        mean = np.nanmean(X_train, axis=0)
+        std = np.nanstd(X_train, axis=0)
+        print("mean: ", mean)
+        print("std_dev: ", std)
+
+        # transform all data set
+        X_train = self.standardize(X_train, mean, std)
+        X_val = self.standardize(X_val, mean, std)
+        X_test = self.standardize(X_test, mean, std)
+
+        # replace NaN with fill_nan value
+        X_train = np.nan_to_num(X_train, nan=fill_nan)
+        X_val = np.nan_to_num(X_val, nan=fill_nan)
+        X_test = np.nan_to_num(X_test, nan=fill_nan)
+
+        class_weights_for_training = self.get_weights_for_training(y_train, rel_w_train)
+
+        # save all the numpy arrays
+        print("\n INFO: saving inputs for mlp")
+        np.save(f"{out_path}/X_train", X_train)
+        np.save(f"{out_path}/X_val", X_val)
+        np.save(f"{out_path}/X_test", X_test)
+
+        np.save(f"{out_path}/y_train", y_train)
+        np.save(f"{out_path}/y_val", y_val)
+        np.save(f"{out_path}/y_test", y_test)
+
+        np.save(f"{out_path}/rel_w_train", rel_w_train)
+        np.save(f"{out_path}/rel_w_val", rel_w_val)
+        np.save(f"{out_path}/rel_w_test", rel_w_test)
+
+        np.save(f"{out_path}/class_weights_for_training", class_weights_for_training)
+
+        # save the training mean ans std_dev. This will be used for standardizing data
+        mean_std_dict = {
+            "mean": mean,
+            "std_dev": std
+        }
+        with open(f"{out_path}/mean_std_dict.pkl", 'wb') as f:
+            pickle.dump(mean_std_dict, f)
+
+        return 0
+
+if __name__ == "__main__":
+    out = PrepareInputs()
+    # out.prep_input("/net/scratch_cms3a/kasaraguppe/public/HHbbgg_samples/", "/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/models")
+    out.prep_input_for_mlp("/net/scratch_cms3a/kasaraguppe/public/HHbbgg_samples/", "./training_inputs_for_mlp")
