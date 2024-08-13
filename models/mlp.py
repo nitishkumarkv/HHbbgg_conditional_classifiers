@@ -3,7 +3,7 @@ import torch.nn as nn
 
 
 class MLP(nn.Module):
-    def __init__(self, input_size, num_layers, num_nodes, output_size, act_fn):
+    def __init__(self, input_size, num_layers, num_nodes, output_size, act_fn, dropout_prob):
         super(MLP, self).__init__()
         layers = []
 
@@ -15,6 +15,7 @@ class MLP(nn.Module):
         for _ in range(num_layers - 1):
             layers.append(nn.Linear(num_nodes, num_nodes))
             layers.append(act_fn())
+            layers.append(nn.Dropout(p=dropout_prob))
 
         # Output layer
         layers.append(nn.Linear(num_nodes, output_size))

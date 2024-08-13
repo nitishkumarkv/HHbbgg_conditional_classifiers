@@ -72,8 +72,8 @@ class PrepareInputs:
                 plt.savefig(f'/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/data/{var}_plot.png')
                 plt.clf()
 
-    def get_relative_xsec_weight(self, events, sum_genw_beforesel, sample_type):
-
+    def get_relative_xsec_weight(self, events, sum_genw_beforesel, sample_type, weight_increase=10):
+        
         dict_xsec = {
             "GGJets": 88.75e3,
             "GJetPt20To40": 242.5e3,
@@ -82,9 +82,26 @@ class PrepareInputs:
             "GluGluToHH": 0.0311e3 * 0.00227 * 0.582 * 2,  # cross sectio of GluGluToHH * BR(HToGG) * BR(HToGG) * 2 for two combination ### have to recheck if this is correct. 
             "VBFToHH": 0.00173e3 * 0.00227 * 0.582 * 2  # cross sectio of VBFToHH * BR(HToGG) * BR(HTobb) * 2 for two combination ### have to recheck if this is correct.
         }
+        sum_of_weights = np.sum(events.weight / sum_genw_beforesel)
         events["rel_xsec_weight"] = (events.weight / sum_genw_beforesel) * dict_xsec[sample_type]
-
-        return events
+        if sample_type == "GluGluToHH" or sample_type == "VBFToHH":
+            events["inc_rel_xsec_weight"] = (events.weight / sum_genw_beforesel) * dict_xsec[sample_type] * weight_increase
+            inc_rel_weight = events["inc_rel_xsec_weight"] / ((events.weight / sum_genw_beforesel) * dict_xsec[sample_type])
+            weight_check=[]
+            for element in inc_rel_weight:
+                if element < weight_increase + 0.001 and element > weight_increase - 0.001:
+                    weight_check.append('True')
+                else:
+                    weight_check.append('False')
+            if np.any(weight_check == 'False'):
+                print('INFO: Weight increase did not work')
+            else:
+                print('INFO: Weight increase succesful')
+           
+        else:
+            events["inc_rel_xsec_weight"] = (events.weight / sum_genw_beforesel) * dict_xsec[sample_type]
+        
+        return events, sum_of_weights
 
     def get_weights_for_training(self, y_train, rel_w_train):
 
@@ -94,21 +111,24 @@ class PrepareInputs:
 
             cls_bool = (y_train[:, i] == 1)
             abs_rel_xsec_weight_for_class = abs(rel_w_train) * cls_bool
-            class_weights_for_training = class_weights_for_training + (abs_rel_xsec_weight_for_class / np.sum(abs_rel_xsec_weight_for_class))
+            if self.classes[i] == "is_GluGluToHH_sig" or self.classes[i] == "is_VBFToHH_sig":
+                class_weights_for_training = class_weights_for_training + (abs_rel_xsec_weight_for_class / np.sum(abs_rel_xsec_weight_for_class)) * 10
+            else:
+                class_weights_for_training = class_weights_for_training + (abs_rel_xsec_weight_for_class / np.sum(abs_rel_xsec_weight_for_class))
 
         for i in range(y_train.shape[1]):
             print(f"(number of events: sum of class_weights_for_training) for class number {i+1} = ({sum(y_train[:, i])}: {sum(class_weights_for_training[y_train[:, i] == 1])})")
 
         return class_weights_for_training
 
-    def train_test_split(self, X, Y, relative_weights, train_ratio=0.6):
+    def train_test_split(self, X, Y, relative_weights, inc_relative_weights, train_ratio=0.6):
 
         from sklearn.model_selection import train_test_split
 
-        X_train, X_test_val, y_train, y_test_val, rel_w_train, rel_w_test_val = train_test_split(X, Y, relative_weights, train_size=train_ratio, shuffle=True, random_state=42)
-        X_val, X_test, y_val, y_test, rel_w_val, rel_w_test = train_test_split(X_test_val, y_test_val, rel_w_test_val, train_size=0.5, shuffle=True, random_state=42)
+        X_train, X_test_val, y_train, y_test_val, rel_w_train, rel_w_test_val, inc_rel_w_train, inc_rel_w_test_val = train_test_split(X, Y, relative_weights, inc_relative_weights, train_size=train_ratio, shuffle=True, random_state=42)
+        X_val, X_test, y_val, y_test, rel_w_val, rel_w_test, inc_rel_w_val, inc_rel_w_test = train_test_split(X_test_val, y_test_val, rel_w_test_val, inc_rel_w_test_val, train_size=0.5, shuffle=True, random_state=42)
 
-        return X_train, X_val, X_test, y_train, y_val, y_test, rel_w_train, rel_w_val, rel_w_test
+        return X_train, X_val, X_test, y_train, y_val, y_test, rel_w_train, rel_w_val, rel_w_test, inc_rel_w_train, inc_rel_w_val, inc_rel_w_test
 
     def standardize(self, X, mean, std):
         return (X - mean) / std
@@ -118,6 +138,7 @@ class PrepareInputs:
         os.makedirs(out_path)
 
         comb_inputs = []
+        Weights=[]
 
         for samples in self.sample_to_class.keys():
 
@@ -131,7 +152,8 @@ class PrepareInputs:
             events = self.add_var(events)
 
             # get relative weights according to cross section of the process
-            events = self.get_relative_xsec_weight(events, sum_genw_beforesel, samples)
+            events, sum_of_weights = self.get_relative_xsec_weight(events, sum_genw_beforesel, samples)
+            Weights.append(sum_of_weights)
 
             # add the bools for each class
             for cls in self.classes:  # first intialize everything to zero
@@ -157,6 +179,7 @@ class PrepareInputs:
         X = comb_inputs[vars_for_training]
         Y = comb_inputs[[cls for cls in self.classes]]
         relative_weights = comb_inputs["rel_xsec_weight"]
+        inc_relative_weights = comb_inputs["inc_rel_xsec_weight"]
 
         # perform log transformation for variables if needed
         for var in vars_for_log:
@@ -165,12 +188,13 @@ class PrepareInputs:
         X = X.values
         Y = Y.values
         relative_weights = relative_weights.values
+        inc_relative_weights = inc_relative_weights.values
 
         # mask -999.0 to nan
         mask = (X < -998.0)
         X[mask] = np.nan
 
-        X_train, X_val, X_test, y_train, y_val, y_test, rel_w_train, rel_w_val, rel_w_test = self.train_test_split(X, Y, relative_weights)
+        X_train, X_val, X_test, y_train, y_val, y_test, rel_w_train, rel_w_val, rel_w_test, inc_rel_w_train, inc_rel_w_val, inc_rel_w_test = self.train_test_split(X, Y, relative_weights, inc_relative_weights)
 
         # get mean according to training data set
         mean = np.nanmean(X_train, axis=0)
@@ -188,6 +212,13 @@ class PrepareInputs:
         X_val = np.nan_to_num(X_val, nan=fill_nan)
         X_test = np.nan_to_num(X_test, nan=fill_nan)
 
+        print('minimal X_train value', np.min(X_train, axis=0))
+
+        #increase weights for signal events
+        w_for_train = rel_w_train
+        w_for_train[(y_train == [0, 0, 1, 0]).all(axis=1)] *= 10
+        w_for_train[(y_train == [0, 0, 0, 1]).all(axis=1)] *= 10
+
         class_weights_for_training = self.get_weights_for_training(y_train, rel_w_train)
 
         # save all the numpy arrays
@@ -204,6 +235,10 @@ class PrepareInputs:
         np.save(f"{out_path}/rel_w_val", rel_w_val)
         np.save(f"{out_path}/rel_w_test", rel_w_test)
 
+        np.save(f"{out_path}/inc_rel_w_train", inc_rel_w_train)
+        np.save(f"{out_path}/inc_rel_w_val", inc_rel_w_val)
+        np.save(f"{out_path}/inc_rel_w_test", inc_rel_w_test)
+
         np.save(f"{out_path}/class_weights_for_training", class_weights_for_training)
 
         # save the training mean ans std_dev. This will be used for standardizing data
@@ -219,4 +254,4 @@ class PrepareInputs:
 if __name__ == "__main__":
     out = PrepareInputs()
     # out.prep_input("/net/scratch_cms3a/kasaraguppe/public/HHbbgg_samples/", "/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/models")
-    out.prep_input_for_mlp("/net/scratch_cms3a/kasaraguppe/public/HHbbgg_samples/", "./training_inputs_for_mlp")
+    out.prep_input_for_mlp("/net/scratch_cms3a/kasaraguppe/public/HHbbgg_samples/", "/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/models/training_inputs_for_mlp_sw10")
