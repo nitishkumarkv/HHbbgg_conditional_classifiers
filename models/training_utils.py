@@ -18,7 +18,7 @@ from mlp import MLP
 # define all other things that are required for training:
 # take the inputs, apply standardization, separate and randomize inputs into training/test sets, optimization function, loss function, backpropagation and weight updation, etc.
 
-input_path="/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/models/training_inputs_for_mlp_sw10/"
+input_path="/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/models/training_inputs_for_mlp_wnorm/"
 
 X_train = np.load(f'{input_path}/X_train.npy')
 X_val = np.load(f'{input_path}/X_val.npy')
@@ -29,10 +29,9 @@ y_test = np.load(f'{input_path}/y_test.npy')
 rel_w_train = np.load(f'{input_path}/rel_w_train.npy')
 rel_w_val = np.load(f'{input_path}/rel_w_val.npy')
 rel_w_test = np.load(f'{input_path}/rel_w_test.npy')
-inc_rel_w_train = np.load(f'{input_path}/inc_rel_w_train.npy')
-inc_rel_w_val = np.load(f'{input_path}/inc_rel_w_val.npy')
-inc_rel_w_test = np.load(f'{input_path}/inc_rel_w_test.npy')
 class_weights_for_training = np.load(f'{input_path}/class_weights_for_training.npy')
+class_weights_for_val = np.load(f'{input_path}/class_weights_for_val.npy')
+class_weights_for_test = np.load(f'{input_path}/class_weights_for_test.npy')
 
 classes=["non resonant bkg", "ttH bkg", "GluGluToHH sig", "VBFToHH sig"]
 
@@ -53,12 +52,11 @@ y_val = torch.tensor(y_val, dtype=torch.float32).to(device)
 rel_w_train = torch.tensor(rel_w_train, dtype=torch.float32).to(device)
 rel_w_test = torch.tensor(rel_w_test, dtype=torch.float32).to(device)
 rel_w_val = torch.tensor(rel_w_val, dtype=torch.float32).to(device)
-inc_rel_w_train = torch.tensor(inc_rel_w_train, dtype=torch.float32).to(device)
-inc_rel_w_test = torch.tensor(inc_rel_w_test, dtype=torch.float32).to(device)
-inc_rel_w_val = torch.tensor(inc_rel_w_val, dtype=torch.float32).to(device)
 class_weights_for_training = torch.tensor(class_weights_for_training, dtype=torch.float32).to(device)
+class_weights_for_val = torch.tensor(class_weights_for_val, dtype=torch.float32).to(device)
+class_weights_for_test = torch.tensor(class_weights_for_test, dtype=torch.float32).to(device)
 
-best_params_path = '/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/models/best_hyperparams.json'
+best_params_path = '/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/models/test_best_hyperparams.json'
 
 with open(best_params_path, 'r') as f:
     best_params = json.load(f)
@@ -71,8 +69,12 @@ best_act_fn = getattr(nn, best_act_fn_name)
 best_lr = best_params['lr']
 best_weight_decay = best_params['weight_decay']
 best_dropout_prob = best_params['dropout_prob']
+weight_increase = best_params['weight_increase']
 input_size = X_train.shape[1]
 output_size = 4
+
+inc_class_weights_for_training = class_weights_for_training[y_train == [0, 0, 1, 0]]*weight_increase
+inc_class_weights_for_training = inc_class_weights_for_training[y_train == [0, 0, 0, 1]]*weight_increase
 
 # best_num_layers = 2
 # best_num_nodes = 256
@@ -141,7 +143,7 @@ for epoch in range(n_epochs):
     #calculate loss and acc
         y_pred = best_model(X_val)
         val_loss = loss_fn(y_pred, y_val)
-        weighted_val_loss = (val_loss*rel_w_val).sum() / rel_w_val.sum()
+        weighted_val_loss = (val_loss*class_weights_for_val).sum() / class_weights_for_val.sum()
         acc = (torch.argmax(y_pred, 1) == torch.argmax(y_val, 1)).float().mean()
 
         # Scheduler step
@@ -180,14 +182,14 @@ y_pred_np = torch.argmax(y_pred_val, 1).cpu().numpy()
 y_val_np = torch.argmax(y_val, 1).cpu().numpy()
 
 threshhold=0.5
-mask = y_pred_np > threshhold
-y_pred_flt = y_pred_np[mask]
-y_val_flt = y_val_np[mask]
-rel_w_val_np = rel_w_val.cpu().numpy()
-rel_w_val_flt = rel_w_val_np[mask]
+mask = torch.max(y_pred_val, dim=1)[0] > threshhold
+y_pred_flt = y_pred_np[mask.cpu().numpy()]
+y_val_flt = y_val_np[mask.cpu().numpy()]
+rel_w_val_np = class_weights_for_val.cpu().numpy()
+rel_w_val_flt = rel_w_val_np[mask.cpu().numpy()]
 
-path_for_plots="/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/models_sw10/"
-os.makedirs(path_for_plots)
+path_for_plots="/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/models/testplots/"
+#os.makedirs(path_for_plots)
 
 # Plot confusion matrix
 cm = confusion_matrix(y_val_flt, y_pred_flt, normalize='true', sample_weight=rel_w_val_flt)
@@ -195,11 +197,11 @@ plt.figure(figsize=(10, 7))
 sns.heatmap(cm, annot=True, fmt='.2g', cmap='Blues', xticklabels=classes, yticklabels=classes)
 plt.xlabel('Predicted Labels')
 plt.ylabel('True Labels')
-plt.title('Confusion Matrix')
+plt.title(f'Confusion Matrix, threshhold = {threshhold}')
 plt.savefig(f'{path_for_plots}/cm_plot')
 plt.clf()
 
-#ROC
+#ROC one vs. all
 y_val_bin = label_binarize(y_val_np, classes = range(output_size))
 fpr = dict()
 tpr = dict()
@@ -226,6 +228,39 @@ plt.title('Receiver Operating Characteristic (One-vs-All)')
 plt.legend(loc="lower right")
 plt.savefig(f'{path_for_plots}/roc_plot')
 plt.clf()
+
+#ROC one vs. one
+fpr = dict()
+tpr = dict()
+roc_auc = dict()
+combinations_to_plot = [(2, 0), (2, 1), (3, 0), (3, 1)]
+for (i, j) in combinations_to_plot:
+    # Extract the binary labels for classes i and j
+    mask = np.logical_or(y_val_np == i, y_val_np == j)
+    y_true_bin = y_val_bin[mask][:, [i, j]]
+    y_scores = y_pred_val[mask][:, [i, j]].cpu().detach().numpy()
+    
+    # True labels: i -> 0, j -> 1
+    y_true = np.argmax(y_true_bin, axis=1)
+    y_score = y_scores[:, 1]  # Score for class j
+
+    # Compute ROC curve and ROC area for this pair
+    fpr[(i, j)], tpr[(i, j)], _ = roc_curve(y_true, y_score)
+    roc_auc[(i, j)] = auc(fpr[(i, j)], tpr[(i, j)])
+    
+    # Plot the ROC curve
+    plt.figure()
+    plt.plot(fpr[(i, j)], tpr[(i, j)], color='royalblue', lw=2,
+             label=f'ROC curve (area = {roc_auc[(i, j)]:.2f})')
+    plt.plot([0, 1], [0, 1], 'k--', lw=2)
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title(f'ROC for class {classes[i]} vs {classes[j]}')
+    plt.legend(loc="lower right")
+    plt.savefig(f'{path_for_plots}/roc_ovo_{i}{j}plot')
+    plt.clf()
 
 #plot loss function
 plt.plot(train_loss_hist, label="train")
