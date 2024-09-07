@@ -12,9 +12,16 @@ from sklearn.metrics import confusion_matrix, classification_report, roc_curve, 
 from sklearn.preprocessing import label_binarize
 
 import optuna
-from optuna.visualization import plot_optimization_history, plot_parallel_coordinate, plot_contour, plot_edf, plot_intermediate_values, plot_param_importances, plot_rank, plot_slice, plot_timeline
-import optuna.visualization as vis
-import plotly.io as pio
+from optuna.samplers import RandomSampler
+from optuna.visualization.matplotlib import plot_contour
+from optuna.visualization.matplotlib import plot_edf
+from optuna.visualization.matplotlib import plot_intermediate_values
+from optuna.visualization.matplotlib import plot_optimization_history
+from optuna.visualization.matplotlib import plot_parallel_coordinate
+from optuna.visualization.matplotlib import plot_param_importances
+from optuna.visualization.matplotlib import plot_rank
+from optuna.visualization.matplotlib import plot_slice
+from optuna.visualization.matplotlib import plot_timeline
 
 from mlp import MLP
 
@@ -123,54 +130,52 @@ def objective(trial):
     return best_loss
 
 # Optuna study
-n_trials = 300
-study_name = "bayesian_300"
+n_trials = 40
+study_name = "random_sampler_40"
 storage = optuna.storages.RDBStorage('sqlite:///example.db')
-study = optuna.create_study(study_name=study_name, storage=storage, direction='minimize')
+study = optuna.create_study(storage=storage, sampler=RandomSampler(), study_name=study_name, direction='minimize')
 study.optimize(objective, n_trials=n_trials)
 
+path_for_plots = '/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/models/test_random_search/'
 
-path_for_plots = '/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/models/plotly_hyperplots/'
+plt.rcParams.update({
+    'font.size': 6,         # Schriftgröße für alle Texte
+    'axes.titlesize': 6,    # Schriftgröße für Titel der Achsen
+    'axes.labelsize': 6,    # Schriftgröße für Achsenbeschriftungen
+    'xtick.labelsize': 6,    # Schriftgröße für x-Achsen-Ticks
+    'ytick.labelsize': 6,    # Schriftgröße für y-Achsen-Ticks
+    'legend.fontsize': 6,    # Schriftgröße für Legenden
+    'figure.titlesize': 10   # Schriftgröße für den Figurentitel
+})
 
 #plots
-fig = plot_optimization_history(study)
-pio.write_image(fig, f'{path_for_plots}/history_plot.png', scale=2)
-fig = plot_parallel_coordinate(study)
-pio.write_image(fig, f'{path_for_plots}/parallel_coordinate_plot.png', scale=2)
-fig = plot_intermediate_values(study)
-pio.write_image(fig, f'{path_for_plots}/intermediate_values_plot.png', scale=2)
-fig = plot_param_importances(study)
-pio.write_image(fig, f'{path_for_plots}/param_importances_plot.png', scale=2)
-
-fig = vis.plot_contour(study)
-fig.update_layout(
-    margin=dict(l=200, r=20, b=200, t=20),  # Anpassung der Ränder, um Platz für Text zu schaffen
-    xaxis_tickangle=-45,  # Neige die x-Achsen-Tick-Labels für bessere Lesbarkeit
-    yaxis_tickangle=0,  # Stelle sicher, dass die y-Achsen-Tick-Labels nicht geneigt sind
-    height=800,  # Erhöhe die Plot-Höhe, um vertikalen Platz zu schaffen
-    autosize=False,  # Deaktiviere die automatische Größenanpassung, falls du eine feste Größe möchtest
-    width=1200  # Breite des Plots, um horizontalen Platz zu schaffen
-)
-pio.write_image(fig, f'{path_for_plots}/contour_plot.png', scale=2)
-
-fig = plot_slice(study)
-pio.write_image(fig, f'{path_for_plots}/slice_plot.png', scale=2)
-
-fig = vis.plot_rank(study)
-fig.update_layout(
-    margin=dict(l=200, r=20, b=200, t=20),  # Anpassung der Ränder, um Platz für Text zu schaffen
-    xaxis_tickangle=-45,  # Neige die x-Achsen-Tick-Labels für bessere Lesbarkeit
-    yaxis_tickangle=0,  # Stelle sicher, dass die y-Achsen-Tick-Labels nicht geneigt sind
-    height=800,  # Erhöhe die Plot-Höhe, um vertikalen Platz zu schaffen
-    autosize=False,  # Deaktiviere die automatische Größenanpassung, falls du eine feste Größe möchtest
-    width=1200  # Breite des Plots, um horizontalen Platz zu schaffen
-)
-pio.write_image(fig, f'{path_for_plots}/rank_plot.png', scale=2)
-
-fig = plot_edf(study)
-pio.write_image(fig, f'{path_for_plots}/edf_plot.png', scale=2)
-fig = plot_timeline(study)
-pio.write_image(fig, f'{path_for_plots}/timeline_plot.png', scale=2)
+plot_optimization_history(study)
+plt.savefig(f'{path_for_plots}/history_plot', dpi=500, bbox_inches="tight")
+plt.clf()
+plot_parallel_coordinate(study)
+plt.savefig(f'{path_for_plots}/parallel_coordinate_plot', dpi=500, bbox_inches="tight")
+plt.clf()
+plot_intermediate_values(study)
+plt.savefig(f'{path_for_plots}/intermediate_values_plot', dpi=500, bbox_inches="tight")
+plt.clf()
+plot_param_importances(study)
+plt.savefig(f'{path_for_plots}/param_importances_plot', dpi=500, bbox_inches="tight")
+plt.clf()
+plot_contour(study)
+plt.savefig(f'{path_for_plots}/contour_plot', dpi=500, bbox_inches="tight")
+plt.clf()
+plot_slice(study)
+plt.savefig(f'{path_for_plots}/slice_plot', dpi=500, bbox_inches="tight")
+plt.clf()
+plot_rank(study)
+plt.savefig(f'{path_for_plots}/rank_plot', dpi=500, bbox_inches="tight")
+plt.clf()
+plot_edf(study)
+plt.savefig(f'{path_for_plots}/edf_plot', dpi=500, bbox_inches="tight")
+plt.clf()
+plot_timeline(study)
+plt.savefig(f'{path_for_plots}/timeline_plot', dpi=500, bbox_inches="tight")
+plt.clf()
 
 # use best hyper params
 best_params = study.best_params
@@ -185,7 +190,7 @@ best_dropout_prob = best_params['dropout_prob']
 weight_increase = best_params['weight_increase']
 
 # save all the numpy arrays
-out_path='/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/models/test_best_hyperparams.json'
+out_path='/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/models/test_random_search_params.json'
 print("\n INFO: saving best hyperparameters")
 
 best_params = {

@@ -15,6 +15,22 @@ from sklearn.metrics import confusion_matrix, classification_report, roc_curve, 
 from sklearn.preprocessing import label_binarize
 import sklearn.model_selection
 
+def load_gat_checkpoint(file_path, model, optimizer, scheduler):
+    checkpoint = torch.load(file_path)
+    model.load_state_dict(checkpoint['model_state_dict'], strict=False)
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+    train_loss_hist = checkpoint['train_loss_hist']
+    val_loss_hist = checkpoint['val_loss_hist']
+    train_acc_hist = checkpoint['train_acc_hist']
+    val_acc_hist = checkpoint['val_acc_hist']
+    best_weights = checkpoint['best_weights']
+    best_loss = checkpoint['best_loss']
+    start_epoch = checkpoint['epoch']
+    counter = checkpoint['counter']
+    print(f'Checkpoint loaded from {file_path}, resuming from epoch {start_epoch + 1}')
+    return start_epoch, train_loss_hist, val_loss_hist, train_acc_hist, val_acc_hist, best_weights, best_loss, counter
+
 input_path = '/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/GAT/inputs'
 
 X_train = torch.load(f'{input_path}/X_train')
@@ -26,23 +42,6 @@ y_test = torch.load(f'{input_path}/y_test')
 class_weights_for_training = torch.load(f'{input_path}/class_weights_for_training')
 class_weights_for_val = torch.load(f'{input_path}/class_weights_for_val')
 class_weights_for_test = torch.load(f'{input_path}/class_weights_for_test')
-
-def save_gat_checkpoint(epoch, model, optimizer, scheduler, train_loss_hist, val_loss_hist, train_acc_hist, val_acc_hist, best_weights, best_loss, counter, file_path):
-    checkpoint = {
-        'epoch': epoch,
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
-        'scheduler_state_dict': scheduler.state_dict(),
-        'train_loss_hist': train_loss_hist,
-        'val_loss_hist': val_loss_hist,
-        'train_acc_hist': train_acc_hist,
-        'val_acc_hist': val_acc_hist,
-        'best_weights': best_weights,
-        'best_loss': best_loss,
-        'counter': counter
-    }
-    torch.save(checkpoint, file_path)
-    print(f'Checkpoint saved to {file_path}')
 
 def generate_edges(num_nodes):
     # create a fully connected graph
@@ -86,24 +85,27 @@ out_dim = 4
 num_classes = 4
 num_heads = 2
 
-n_epochs = 2
+n_epochs = 4
 
-best_loss = np.inf
-best_weights = None
+#best_loss = np.inf
+#best_weights = None
 patience = 50
-counter = 0
+#counter = 0
 
 model = GAT(hidden_dim=hidden_dim , out_dim=out_dim, num_heads=num_heads)
 loss_fn = nn.CrossEntropyLoss(reduction='none')
 optimizer = optim.Adam(model.parameters(), lr = 8.41439611133144e-05, weight_decay=1.601106283960543e-05)
 scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=20, min_lr=1e-6)
 
-train_loss_hist = []
-train_acc_hist = []
-val_loss_hist = []
-val_acc_hist = []
+path_to_checkpoint = "/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/GAT/gat_checkpoint/"
+start_epoch, train_loss_hist, val_loss_hist, train_acc_hist, val_acc_hist, best_weights, best_loss, counter = load_gat_checkpoint(f'{path_to_checkpoint}/gat.pth', model, optimizer, scheduler)
 
-for epoch in range(n_epochs):
+# train_loss_hist = []
+# train_acc_hist = []
+# val_loss_hist = []
+# val_acc_hist = []
+
+for epoch in range(start_epoch + 1, n_epochs):
     batch_loss = []
     batch_acc = []
     model.train()
@@ -169,12 +171,6 @@ for epoch in range(n_epochs):
 
     print(f"Epoch {epoch} validation: Cross-entropy={float(ce)}, Accuracy={float(acc)}")
 
-    path_to_checkpoint = "/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/GAT/gat_checkpoint/"
-
-    save_gat_checkpoint(epoch, model, optimizer, scheduler, 
-                train_loss_hist, val_loss_hist, train_acc_hist, val_acc_hist, 
-                best_weights, best_loss, counter, f"{path_to_checkpoint}/gat.pth")
-
 path_for_plots = "/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/GAT/performance_test"
 
 #plot loss function
@@ -194,98 +190,3 @@ plt.ylabel("accuracy")
 plt.legend()
 plt.savefig(f'{path_for_plots}/acc_plot')
 plt.clf()
-
-# # ROC and CM
-# model.load_state_dict(best_weights)
-# model.eval()
-# y_pred_list = []
-# y_val_list = []
-# with torch.no_grad():
-#     for batch in val_loader:
-#         out = model(batch.x, batch.edge_index, batch.batch)
-#         y_pred_list.append(out)
-#         y_flat = batch.y
-#         num_rows = y_flat.size(0) // num_classes
-#         y_one_hot = y_flat.view(num_rows, num_classes)
-#         y = torch.argmax(y_one_hot, dim=1)
-#         y_val_list.append(y)
-
-# y_pred_val = torch.cat(y_pred_list, dim=0)
-# y_val_np = torch.cat(y_val_list, dim=0)
-# y_pred_np = torch.argmax(y_pred_val, 1).cpu().numpy()
-
-# threshhold=0.5
-# mask = torch.max(y_pred_val, dim=1)[0] > threshhold
-# y_pred_flt = y_pred_np[mask.cpu().numpy()]
-# y_val_flt = y_val_np[mask.cpu().numpy()]
-
-# # Plot confusion matrix
-# cm = confusion_matrix(y_val_flt, y_pred_flt, normalize='true')
-# plt.figure(figsize=(10, 7))
-# sns.heatmap(cm, annot=True, fmt='.2g', cmap='Blues', xticklabels=classes, yticklabels=classes)
-# plt.xlabel('Predicted Labels')
-# plt.ylabel('True Labels')
-# plt.title(f'Confusion Matrix, threshhold = {threshhold}')
-# plt.savefig(f'{path_for_plots}/cm_plot')
-# plt.clf()
-
-# #ROC one vs. all
-# y_val_bin = label_binarize(y_val_np, classes = range(num_classes))
-# fpr = dict()
-# tpr = dict()
-# roc_auc = dict()
-# for i in range(num_classes):
-#     fpr[i], tpr[i], _ = roc_curve(y_val_bin[:, i], y_pred_val[:, i].cpu().detach())
-#     # Ensure fpr is strictly increasing
-#     fpr[i], tpr[i] = zip(*sorted(zip(fpr[i], tpr[i])))
-#     fpr[i] = np.array(fpr[i])
-#     tpr[i] = np.array(tpr[i])
-#     roc_auc[i] = auc(fpr[i], tpr[i])
-
-# # Plot ROC curves
-# plt.figure()
-# colors = ['royalblue', 'darkorange', 'darkviolet', 'seagreen']
-# for i, color in zip(range(num_classes), colors):
-#     plt.plot(fpr[i], tpr[i], color=color, lw=2, label=f'{classes[i]} (AUC = {roc_auc[i]:.2f})' ''.format(i, roc_auc[i]))
-# plt.plot([0, 1], [0, 1], 'k--', lw=2)
-# plt.xlim([0.0, 1.0])
-# plt.ylim([0.0, 1.05])
-# plt.xlabel('False Positive Rate')
-# plt.ylabel('True Positive Rate')
-# plt.title('Receiver Operating Characteristic (One-vs-All)')
-# plt.legend(loc="lower right")
-# plt.savefig(f'{path_for_plots}/roc_plot')
-# plt.clf()
-
-# #ROC one vs. one
-# fpr = dict()
-# tpr = dict()
-# roc_auc = dict()
-# combinations_to_plot = [(2, 0), (2, 1), (3, 0), (3, 1)]
-# for (i, j) in combinations_to_plot:
-#     # Extract the binary labels for classes i and j
-#     mask = np.logical_or(y_val_np == i, y_val_np == j)
-#     y_true_bin = y_val_bin[mask][:, [i, j]]
-#     y_scores = y_pred_val[mask].cpu().detach().numpy()
-
-#     # True labels: i -> 0, j -> 1
-#     y_true = np.argmax(y_true_bin, axis=1)
-#     y_score = y_scores[:, j]  # Score for class j
-
-#     # Compute ROC curve and ROC area for this pair
-#     fpr[(i, j)], tpr[(i, j)], _ = roc_curve(y_true, y_score)
-#     roc_auc[(i, j)] = auc(fpr[(i, j)], tpr[(i, j)])
-    
-#     # Plot the ROC curve
-#     plt.figure()
-#     plt.plot(fpr[(i, j)], tpr[(i, j)], color='royalblue', lw=2,
-#              label=f'ROC curve (area = {roc_auc[(i, j)]:.2f})')
-#     plt.plot([0, 1], [0, 1], 'k--', lw=2)
-#     plt.xlim([0.0, 1.0])
-#     plt.ylim([0.0, 1.05])
-#     plt.xlabel('False Positive Rate')
-#     plt.ylabel('True Positive Rate')
-#     plt.title(f'ROC for class {classes[i]} vs {classes[j]}')
-#     plt.legend(loc="lower right")
-#     plt.savefig(f'{path_for_plots}/roc_ovo_{i}{j}plot')
-#     plt.clf()

@@ -55,10 +55,17 @@ class MultiHeadGATLayer(nn.Module):
     
 # create GAT with two layers
 class GAT(nn.Module):
-    def __init__(self, in_dim, hidden_dim, out_dim, num_heads, dropout_rate=0.085):
+    def __init__(self, hidden_dim, out_dim, num_heads, dropout_rate=0.2):
         super(GAT, self).__init__()
-        self.layer1 = MultiHeadGATLayer(in_dim, hidden_dim, num_heads)
-        self.layer2 = MultiHeadGATLayer(hidden_dim * num_heads, out_dim, 1)
+        self.hidden_dim = hidden_dim
+        self.out_dim = out_dim
+        self.num_heads = num_heads
+
+        self.layer1 = None
+        self.layer2 = None
+
+        # self.layer1 = MultiHeadGATLayer(in_dim, hidden_dim, num_heads)
+        # self.layer2 = MultiHeadGATLayer(hidden_dim * num_heads, out_dim, 1)
 
         # Global Pooling
         self.global_pool = global_mean_pool
@@ -82,6 +89,12 @@ class GAT(nn.Module):
         )
 
     def forward(self, x, edge_index, batch):
+        if self.layer1 is None:
+            # Initialize the first layer with the dimension of x
+            in_dim = x.size(1)
+            self.layer1 = MultiHeadGATLayer(in_dim, self.hidden_dim, self.num_heads)
+            self.layer2 = MultiHeadGATLayer(self.hidden_dim * self.num_heads, self.out_dim, 1)
+        
         x = self.layer1(x, edge_index)
         x = F.elu(x)
         x = self.layer2(x, edge_index)

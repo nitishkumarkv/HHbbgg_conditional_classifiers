@@ -39,6 +39,7 @@ class PrepareInputs:
         file_list_ = file_list[:N_files]
 
         events = ak.from_parquet(file_list_)
+        print(events.fields)
         print(f"INFO: loaded parquet files from the path {path}")
 
         sum_genw_beforesel = sum(float(pq.read_table(file).schema.metadata[b'sum_genw_presel']) for file in file_list)
@@ -97,7 +98,7 @@ class PrepareInputs:
         for i in range(y_train.shape[1]):
 
             cls_bool = (y_train[:, i] == 1)
-            abs_rel_xsec_weight_for_class = rel_w_train * cls_bool
+            abs_rel_xsec_weight_for_class = abs(rel_w_train) * cls_bool
             class_weights_for_training = class_weights_for_training + (abs_rel_xsec_weight_for_class / np.sum(abs_rel_xsec_weight_for_class))
                 
         for i in range(y_train.shape[1]):

@@ -12,7 +12,10 @@ from sklearn.metrics import confusion_matrix, classification_report, roc_curve, 
 from sklearn.preprocessing import label_binarize
 import optuna
 import os
+import awkward as ak
+import mplhep as hep
 from mlp import MLP
+import pickle
 
 # the MLP model is already imported
 # define all other things that are required for training:
@@ -76,6 +79,23 @@ output_size = 4
 inc_class_weights_for_training = class_weights_for_training[y_train == [0, 0, 1, 0]]*weight_increase
 inc_class_weights_for_training = inc_class_weights_for_training[y_train == [0, 0, 0, 1]]*weight_increase
 
+def save_checkpoint(epoch, model, optimizer, scheduler, train_loss_hist, val_loss_hist, train_acc_hist, val_acc_hist, best_weights, best_loss, file_path):
+    checkpoint = {
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'scheduler_state_dict': scheduler.state_dict(),
+        'train_loss_hist': train_loss_hist,
+        'val_loss_hist': val_loss_hist,
+        'train_acc_hist': train_acc_hist,
+        'val_acc_hist': val_acc_hist,
+        'best_weights': best_weights,
+        'best_loss': best_loss
+    }
+    torch.save(checkpoint, file_path)
+    print(f'Checkpoint saved to {file_path}')
+
+
 # best_num_layers = 2
 # best_num_nodes = 256
 # #best_act_fn_name = best_params['act_fn_name']
@@ -92,7 +112,7 @@ best_optimizer = optim.Adam(best_model.parameters(), lr=best_lr, weight_decay=be
 best_scheduler = ReduceLROnPlateau(best_optimizer, mode='min', factor=0.5, patience=20, min_lr=1e-6)
 
 #prepare model and training parameters
-n_epochs = 350
+n_epochs = 300
 batch_size = 512
 batches_per_epoch = len(X_train) // batch_size
 
@@ -174,108 +194,18 @@ for epoch in range(n_epochs):
 
 #load the best state of the model
 best_model.load_state_dict(best_weights)
-#torch.save(best_model, '/net/scratch_cms3a/seiler/public')
 
 #validation prediction for the best model
 y_pred_val = best_model(X_val)
 y_pred_np = torch.argmax(y_pred_val, 1).cpu().numpy()
 y_val_np = torch.argmax(y_val, 1).cpu().numpy()
 
-threshhold=0.5
-mask = torch.max(y_pred_val, dim=1)[0] > threshhold
-y_pred_flt = y_pred_np[mask.cpu().numpy()]
-y_val_flt = y_val_np[mask.cpu().numpy()]
-rel_w_val_np = class_weights_for_val.cpu().numpy()
-rel_w_val_flt = rel_w_val_np[mask.cpu().numpy()]
+path_to_checkpoint = "/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/models/mlp_checkpoint/"
 
-path_for_plots="/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/models/testplots/"
-#os.makedirs(path_for_plots)
+save_checkpoint(epoch, best_model, best_optimizer, best_scheduler, 
+                train_loss_hist, val_loss_hist, train_acc_hist, val_acc_hist, 
+                best_weights, best_loss, f"{path_to_checkpoint}/mlp.pth")
 
-# Plot confusion matrix
-cm = confusion_matrix(y_val_flt, y_pred_flt, normalize='true', sample_weight=rel_w_val_flt)
-plt.figure(figsize=(10, 7))
-sns.heatmap(cm, annot=True, fmt='.2g', cmap='Blues', xticklabels=classes, yticklabels=classes)
-plt.xlabel('Predicted Labels')
-plt.ylabel('True Labels')
-plt.title(f'Confusion Matrix, threshhold = {threshhold}')
-plt.savefig(f'{path_for_plots}/cm_plot')
-plt.clf()
-
-#ROC one vs. all
-y_val_bin = label_binarize(y_val_np, classes = range(output_size))
-fpr = dict()
-tpr = dict()
-roc_auc = dict()
-for i in range(output_size):
-    fpr[i], tpr[i], _ = roc_curve(y_val_bin[:, i], y_pred_val[:, i].cpu().detach(), sample_weight=rel_w_val.cpu().numpy())
-    # Ensure fpr is strictly increasing
-    fpr[i], tpr[i] = zip(*sorted(zip(fpr[i], tpr[i])))
-    fpr[i] = np.array(fpr[i])
-    tpr[i] = np.array(tpr[i])
-    roc_auc[i] = auc(fpr[i], tpr[i])
-
-# Plot ROC curves
-plt.figure()
-colors = ['royalblue', 'darkorange', 'darkviolet', 'seagreen']
-for i, color in zip(range(output_size), colors):
-    plt.plot(fpr[i], tpr[i], color=color, lw=2, label=f'{classes[i]} (AUC = {roc_auc[i]:.2f})' ''.format(i, roc_auc[i]))
-plt.plot([0, 1], [0, 1], 'k--', lw=2)
-plt.xlim([0.0, 1.0])
-plt.ylim([0.0, 1.05])
-plt.xlabel('False Positive Rate')
-plt.ylabel('True Positive Rate')
-plt.title('Receiver Operating Characteristic (One-vs-All)')
-plt.legend(loc="lower right")
-plt.savefig(f'{path_for_plots}/roc_plot')
-plt.clf()
-
-#ROC one vs. one
-fpr = dict()
-tpr = dict()
-roc_auc = dict()
-combinations_to_plot = [(2, 0), (2, 1), (3, 0), (3, 1)]
-for (i, j) in combinations_to_plot:
-    # Extract the binary labels for classes i and j
-    mask = np.logical_or(y_val_np == i, y_val_np == j)
-    y_true_bin = y_val_bin[mask][:, [i, j]]
-    y_scores = y_pred_val[mask][:, [i, j]].cpu().detach().numpy()
-    
-    # True labels: i -> 0, j -> 1
-    y_true = np.argmax(y_true_bin, axis=1)
-    y_score = y_scores[:, 1]  # Score for class j
-
-    # Compute ROC curve and ROC area for this pair
-    fpr[(i, j)], tpr[(i, j)], _ = roc_curve(y_true, y_score)
-    roc_auc[(i, j)] = auc(fpr[(i, j)], tpr[(i, j)])
-    
-    # Plot the ROC curve
-    plt.figure()
-    plt.plot(fpr[(i, j)], tpr[(i, j)], color='royalblue', lw=2,
-             label=f'ROC curve (area = {roc_auc[(i, j)]:.2f})')
-    plt.plot([0, 1], [0, 1], 'k--', lw=2)
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.05])
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.title(f'ROC for class {classes[i]} vs {classes[j]}')
-    plt.legend(loc="lower right")
-    plt.savefig(f'{path_for_plots}/roc_ovo_{i}{j}plot')
-    plt.clf()
-
-#plot loss function
-plt.plot(train_loss_hist, label="train")
-plt.plot(val_loss_hist, label="validation")
-plt.xlabel("epochs")
-plt.ylabel("cross entropy")
-plt.legend()
-plt.savefig(f'{path_for_plots}/loss_plot')
-plt.clf()
-
-#plot accuracy
-plt.plot(train_acc_hist, label="train")
-plt.plot(val_acc_hist, label="validation")
-plt.xlabel("epochs")
-plt.ylabel("accuracy")
-plt.legend()
-plt.savefig(f'{path_for_plots}/acc_plot')
-plt.clf()
+np.save(f"{path_to_checkpoint}/y_pred_val.npy", y_pred_val.cpu().detach().numpy())
+np.save(f"{path_to_checkpoint}y_pred_np.npy", y_pred_np)
+np.save(f"{path_to_checkpoint}y_val_np.npy", y_val_np)
