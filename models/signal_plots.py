@@ -75,10 +75,10 @@ def plot_misidentified_signal(var_name, n_bins):
     mask_class_2_as_3 = var_class_2_as_3 > -10
 
     var_class_3_as_2 = var_class_3_as_2[mask_class_3_as_2]
-    weight_class_3_as_2 = rel_w_val_flt[class_3_as_2_idx][mask_class_3_as_2]/sum_of_weights_ggF_flt
+    weight_class_3_as_2 = rel_w_val_flt[class_3_as_2_idx][mask_class_3_as_2]/sum_of_weights_VBF_flt
     
     var_class_2_as_3 = var_class_2_as_3[mask_class_2_as_3]
-    weight_class_2_as_3 = rel_w_val_flt[class_2_as_3_idx][mask_class_2_as_3]/sum_of_weights_VBF_flt
+    weight_class_2_as_3 = rel_w_val_flt[class_2_as_3_idx][mask_class_2_as_3]/sum_of_weights_ggF_flt
 
     if len(var_class_3_as_2) == 0 or len(var_class_2_as_3) == 0:
         print(f"Skipping {var_name} because one of the arrays is empty after filtering.")
