@@ -10,7 +10,7 @@ from tools import load_samples, asymptotic_significance, approx_significance
 import pandas as pd
 import json
 import mplhep
-from ploting import plot_stacked_histogram
+
 
 def plot_optuna_history(study, out_dir, category):
     """
@@ -46,7 +46,7 @@ def plot_mass_category(selected_events, out_dir, category):
     plt.style.use(mplhep.style.CMS)
 
     # Diphoton mass distribution.
-    non_res_bkg_mask = ((sample == "GGJets") | (sample == "TTGG") | (sample == "DDQCDGJET"))
+    non_res_bkg_mask = ((sample == "GGJets") | (sample == "GJetPt20To40") | (sample == "GJetPt40") | (sample == "TTGG") | (sample == "DDQCDGJET"))
     plt.hist(dipho_mass[non_res_bkg_mask], bins=20, range=(100, 180),
              weights=weights[non_res_bkg_mask], histtype='step', label="Background")
     plt.hist(dipho_mass[labels == 1], bins=20, range=(100, 180),
@@ -95,22 +95,16 @@ def plot_mass_sideband_data(best_cut_values, base_path, plot_dir):
     scores = scores[side_band_mask]
     # only consider sidebands data
 
-    selected_events = events
-    selected_scores = scores
-
     for i in range(len(best_cut_values)):
         # get diphoton and dijet mass for each category
         score_cuts = best_cut_values[i]
-        mask = selected_scores[:, 3] > score_cuts["th_signal"]
+        mask = scores[:, 3] > score_cuts["th_signal"]
 
         for b in [0, 1, 2, 4]:
-            mask = mask & (selected_scores[:, b] < score_cuts[f"th_bg_{b}"])
+            mask = mask & (scores[:, b] < score_cuts[f"th_bg_{b}"])
 
-        data_diphoton_mass = selected_events[mask]["mass"]
-        data_dijet_mass = selected_events[mask]["nonRes_dijet_mass"]
-
-        selected_events = selected_events[~mask]
-        selected_scores = selected_scores[~mask]
+        data_diphoton_mass = events[mask]["mass"]
+        data_dijet_mass = events[mask]["nonRes_dijet_mass"]
 
         # plot the diphoton mass in range 100-180 from the sample weights
         plt.hist(data_diphoton_mass, bins=20, range=(100, 180), histtype='bar', label="Data 2022")
@@ -187,13 +181,6 @@ def plot_category_summary_with_thresholds(
     axs[0].grid(True)
     # Remove x-tick labels for this subplot (to avoid clutter)
     axs[0].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
-    th_name_to_calss = {
-        "th_signal": "th_ggFHH",
-        "th_bg_0": "th_nonRes",
-        "th_bg_1": "th_ttH",
-        "th_bg_2": "th_singleH",
-        "th_bg_4": "th_VBFHH",
-    }
 
     # Annotate threshold values on the significance plot
     for i in range(n_cats):
@@ -201,7 +188,7 @@ def plot_category_summary_with_thresholds(
         # Construct a small text with the thresholds
         # Example: "th_signal=0.80\nth_bg_0=0.30\nth_bg_1=0.40"
         threshold_text = "\n".join(
-            f"{th_name_to_calss[k]}={v:.2f}" for k, v in thresholds_dict.items()
+            f"{k}={v:.2f}" for k, v in thresholds_dict.items()
         )
         # Place annotation above each point
         axs[0].annotate(
@@ -234,7 +221,7 @@ def plot_category_summary_with_thresholds(
     # annot the background values
     for i in range(n_cats):
         axs[3].annotate(
-            f"{bkg_side_list[i]:.5f}",
+            f"{bkg_side_list[i]:.2f}",
             xy=(i, bkg_side_list[i]),
             xytext=(i, bkg_side_list[i] + (bkg_side_list[i] * 0.5)),
             fontsize=8,
@@ -330,7 +317,7 @@ def get_best_cut_params_using_optuna(n_categories, samples_input, out_dir, signa
             return sig_val
 
         study = optuna.create_study(direction="maximize")
-        study.optimize(objective, n_trials=200, show_progress_bar=False)
+        study.optimize(objective, n_trials=150, show_progress_bar=False)
         
         best_params = study.best_params
         best_target = study.best_value
@@ -349,7 +336,7 @@ def get_best_cut_params_using_optuna(n_categories, samples_input, out_dir, signa
         
         selected_mask = mask
         selected_events = samples_remaining[selected_mask]
-        #plot_mass_category(selected_events, cat_path, category=cat)
+        plot_mass_category(selected_events, cat_path, category=cat)
 
         # Compute the weighted signal in the peak region (120-130) and background in the sidebands.
         sel_df = selected_events
@@ -397,14 +384,14 @@ def get_best_cut_params_using_optuna(n_categories, samples_input, out_dir, signa
 
 
     # plot the diphoton and dijet mass for each category for data
-    #plot_mass_sideband_data(best_cut_params_list, out_dir, cat_path)
+    plot_mass_sideband_data(best_cut_params_list, out_dir, cat_path)
     
 
     
 
     return best_cut_params_list, best_sig_values
 
-def store_categorization_events_with_score(base_path, best_cut_values):
+def store_categorization_events_with_score_old(base_path, best_cut_values):
 
     # create the output directory
     out_dir = f"{base_path}/optuna_categorization/"
@@ -421,9 +408,7 @@ def store_categorization_events_with_score(base_path, best_cut_values):
                 "VBFHToGG_M_125",
                 "VHtoGG_M_125",
                 "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00",
-                "VBFHHto2B2G_CV_1_C2V_1_C3_1",
-                "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00",
-                "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00"
+                "VBFHHto2B2G_CV_1_C2V_1_C3_1"
                 ]
     for era in ["preEE", "postEE"]:
         for sample in samples:
@@ -442,55 +427,22 @@ def store_categorization_events_with_score(base_path, best_cut_values):
             events["weight_tot"] = rel_w
             events["dijet_mass"] = events["nonRes_dijet_mass"]
 
-            selected_events = events
-            selected_scores = scores
-
-            for i in range(2):
+            for i in range(len(best_cut_values)):
 
                 # get mask for category
                 score_cuts = best_cut_values[i]
-                mask = selected_scores[:, 3] > score_cuts["th_signal"]
+                mask = scores[:, 3] > score_cuts["th_signal"]
+
 
                 for b in [0, 1, 2, 4]:
-                    mask = mask & (selected_scores[:, b] < score_cuts[f"th_bg_{b}"])
+                    mask = mask & (scores[:, b] < score_cuts[f"th_bg_{b}"])
+                #print("sum of mask", np.sum(mask))
 
                 # store events, y, rel_w
                 os.makedirs(f"{out_dir}/cat{i+1}/{era}/{sample}", exist_ok=True)
-                ak.to_parquet(selected_events[mask], f"{out_dir}/cat{i+1}/{era}/{sample}/events.parquet")
-                np.save(f"{out_dir}/cat{i+1}/{era}/{sample}/y.npy", selected_scores[mask])
-
-                selected_events = selected_events[~mask]
-                selected_scores = selected_scores[~mask]
-
-            # also store singleH region
-            singleH_cut = best_cut_values[1]
-            mask = scores[:, 3] < singleH_cut["th_signal"]
-            mask = mask & (scores[:, 2] > singleH_cut["th_bg_2"])
-            mask = mask & (scores[:, 2] > 0.2)
-            for b in [0, 1, 4]:
-                mask = mask & (scores[:, b] < 0.2)
-            os.makedirs(f"{out_dir}/singleH_enriched/{era}/{sample}", exist_ok=True)
-            ak.to_parquet(events[mask], f"{out_dir}/singleH_enriched/{era}/{sample}/events.parquet")
-            np.save(f"{out_dir}/singleH_enriched/{era}/{sample}/y.npy", scores[mask])
-            mask = mask & (scores[:, 2] > 0.85)
-            os.makedirs(f"{out_dir}/singleH_enriched_singleH_score_gt_0p85/{era}/{sample}", exist_ok=True)
-            ak.to_parquet(events[mask], f"{out_dir}/singleH_enriched_singleH_score_gt_0p85/{era}/{sample}/events.parquet")
-            np.save(f"{out_dir}/singleH_enriched_singleH_score_gt_0p85/{era}/{sample}/y.npy", scores[mask])
-
-            # for ttH enriched region
-            ttH_cut = best_cut_values[1]
-            mask = scores[:, 3] < ttH_cut["th_signal"]
-            mask = mask & (scores[:, 1] > ttH_cut["th_bg_1"])
-            mask = mask & (scores[:, 1] > 0.2)
-            for b in [0, 2, 4]:
-                mask = mask & (scores[:, b] < 0.2)
-            os.makedirs(f"{out_dir}/ttH_enriched/{era}/{sample}", exist_ok=True)
-            ak.to_parquet(events[mask], f"{out_dir}/ttH_enriched/{era}/{sample}/events.parquet")
-            np.save(f"{out_dir}/ttH_enriched/{era}/{sample}/y.npy", scores[mask])
-            mask = mask & (scores[:, 1] > 0.85)
-            os.makedirs(f"{out_dir}/ttH_enriched_ttH_score_gt_0p85/{era}/{sample}", exist_ok=True)
-            ak.to_parquet(events[mask], f"{out_dir}/ttH_enriched_ttH_score_gt_0p85/{era}/{sample}/events.parquet")
-            np.save(f"{out_dir}/ttH_enriched_ttH_score_gt_0p85/{era}/{sample}/y.npy", scores[mask])
+                ak.to_parquet(events[mask], f"{out_dir}/cat{i+1}/{era}/{sample}/events.parquet")
+                np.save(f"{out_dir}/cat{i+1}/{era}/{sample}/y.npy", scores[mask])
+                np.save(f"{out_dir}/cat{i+1}/{era}/{sample}/rel_w.npy", rel_w[mask])
 
     # category data
     data_samples = [
@@ -509,69 +461,35 @@ def store_categorization_events_with_score(base_path, best_cut_values):
         # load score and get max score
         scores = np.load(f"{inputs_path}/y.npy")
 
-        selected_events = events
-        selected_scores = scores
-
-        for i in range(2):
+        for i in range(len(best_cut_values)):
 
             # get mask for category
             score_cuts = best_cut_values[i]
-            mask = selected_scores[:, 3] > score_cuts["th_signal"]
+            mask = scores[:, 3] > score_cuts["th_signal"]
 
             for b in [0, 1, 2, 4]:
-                mask = mask & (selected_scores[:, b] < score_cuts[f"th_bg_{b}"])
+                mask = mask & (scores[:, b] < score_cuts[f"th_bg_{b}"])
 
             # remove mass in 120-130
-            #mask = mask & ((selected_events["mass"] < 120) | (selected_events["mass"] > 130))
+            mask = mask & ((events["mass"] < 120) | (events["mass"] > 130))
 
-            selected_events["dijet_mass"] = selected_events["nonRes_dijet_mass"]
-            selected_events["weight_tot"] = ak.ones_like(selected_events["dijet_mass"])
+            events = events[mask]
+            events["dijet_mass"] = events["nonRes_dijet_mass"]
+            events["weight_tot"] = ak.ones_like(events["dijet_mass"])
+            scores = scores[mask]
 
             # store events, y, rel_w
             os.makedirs(f"{out_dir}/cat{i+1}/{data_sample}", exist_ok=True)
-            ak.to_parquet(selected_events[mask], f"{out_dir}/cat{i+1}/{data_sample}/events.parquet")
-            np.save(f"{out_dir}/cat{i+1}/{data_sample}/y.npy", selected_scores[mask])
-
-            selected_events = selected_events[~mask]
-            selected_scores = selected_scores[~mask]
-
-        # also store singleH region
-        singleH_cut = best_cut_values[1]
-        mask = scores[:, 3] < singleH_cut["th_signal"]
-        mask = mask & (scores[:, 2] > singleH_cut["th_bg_2"])
-        mask = mask & (scores[:, 2] > 0.2)
-        for b in [0, 1, 4]:
-            mask = mask & (scores[:, b] < 0.2)
-        os.makedirs(f"{out_dir}/singleH_enriched/{data_sample}", exist_ok=True)
-        ak.to_parquet(events[mask], f"{out_dir}/singleH_enriched/{data_sample}/events.parquet")
-        np.save(f"{out_dir}/singleH_enriched/{data_sample}/y.npy", scores[mask])
-        mask = mask & (scores[:, 2] > 0.85)
-        os.makedirs(f"{out_dir}/singleH_enriched_singleH_score_gt_0p85/{data_sample}", exist_ok=True)
-        ak.to_parquet(events[mask], f"{out_dir}/singleH_enriched_singleH_score_gt_0p85/{data_sample}/events.parquet")
-        np.save(f"{out_dir}/singleH_enriched_singleH_score_gt_0p85/{data_sample}/y.npy", scores[mask])
-
-        # for ttH enriched region
-        ttH_cut = best_cut_values[1]
-        mask = scores[:, 3] < ttH_cut["th_signal"]
-        mask = mask & (scores[:, 1] > ttH_cut["th_bg_1"])
-        mask = mask & (scores[:, 1] > 0.2)
-        for b in [0, 2, 4]:
-            mask = mask & (scores[:, b] < 0.2)
-        os.makedirs(f"{out_dir}/ttH_enriched/{data_sample}", exist_ok=True)
-        ak.to_parquet(events[mask], f"{out_dir}/ttH_enriched/{data_sample}/events.parquet")
-        np.save(f"{out_dir}/ttH_enriched/{data_sample}/y.npy", scores[mask])
-        mask = mask & (scores[:, 1] > 0.85)
-        os.makedirs(f"{out_dir}/ttH_enriched_ttH_score_gt_0p85/{data_sample}", exist_ok=True)
-        ak.to_parquet(events[mask], f"{out_dir}/ttH_enriched_ttH_score_gt_0p85/{data_sample}/events.parquet")
-        np.save(f"{out_dir}/ttH_enriched_ttH_score_gt_0p85/{data_sample}/y.npy", scores[mask])
+            ak.to_parquet(events, f"{out_dir}/cat{i+1}/{data_sample}/events.parquet")
+            np.save(f"{out_dir}/cat{i+1}/{data_sample}/y.npy", scores)
 
     return 0
 
-def convert_to_root(base_path):
-    import uproot
-    import awkward as ak
-    import numpy as np
-    import os
+def store_categorization_events_with_score(base_path, best_cut_values):
+
+    # create the output directory
+    out_dir = f"{base_path}/optuna_categorization/"
+    os.makedirs(out_dir, exist_ok=True)
 
     # category sim
     samples = [
@@ -584,26 +502,65 @@ def convert_to_root(base_path):
                 "VBFHToGG_M_125",
                 "VHtoGG_M_125",
                 "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00",
-                "VBFHHto2B2G_CV_1_C2V_1_C3_1",
-                "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00",
-                "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00"
+                "VBFHHto2B2G_CV_1_C2V_1_C3_1"
                 ]
-    # combine preEE and postEE and convert to root
-    for sample in samples:
-        preEE_events = ak.from_parquet(f"{base_path}/preEE/{sample}/events.parquet")
-        postEE_events = ak.from_parquet(f"{base_path}/postEE/{sample}/events.parquet")
-        events = ak.concatenate([preEE_events, postEE_events], axis=0)
-        os.makedirs(f"{base_path}/root_files/", exist_ok=True)
-        
-        # create dict
-        tree_dict = {field: ak.to_numpy(events[field]) for field in events.fields}
-        root_outfile = f"{base_path}/root_files/{sample}.root"
-        tree_name = "Events"
-        with uproot.recreate(root_outfile) as f:
-            f[tree_name] = tree_dict
-        print(f"Wrote {root_outfile}")
+    for era in ["preEE", "postEE"]:
+        for sample in samples:
+            inputs_path = f"{base_path}/individual_samples/{era}/{sample}"
+            print(f"Processing {inputs_path}")
+            # events parquet
+            events = ak.from_parquet(inputs_path)
+            
 
-    # for data
+            # load score and get max score
+            scores = np.load(f"{inputs_path}/y.npy")
+
+            # load rel_w
+            rel_w = np.load(f"{inputs_path}/rel_w.npy")
+            #events["rel_w"] = rel_w
+            events["weight_tot"] = rel_w
+            events["dijet_mass"] = events["nonRes_dijet_mass"]
+
+            for i in range(1):
+
+                # get mask for category
+                score_cuts = best_cut_values[i]
+                if i == 0:
+                    mask = scores[:, 3] > score_cuts["th_signal"]
+                    for b in [0, 1, 2, 4]:
+                        mask = mask & (scores[:, b] < score_cuts[f"th_bg_{b}"])
+                else:
+                    score_cuts_previous = best_cut_values[i-1]
+                    mask = scores[:, 3] > score_cuts["th_signal"]
+                    print("sum of mask", np.sum(mask))
+                    mask = mask & (scores[:, 3] < score_cuts_previous["th_signal"])
+                    print("sum of mask", np.sum(mask))
+                    for b in [0, 1, 2, 4]:
+                        mask = mask & (scores[:, b] < score_cuts[f"th_bg_{b}"])
+                        print("sum of mask", np.sum(mask))
+                        mask = mask & (scores[:, b] > score_cuts_previous[f"th_bg_{b}"])
+                        print("sum of mask", np.sum(mask))
+
+                # store events, y, rel_w
+                os.makedirs(f"{out_dir}/cat{i+1}/{era}/{sample}", exist_ok=True)
+                ak.to_parquet(events[mask], f"{out_dir}/cat{i+1}/{era}/{sample}/events.parquet")
+                np.save(f"{out_dir}/cat{i+1}/{era}/{sample}/y.npy", scores[mask])
+                np.save(f"{out_dir}/cat{i+1}/{era}/{sample}/rel_w.npy", rel_w[mask])
+
+            # also store singleH region
+            singleH_cut = best_cut_values[2]
+            mask = scores[:, 3] < singleH_cut["th_signal"]
+            mask = mask & (scores[:, 2] > singleH_cut["th_bg_2"])
+            mask = mask & (scores[:, 4] < 0.2)
+
+            os.makedirs(f"{out_dir}/singleH/{era}/{sample}", exist_ok=True)
+            ak.to_parquet(events[mask], f"{out_dir}/singleH/{era}/{sample}/events.parquet")
+            np.save(f"{out_dir}/singleH/{era}/{sample}/y.npy", scores[mask])
+            np.save(f"{out_dir}/singleH/{era}/{sample}/rel_w.npy", rel_w[mask])
+
+
+
+    # category data
     data_samples = [
         "Data_EraE",
         "Data_EraF",
@@ -611,25 +568,51 @@ def convert_to_root(base_path):
         "DataC_2022",
         "DataD_2022",
     ]
-    # combine all the data samples and convert to root
-    data_combined = None
-
     for data_sample in data_samples:
-        data_part = ak.from_parquet(f"{data_folder}/{data_sample}/events.parquet")
-        if data_combined is None:
-            data_combined = data_part
-        else:
-            data_combined = ak.concatenate([data_combined, data_part], axis=0)
+        inputs_path = f"{base_path}/individual_samples_data/{data_sample}"
+        print(f"Processing {inputs_path}")
+        # events parquet
+        events = ak.from_parquet(inputs_path)
 
-    os.makedirs(f"{base_path}/root_files/", exist_ok=True)
-    # create dict
-    tree_dict = {field: ak.to_numpy(data_combined[field]) for field in data_combined.fields}
-    root_outfile = f"{base_path}/root_files/Data.root"
-    tree_name = "Events"
-    with uproot.recreate(root_outfile) as f:
-        f[tree_name] = tree_dict
-    print(f"Wrote {root_outfile}")
+        # load score and get max score
+        scores = np.load(f"{inputs_path}/y.npy")
 
+        for i in range(1):
+
+            # get mask for category
+            score_cuts = best_cut_values[i]
+            if i == 0:
+                mask = scores[:, 3] > score_cuts["th_signal"]
+                for b in [0, 1, 2, 4]:
+                    mask = mask & (scores[:, b] < score_cuts[f"th_bg_{b}"])
+            else:
+                score_cuts_previous = best_cut_values[i-1]
+                mask = scores[:, 3] > score_cuts["th_signal"]
+                print("sum of mask", np.sum(mask))
+                mask = mask & (scores[:, 3] < score_cuts_previous["th_signal"])
+                print("sum of mask", np.sum(mask))
+                for b in [0, 1, 2, 4]:
+                    mask = mask & (scores[:, b] < score_cuts[f"th_bg_{b}"])
+                    print("sum of mask", np.sum(mask))
+                    mask = mask & (scores[:, b] > score_cuts_previous[f"th_bg_{b}"])
+                    print("sum of mask", np.sum(mask))
+
+            # store events, y, rel_w
+            os.makedirs(f"{out_dir}/cat{i+1}/{data_sample}", exist_ok=True)
+            ak.to_parquet(events[mask], f"{out_dir}/cat{i+1}/{data_sample}/events.parquet")
+            np.save(f"{out_dir}/cat{i+1}/{data_sample}/y.npy", scores[mask])
+
+        # also store singleH region
+        singleH_cut = best_cut_values[2]
+        mask = scores[:, 3] < singleH_cut["th_signal"]
+        mask = mask & (scores[:, 2] > singleH_cut["th_bg_2"])
+        mask = mask & (scores[:, 4] < 0.2)
+
+        os.makedirs(f"{out_dir}/singleH/{data_sample}", exist_ok=True)
+        ak.to_parquet(events[mask], f"{out_dir}/singleH/{data_sample}/events.parquet")
+        np.save(f"{out_dir}/singleH/{data_sample}/y.npy", scores[mask])
+
+    return 0
 
 #############################################
 # Main execution
@@ -645,40 +628,27 @@ if __name__ == "__main__":
         "GGJets",
         "DDQCDGJET",
         "TTGG",
-        #"ttHtoGG_M_125",
-        #"BBHto2G_M_125",
-        #"GluGluHToGG_M_125",
-        #"VBFHToGG_M_125",
-        #"VHtoGG_M_125",
+        "ttHtoGG_M_125",
+        "BBHto2G_M_125",
+        "GluGluHToGG_M_125",
+        "VBFHToGG_M_125",
+        "VHtoGG_M_125",
         "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00",
-        "VBFHHto2B2G_CV_1_C2V_1_C3_1",
-        #"GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00",
-        #"GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00"
+        #"VBFHHto2B2G_CV_1_C2V_1_C3_1"
     ]
     
     samples_input = load_samples(args.base_path, samples_list)
 
-    #best_params, best_sig_values = get_best_cut_params_using_optuna(
-    #    n_categories=args.n_categories,
-    #    samples_input=samples_input,
-    #    out_dir=args.base_path,
-    #    signal_class=3  # adjust if necessary
-    #)
+    best_params, best_sig_values = get_best_cut_params_using_optuna(
+        n_categories=args.n_categories,
+        samples_input=samples_input,
+        out_dir=args.base_path,
+        signal_class=3  # adjust if necessary
+    )
 
     # load the best cut values
     with open(f"{args.base_path}/optuna_categorization/best_cut_params.json", "r") as f:
         best_cut_values = json.load(f)
 
-    # store the events in each category
+
     #store_categorization_events_with_score(args.base_path, best_cut_values)
-
-    folder_list = ["cat1", "cat2", "singleH_enriched", "ttH_enriched", "singleH_enriched_singleH_score_gt_0p85", "ttH_enriched_ttH_score_gt_0p85"]
-
-    for folder in folder_list:
-        sim_folder = f"{args.base_path}/optuna_categorization/{folder}"
-        data_folder = f"{args.base_path}/optuna_categorization/{folder}"
-        out_path = f"{args.base_path}/optuna_categorization/{folder}"
-        variables = ["mass", "nonRes_dijet_mass"]
-        print("INFO: Plotting the stacked histogram for ", folder)
-        plot_stacked_histogram(sim_folder, data_folder, samples_list, variables, out_path, signal_scale=100)
-        #convert_to_root(out_path)

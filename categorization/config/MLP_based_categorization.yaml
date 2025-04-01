@@ -1,0 +1,29 @@
+# model_config
+num_layers: 1
+num_nodes: 16
+num_categories: 1
+act_fn: ReLU
+dropout_prob: 0.1
+
+# training_config
+batch_size: 8192
+lr: 0.001
+weight_decay: 0.1
+n_epochs: 10
+patience_early_stopping: 50
+
+
+# scheduler_config
+scheduler: StepLR # ReduceLROnPlateau, CosineAnnealingLR, ExponentialLR, StepLR
+
+# settings for ReduceLROnPlateau
+patience_scheduler: 10
+
+# settings for CosineAnnealingLR
+T_max: 10
+
+# settings for ExponentialLR
+gamma: 0.5
+
+# settings for StepLR
+step_size: 1

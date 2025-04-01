@@ -3,6 +3,7 @@ from tools import load_samples, asymptotic_significance, approx_significance
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+from ploting import plot_stacked_histogram
 
 
 def get_best_cut_values_on_max_score_for_n_cuts(n_cuts, samples_input, out_dir):
@@ -146,7 +147,7 @@ def plot_mass(best_cut_values, samples_input, plot_dir):
 
     for i in range(len(best_cut_values)-1):
         samples_for_cut = samples_input[(samples_input["max_score"] < best_cut_values[i]) & (samples_input["max_score"] > best_cut_values[i+1])]
-        non_res_bkg_mask = ((samples_for_cut["sample"] == "GGJets") | (samples_for_cut["sample"] == "GJetPt20To40") | (samples_for_cut["sample"] == "GJetPt40") | (samples_for_cut["sample"] == "TTGG"))
+        non_res_bkg_mask = ((samples_for_cut["sample"] == "GGJets") | (samples_for_cut["sample"] == "GJetPt20To40") | (samples_for_cut["sample"] == "GJetPt40") | (samples_for_cut["sample"] == "TTGG") | (samples_for_cut["sample"] == "DDQCDGJET"))
         #bkg_diphoton_mass = samples_for_cut["diphoton_mass"][samples_for_cut["labels"] == 0]
         bkg_diphoton_mass = samples_for_cut["diphoton_mass"][non_res_bkg_mask]
         sig_diphoton_mass = samples_for_cut["diphoton_mass"][samples_for_cut["labels"] == 1]
@@ -226,12 +227,12 @@ def plot_mass_sideband_data(best_cut_values, base_path, plot_dir):
     
 
 def plot_Z_sum_quad(best_asy_sig_values, plot_dir):
-    
+    print("INFO: Plotting the sum of Z in quadrature")
     Z_sum_quad = []
     for i in range(1, len(best_asy_sig_values)+1):
         Z_sum_quad.append(np.sqrt(np.sum(np.array(best_asy_sig_values[:i])**2)))
 
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(6, 5))
     plt.plot([i+1 for i in range(len(best_asy_sig_values))], Z_sum_quad, "b.")
 
     #also annotote the values
@@ -255,8 +256,7 @@ def store_categorization_events_with_score(base_path, best_cut_values):
     # category sim
     samples = [
                 "GGJets",
-                "GJetPt20To40",
-                "GJetPt40",
+                "DDQCDGJET",
                 "TTGG",
                 "ttHtoGG_M_125",
                 "BBHto2G_M_125",
@@ -294,6 +294,12 @@ def store_categorization_events_with_score(base_path, best_cut_values):
                 np.save(f"{out_dir}/cat{i+1}/{era}/{sample}/y.npy", scores[mask])
                 np.save(f"{out_dir}/cat{i+1}/{era}/{sample}/rel_w.npy", rel_w[mask])
 
+            mask_singleH = (arg_max_score == 2)
+            os.makedirs(f"{out_dir}/singleH/{era}/{sample}", exist_ok=True)
+            ak.to_parquet(events[mask_singleH], f"{out_dir}/singleH/{era}/{sample}/events.parquet")
+            np.save(f"{out_dir}/singleH/{era}/{sample}/y.npy", scores[mask_singleH])
+            np.save(f"{out_dir}/singleH/{era}/{sample}/rel_w.npy", rel_w[mask_singleH])
+
     # category data
     data_samples = [
         "Data_EraE",
@@ -324,8 +330,77 @@ def store_categorization_events_with_score(base_path, best_cut_values):
             ak.to_parquet(events[mask], f"{out_dir}/cat{i+1}/{data_sample}/events.parquet")
             np.save(f"{out_dir}/cat{i+1}/{data_sample}/y.npy", scores[mask])
 
+        # store singleH data
+        mask_singleH = (arg_max_score == 2)
+        os.makedirs(f"{out_dir}/singleH/{data_sample}", exist_ok=True)
+        ak.to_parquet(events[mask_singleH], f"{out_dir}/singleH/{data_sample}/events.parquet")
+        np.save(f"{out_dir}/singleH/{data_sample}/y.npy", scores[mask_singleH])
+
     return 0
 
+
+def convert_to_root(base_path):
+    import uproot
+    import awkward as ak
+    import numpy as np
+    import os
+
+    # category sim
+    samples = [
+                "GGJets",
+                "DDQCDGJET",
+                "TTGG",
+                "ttHtoGG_M_125",
+                "BBHto2G_M_125",
+                "GluGluHToGG_M_125",
+                "VBFHToGG_M_125",
+                "VHtoGG_M_125",
+                "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00",
+                "VBFHHto2B2G_CV_1_C2V_1_C3_1",
+                #"GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00",
+                #"GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00"
+                ]
+    # combine preEE and postEE and convert to root
+    for sample in samples:
+        preEE_events = ak.from_parquet(f"{base_path}/preEE/{sample}/events.parquet")
+        postEE_events = ak.from_parquet(f"{base_path}/postEE/{sample}/events.parquet")
+        events = ak.concatenate([preEE_events, postEE_events], axis=0)
+        os.makedirs(f"{base_path}/root_files/", exist_ok=True)
+        
+        # create dict
+        tree_dict = {field: ak.to_numpy(events[field]) for field in events.fields}
+        root_outfile = f"{base_path}/root_files/{sample}.root"
+        tree_name = "Events"
+        with uproot.recreate(root_outfile) as f:
+            f[tree_name] = tree_dict
+        print(f"Wrote {root_outfile}")
+
+    # for data
+    data_samples = [
+        "Data_EraE",
+        "Data_EraF",
+        "Data_EraG",
+        "DataC_2022",
+        "DataD_2022",
+    ]
+    # combine all the data samples and convert to root
+    data_combined = None
+
+    for data_sample in data_samples:
+        data_part = ak.from_parquet(f"{base_path}/{data_sample}/events.parquet")
+        if data_combined is None:
+            data_combined = data_part
+        else:
+            data_combined = ak.concatenate([data_combined, data_part], axis=0)
+
+    os.makedirs(f"{base_path}/root_files/", exist_ok=True)
+    # create dict
+    tree_dict = {field: ak.to_numpy(data_combined[field]) for field in data_combined.fields}
+    root_outfile = f"{base_path}/root_files/Data.root"
+    tree_name = "Events"
+    with uproot.recreate(root_outfile) as f:
+        f[tree_name] = tree_dict
+    print(f"Wrote {root_outfile}")
 
 
 
@@ -343,8 +418,7 @@ if __name__ == "__main__":
     # load the samples
     base_path = args.base_path
     samples = ["GGJets",
-                   "GJetPt20To40",
-                   "GJetPt40",
+                   "DDQCDGJET",
                    "TTGG",
                    "ttHtoGG_M_125",
                    "BBHto2G_M_125",
@@ -356,13 +430,28 @@ if __name__ == "__main__":
     
     samples_input = load_samples(base_path, samples)
     # get the best cut values
-    best_cut_values, best_asy_sig_values = get_best_cut_values_on_max_score_for_n_cuts(args.n_cuts, samples_input, base_path)
+    #best_cut_values, best_asy_sig_values = get_best_cut_values_on_max_score_for_n_cuts(args.n_cuts, samples_input, base_path)
 
     # store the categorization events
     #store_categorization_events_with_score(base_path, best_cut_values)
 
     # plot the categories
-    plot_categories(best_cut_values, samples_input)
+    #plot_categories(best_cut_values, samples_input)
+
+    
+
+    # convert to root
+    folder_list = ["cat1", "cat2", "cat3", "singleH"]
+    for folder in folder_list:
+        sim_folder = f"{args.base_path}/max_categorization/{folder}"
+        data_folder = f"{args.base_path}/max_categorization/{folder}"
+        out_path = f"{args.base_path}/max_categorization/{folder}"
+        variables = ["mass", "nonRes_dijet_mass"]
+        print("INFO: Plotting the stacked histogram for ", folder)
+        plot_stacked_histogram(sim_folder, data_folder, samples, variables, out_path, signal_scale=100)
+
+        out_path = f"{args.base_path}/max_categorization//{folder}"
+        #convert_to_root(out_path)
 
 
 

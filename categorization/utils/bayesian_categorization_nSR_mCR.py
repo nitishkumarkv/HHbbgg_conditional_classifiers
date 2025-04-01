@@ -12,6 +12,15 @@ import json
 import mplhep
 from ploting import plot_stacked_histogram
 
+
+import optuna
+import numpy as np
+import pandas as pd
+import os
+import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
+from math import pi
+
 def plot_optuna_history(study, out_dir, category):
     """
     Plot the optimization history using Optuna's matplotlib interface.
@@ -30,124 +39,6 @@ def plot_parallel_coordinates(study, out_dir, category):
     fig = ax.get_figure()  # Retrieve the parent Figure.
     fig.suptitle(f"Parallel Coordinates for Category {category}", fontsize=14)
     fig.savefig(os.path.join(out_dir, f"parallel_coordinates_cat_{category}.png"))
-    plt.clf()
-
-def plot_mass_category(selected_events, out_dir, category):
-    """
-    Plot diphoton and dijet mass distributions for the given category.
-    """
-    import mplhep
-    dipho_mass = selected_events["diphoton_mass"].values
-    dijet_mass = selected_events["dijet_mass"].values
-    labels = selected_events["labels"].values
-    weights = selected_events["weights"].values
-    sample = selected_events["sample"].values
-
-    plt.style.use(mplhep.style.CMS)
-
-    # Diphoton mass distribution.
-    non_res_bkg_mask = ((sample == "GGJets") | (sample == "TTGG") | (sample == "DDQCDGJET"))
-    plt.hist(dipho_mass[non_res_bkg_mask], bins=20, range=(100, 180),
-             weights=weights[non_res_bkg_mask], histtype='step', label="Background")
-    plt.hist(dipho_mass[labels == 1], bins=20, range=(100, 180),
-             weights=weights[labels == 1], histtype='step', label="Signal")
-    plt.xlabel("$m_{\\gamma\\gamma}$ [GeV]", fontsize=12)
-    plt.ylabel("Number of events", fontsize=12)
-    plt.legend()
-    plt.title(f"Diphoton Mass (Category {category})", fontsize=14)
-    plt.savefig(os.path.join(out_dir, f"diphoton_mass_cat_{category}.png"))
-    plt.clf()
-
-    # Dijet mass distribution.
-    plt.hist(dijet_mass[non_res_bkg_mask], bins=20, range=(100, 180),
-             weights=weights[non_res_bkg_mask], histtype='step', label="Background")
-    plt.hist(dijet_mass[labels == 1], bins=20, range=(100, 180),
-             weights=weights[labels == 1], histtype='step', label="Signal")
-    plt.xlabel("$m_{jj}$ [GeV]", fontsize=12)
-    plt.ylabel("Number of events", fontsize=12)
-    plt.legend()
-    plt.title(f"Dijet Mass (Category {category})", fontsize=14)
-    plt.savefig(os.path.join(out_dir, f"dijet_mass_cat_{category}.png"))
-    plt.clf()
-
-def plot_mass_sideband_data(best_cut_values, base_path, plot_dir):
-    # plot the diphoton mass and dijet mass for each category for data
-
-    data_samples = [
-        "Data_EraE",
-        "Data_EraF",
-        "Data_EraG",
-        "DataC_2022",
-        "DataD_2022",
-    ]
-    events = []
-    scores = []
-    for data_sample in data_samples:
-        inputs_path = f"{base_path}/individual_samples_data/{data_sample}"
-        events.append(ak.from_parquet(inputs_path))
-        scores.append(np.load(f"{inputs_path}/y.npy"))
-
-    # concatenate the data samples
-    events = ak.concatenate(events, axis=0)
-    scores = np.concatenate(scores, axis=0)
-    side_band_mask = ((events["mass"] < 120) | (events["mass"] > 130))
-    events = events[side_band_mask]
-    scores = scores[side_band_mask]
-    # only consider sidebands data
-
-    selected_events = events
-    selected_scores = scores
-
-    for i in range(len(best_cut_values)):
-        # get diphoton and dijet mass for each category
-        score_cuts = best_cut_values[i]
-        mask = selected_scores[:, 3] > score_cuts["th_signal"]
-
-        for b in [0, 1, 2, 4]:
-            mask = mask & (selected_scores[:, b] < score_cuts[f"th_bg_{b}"])
-
-        data_diphoton_mass = selected_events[mask]["mass"]
-        data_dijet_mass = selected_events[mask]["nonRes_dijet_mass"]
-
-        selected_events = selected_events[~mask]
-        selected_scores = selected_scores[~mask]
-
-        # plot the diphoton mass in range 100-180 from the sample weights
-        plt.hist(data_diphoton_mass, bins=20, range=(100, 180), histtype='bar', label="Data 2022")
-        plt.xlabel("$m_{\gamma\gamma}$ [GeV]")
-        plt.ylabel("Number of events")
-        plt.legend()
-        plt.savefig(f"{plot_dir}/diphoton_mass_data_cat_{i+1}.png")
-        plt.clf()
-
-        # plot the dijet mass in range 100-180 from the sample weights
-        plt.hist(data_dijet_mass, bins=20, range=(100, 180), histtype='bar', label="Data 2022")
-        plt.xlabel("$m_{jj}$ [GeV]")
-        plt.ylabel("Number of events")
-        plt.legend()
-        plt.savefig(f"{plot_dir}/dijet_mass_data_cat_{i+1}.png")
-        plt.clf()
-
-def plot_category_summary(best_sig_values, sig_peak_list, bkg_side_list, out_dir):
-    """
-    Plot the cumulative quadrature sum of significance (Z_sum_quad), individual category Z,
-    signal in the peak, and background in the sideband versus category number.
-    """
-    plt.style.use(mplhep.style.CMS)
-    categories = np.arange(1, len(best_sig_values) + 1)
-    z_sum_quad = [np.sqrt(np.sum(np.array(best_sig_values[:i])**2)) for i in range(1, len(best_sig_values)+1)]
-    
-    plt.figure(figsize=(10, 6))
-    plt.plot(categories, z_sum_quad, "bo-", label="Cumulative Z (quad sum)")
-    plt.plot(categories, best_sig_values, "ro-", label="Category Z")
-    plt.plot(categories, sig_peak_list, "go-", label="Signal in Peak")
-    plt.plot(categories, bkg_side_list, "ko-", label="Bkg in Sideband")
-    plt.xlabel("Category Number", fontsize=12)
-    plt.ylabel("Value", fontsize=12)
-    plt.title("Category Summary", fontsize=14)
-    plt.legend()
-    plt.grid(True, linestyle="--", alpha=0.7)
-    plt.savefig(os.path.join(out_dir, "category_summary.png"))
     plt.clf()
 
 def plot_category_summary_with_thresholds(
@@ -247,6 +138,261 @@ def plot_category_summary_with_thresholds(
     # Save the figure
     plt.savefig(os.path.join(save_path, "category_summary_new.png"))
     plt.close(fig)
+
+def generalized_asimov_significance(
+    s_array,         # shape (N,) — signal yields in SRs
+    b_array,         # shape (N,) — total background in SRs (all backgrounds)
+    b_components,    # shape (K, N) — per-process background contributions in SRs
+    b_cr_array,      # shape (M,) — total background in CRs
+    tau_matrix       # shape (M, K) — tau[j][k] = transfer factor: CR j gets bkg comp k
+):
+    """
+    Implements Eq. (69) from arXiv:2102.04275.
+    
+    Arguments:
+    ----------
+    s_array : array-like, shape (N,)
+        Expected signal yield in each SR.
+    b_array : array-like, shape (N,)
+        Total background yield in each SR (including constrained + unconstrained).
+    b_components : array-like, shape (K, N)
+        Background breakdown per process across SRs.
+    b_cr_array : array-like, shape (M,)
+        Total background in each CR.
+    tau_matrix : array-like, shape (M, K)
+        Transfer matrix: tau[j][k] = how much bkg comp k contributes to CR j.
+    
+    Returns:
+    --------
+    Z : float
+        Asymptotic discovery significance.
+    """
+    s_array = np.array(s_array)
+    b_array = np.array(b_array)
+    b_cr_array = np.array(b_cr_array)
+    b_components = np.array(b_components)
+    tau_matrix = np.array(tau_matrix)
+
+    N = len(s_array)
+    K, N_b = b_components.shape
+    M = len(b_cr_array)
+    
+    assert N == N_b, "Mismatch between SR count and b_component shape"
+    assert tau_matrix.shape == (M, K), "Tau matrix should be (M, K)"
+
+    n = np.sum(s_array + b_array)       # Total events in SRs
+    m = b_cr_array                      # Total background in each CR
+    b_hat_cr = m                       # Asimov: profiled background = observed
+
+    # Estimate b_hat per background component as in Asimov case (just b_components sum over SR)
+    b_hat_components = np.sum(b_components, axis=1)  # shape (K,)
+
+    # Denominator of CR prediction: tau @ b_hat
+    m_hat_cr = tau_matrix @ b_hat_components  # shape (M,)
+
+    # term1: SR log term
+    b_hat_total = np.sum(b_hat_cr)
+    term1 = n * np.log(b_hat_total / n)
+
+    # term2: sum over CRs
+    term2 = 0.0
+    for j in range(M):
+        m_j = m[j]
+        b_hat_j = b_hat_cr[j]
+        num = np.sum(tau_matrix[j] * np.sum(b_components, axis=1))      
+        denom = np.sum(tau_matrix[j] * b_hat_components)                
+
+        log_term = np.log(num / denom) if denom > 0 and num > 0 else 0.0
+        diff_term = np.sum(tau_matrix[j] * (np.sum(b_components, axis=1) - b_hat_components))
+
+        term2 += (-b_hat_j + m_j) * log_term + diff_term
+
+    Z2 = -2 * (term1 + n + term2)
+    Z = np.sqrt(Z2) if Z2 > 0 else 0.0
+    return Z
+
+# Optuna-based optimization of N SRs and M CRs using multiclass classifier scores
+
+
+
+def simple_asimov_significance(s, b):
+    """
+    Computes the simple Asimov significance:
+    Z = sqrt(2 * ((s + b) * ln(1 + s / b) - s))
+    """
+    if b <= 0 or s <= 0:
+        return 0.0
+    return np.sqrt(2 * ((s + b) * np.log(1 + s / b) - s))
+
+def plot_radar_regions(best_params_list, class_names, n_srs, n_crs, out_path):
+    os.makedirs(out_path, exist_ok=True)
+    labels = class_names
+    num_vars = len(labels)
+    angles = [n / float(num_vars) * 2 * pi for n in range(num_vars)]
+    angles += angles[:1]  # complete the loop
+
+    fig, ax = plt.subplots(figsize=(10, 10), subplot_kw=dict(polar=True))
+
+    cmap = plt.get_cmap("tab10")
+    legend_elements = []
+
+    for i, params in enumerate(best_params_list):
+        values = []
+        region_type = "SR" if i < n_srs else "CR"
+        region_label = f"{region_type}{i if region_type == 'SR' else i - n_srs}"
+
+        for cls in class_names:
+            if f"th_{cls}" in params:
+                values.append(params[f"th_{cls}"])  # lower cut
+            elif f"th_{cls}_max" in params:
+                values.append(params[f"th_{cls}_max"])  # upper cut
+            elif f"th_{cls}_min" in params:
+                values.append(params[f"th_{cls}_min"])  # lower cut
+            else:
+                values.append(0.0)  # default if not present
+
+        values += values[:1]  # repeat first to close the loop
+        color = cmap(i % 10)
+        ax.plot(angles, values, linewidth=2, linestyle='solid', label=region_label, color=color)
+        ax.fill(angles, values, alpha=0.2, color=color)
+        legend_elements.append(Patch(facecolor=color, label=region_label))
+
+    ax.set_xticks(angles[:-1])
+    ax.set_xticklabels(labels, fontsize=12)
+    ax.set_yticks([0.2, 0.4, 0.6, 0.8])
+    ax.set_yticklabels(["0.2", "0.4", "0.6", "0.8"], fontsize=10)
+    ax.set_title("Cut thresholds per Region (Radar Plot)", fontsize=14)
+    ax.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(1.3, 1.1))
+    plt.tight_layout()
+    plt.savefig(os.path.join(out_path, "cut_radar_plot.png"))
+    plt.close()
+
+
+# Optuna-based optimization of N SRs and M CRs
+
+def optimize_sr_cr_cuts(
+    samples_input,
+    n_classes,
+    signal_class,
+    control_classes,
+    class_names,
+    n_srs=2,
+    n_crs=2,
+    n_trials=100,
+    out_dir="optuna_output",
+    min_bkg_sideband=10.0
+):
+    os.makedirs(out_dir, exist_ok=True)
+
+    scores = np.stack(samples_input["score"].values)
+    weights = samples_input["weights"].values
+    labels = samples_input["labels"].values
+    masses = samples_input["diphoton_mass"].values if "diphoton_mass" in samples_input.fields else samples_input["mass"].values
+
+    bkg_classes = [i for i in range(n_classes) if i != signal_class]
+
+    best_params_list = []
+
+    def objective(trial):
+        nonlocal best_params_list
+
+        sr_thresholds = []
+        for i in range(n_srs):
+            sr_cut = {
+                f"th_{class_names[signal_class]}": trial.suggest_float(f"sr_{i}_th_{class_names[signal_class]}", 0.0, 1.0),
+            }
+            for bg in bkg_classes:
+                sr_cut[f"th_{class_names[bg]}_max"] = trial.suggest_float(f"sr_{i}_th_{class_names[bg]}_max", 0.0, 1.0)
+            sr_thresholds.append(sr_cut)
+
+        cr_thresholds = []
+        for i, ctrl_cls in enumerate(control_classes):
+            cr_cut = {
+                "target_class": ctrl_cls,
+                f"th_{class_names[signal_class]}_max": trial.suggest_float(f"cr_{i}_th_{class_names[signal_class]}_max", 0.0, 1.0),
+                f"th_{class_names[ctrl_cls]}_min": trial.suggest_float(f"cr_{i}_th_{class_names[ctrl_cls]}_min", 0.0, 1.0)
+            }
+            for bg in bkg_classes:
+                if bg != ctrl_cls:
+                    cr_cut[f"th_{class_names[bg]}_max"] = trial.suggest_float(f"cr_{i}_th_{class_names[bg]}_max", 0.0, 1.0)
+            cr_thresholds.append(cr_cut)
+
+        region_ids = -1 * np.ones(len(scores), dtype=int)
+
+        region_index = 0
+        sr_masks = []
+        for i, cut in enumerate(sr_thresholds):
+            mask = scores[:, signal_class] > cut[f"th_{class_names[signal_class]}"]
+            for bg in bkg_classes:
+                mask &= scores[:, bg] < cut[f"th_{class_names[bg]}_max"]
+            mask &= region_ids == -1
+            region_ids[mask] = region_index
+            sr_masks.append(mask)
+            region_index += 1
+
+        cr_masks = []
+        if n_crs > 0:
+            for i, cut in enumerate(cr_thresholds):
+                target_cls = cut["target_class"]
+                mask = (scores[:, signal_class] < cut[f"th_{class_names[signal_class]}_max"]) & \
+                       (scores[:, target_cls] > cut[f"th_{class_names[target_cls]}_min"])
+                for bg in bkg_classes:
+                    if bg != target_cls:
+                        mask &= scores[:, bg] < cut[f"th_{class_names[bg]}_max"]
+                mask &= region_ids == -1
+                region_ids[mask] = region_index
+                cr_masks.append(mask)
+                region_index += 1
+
+        s_array, b_array, b_components = [], [], []
+        total_bkg_sideband = 0.0
+
+        for mask in sr_masks:
+            s_array.append(weights[mask & (labels == 1)].sum())
+            b_array.append(weights[mask & (labels == 0)].sum())
+            comps = [weights[mask & (labels == 0) & (scores[:, c] > 0.3)].sum() for c in control_classes]
+            b_components.append(comps)
+
+            sideband_mask = (labels == 0) & mask & ((masses < 120) | (masses > 130))
+            total_bkg_sideband += weights[sideband_mask].sum()
+
+        b_components = np.array(b_components).T if b_components else np.zeros((0, n_srs))
+
+        if total_bkg_sideband < min_bkg_sideband:
+            return -1e6
+
+        if n_crs == 0:
+            Z_values = [simple_asimov_significance(s, b) for s, b in zip(s_array, b_array)]
+            Z = np.sqrt(np.sum(np.array(Z_values) ** 2))
+        else:
+            b_cr_array = [weights[mask & (labels == 0)].sum() for mask in cr_masks]
+
+            tau_matrix = np.zeros((n_crs, len(control_classes)))
+            for j, mask in enumerate(cr_masks):
+                for k, ctrl_cls in enumerate(control_classes):
+                    b_in_cr = weights[mask & (labels == 0) & (scores[:, ctrl_cls] > 0.3)].sum()
+                    b_in_sr = b_components[k].sum()
+                    tau_matrix[j, k] = b_in_cr / b_in_sr if b_in_sr > 0 else 0.0
+
+            Z = generalized_asimov_significance(
+                s_array=np.array(s_array),
+                b_array=np.array(b_array),
+                b_components=b_components,
+                b_cr_array=np.array(b_cr_array),
+                tau_matrix=tau_matrix
+            )
+
+        best_params_list = sr_thresholds + cr_thresholds
+        return Z
+
+    study = optuna.create_study(direction="maximize")
+    study.optimize(objective, n_trials=n_trials)
+
+    print("Best significance:", study.best_value)
+    print("Best parameters:", study.best_params)
+
+    plot_radar_regions(best_params_list, class_names, n_srs, n_crs, out_dir)
+    return study
 
 #############################################
 # Sequential categorization using Optuna
@@ -399,9 +545,6 @@ def get_best_cut_params_using_optuna(n_categories, samples_input, out_dir, signa
     # plot the diphoton and dijet mass for each category for data
     #plot_mass_sideband_data(best_cut_params_list, out_dir, cat_path)
     
-
-    
-
     return best_cut_params_list, best_sig_values
 
 def store_categorization_events_with_score(base_path, best_cut_values):
@@ -645,11 +788,11 @@ if __name__ == "__main__":
         "GGJets",
         "DDQCDGJET",
         "TTGG",
-        #"ttHtoGG_M_125",
-        #"BBHto2G_M_125",
-        #"GluGluHToGG_M_125",
-        #"VBFHToGG_M_125",
-        #"VHtoGG_M_125",
+        "ttHtoGG_M_125",
+        "BBHto2G_M_125",
+        "GluGluHToGG_M_125",
+        "VBFHToGG_M_125",
+        "VHtoGG_M_125",
         "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00",
         "VBFHHto2B2G_CV_1_C2V_1_C3_1",
         #"GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00",
@@ -680,5 +823,5 @@ if __name__ == "__main__":
         out_path = f"{args.base_path}/optuna_categorization/{folder}"
         variables = ["mass", "nonRes_dijet_mass"]
         print("INFO: Plotting the stacked histogram for ", folder)
-        plot_stacked_histogram(sim_folder, data_folder, samples_list, variables, out_path, signal_scale=100)
-        #convert_to_root(out_path)
+        #plot_stacked_histogram(sim_folder, data_folder, samples_list, variables, out_path, signal_scale=100)
+        convert_to_root(out_path)

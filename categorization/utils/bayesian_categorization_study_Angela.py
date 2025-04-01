@@ -103,7 +103,7 @@ def plot_mass_sideband_data(best_cut_values, base_path, plot_dir):
         score_cuts = best_cut_values[i]
         mask = selected_scores[:, 3] > score_cuts["th_signal"]
 
-        for b in [0, 1, 2, 4]:
+        for b in [0, 1, 2]:
             mask = mask & (selected_scores[:, b] < score_cuts[f"th_bg_{b}"])
 
         data_diphoton_mass = selected_events[mask]["mass"]
@@ -330,7 +330,7 @@ def get_best_cut_params_using_optuna(n_categories, samples_input, out_dir, signa
             return sig_val
 
         study = optuna.create_study(direction="maximize")
-        study.optimize(objective, n_trials=200, show_progress_bar=False)
+        study.optimize(objective, n_trials=150, show_progress_bar=False)
         
         best_params = study.best_params
         best_target = study.best_value
@@ -421,9 +421,7 @@ def store_categorization_events_with_score(base_path, best_cut_values):
                 "VBFHToGG_M_125",
                 "VHtoGG_M_125",
                 "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00",
-                "VBFHHto2B2G_CV_1_C2V_1_C3_1",
-                "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00",
-                "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00"
+                "VBFHHto2B2G_CV_1_C2V_1_C3_1"
                 ]
     for era in ["preEE", "postEE"]:
         for sample in samples:
@@ -451,7 +449,7 @@ def store_categorization_events_with_score(base_path, best_cut_values):
                 score_cuts = best_cut_values[i]
                 mask = selected_scores[:, 3] > score_cuts["th_signal"]
 
-                for b in [0, 1, 2, 4]:
+                for b in [0, 1, 2]:
                     mask = mask & (selected_scores[:, b] < score_cuts[f"th_bg_{b}"])
 
                 # store events, y, rel_w
@@ -467,7 +465,7 @@ def store_categorization_events_with_score(base_path, best_cut_values):
             mask = scores[:, 3] < singleH_cut["th_signal"]
             mask = mask & (scores[:, 2] > singleH_cut["th_bg_2"])
             mask = mask & (scores[:, 2] > 0.2)
-            for b in [0, 1, 4]:
+            for b in [0, 1]:
                 mask = mask & (scores[:, b] < 0.2)
             os.makedirs(f"{out_dir}/singleH_enriched/{era}/{sample}", exist_ok=True)
             ak.to_parquet(events[mask], f"{out_dir}/singleH_enriched/{era}/{sample}/events.parquet")
@@ -482,7 +480,7 @@ def store_categorization_events_with_score(base_path, best_cut_values):
             mask = scores[:, 3] < ttH_cut["th_signal"]
             mask = mask & (scores[:, 1] > ttH_cut["th_bg_1"])
             mask = mask & (scores[:, 1] > 0.2)
-            for b in [0, 2, 4]:
+            for b in [0, 2]:
                 mask = mask & (scores[:, b] < 0.2)
             os.makedirs(f"{out_dir}/ttH_enriched/{era}/{sample}", exist_ok=True)
             ak.to_parquet(events[mask], f"{out_dir}/ttH_enriched/{era}/{sample}/events.parquet")
@@ -518,7 +516,7 @@ def store_categorization_events_with_score(base_path, best_cut_values):
             score_cuts = best_cut_values[i]
             mask = selected_scores[:, 3] > score_cuts["th_signal"]
 
-            for b in [0, 1, 2, 4]:
+            for b in [0, 1, 2]:
                 mask = mask & (selected_scores[:, b] < score_cuts[f"th_bg_{b}"])
 
             # remove mass in 120-130
@@ -540,7 +538,7 @@ def store_categorization_events_with_score(base_path, best_cut_values):
         mask = scores[:, 3] < singleH_cut["th_signal"]
         mask = mask & (scores[:, 2] > singleH_cut["th_bg_2"])
         mask = mask & (scores[:, 2] > 0.2)
-        for b in [0, 1, 4]:
+        for b in [0, 1]:
             mask = mask & (scores[:, b] < 0.2)
         os.makedirs(f"{out_dir}/singleH_enriched/{data_sample}", exist_ok=True)
         ak.to_parquet(events[mask], f"{out_dir}/singleH_enriched/{data_sample}/events.parquet")
@@ -555,7 +553,7 @@ def store_categorization_events_with_score(base_path, best_cut_values):
         mask = scores[:, 3] < ttH_cut["th_signal"]
         mask = mask & (scores[:, 1] > ttH_cut["th_bg_1"])
         mask = mask & (scores[:, 1] > 0.2)
-        for b in [0, 2, 4]:
+        for b in [0, 2]:
             mask = mask & (scores[:, b] < 0.2)
         os.makedirs(f"{out_dir}/ttH_enriched/{data_sample}", exist_ok=True)
         ak.to_parquet(events[mask], f"{out_dir}/ttH_enriched/{data_sample}/events.parquet")
@@ -584,9 +582,7 @@ def convert_to_root(base_path):
                 "VBFHToGG_M_125",
                 "VHtoGG_M_125",
                 "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00",
-                "VBFHHto2B2G_CV_1_C2V_1_C3_1",
-                "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00",
-                "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00"
+                "VBFHHto2B2G_CV_1_C2V_1_C3_1"
                 ]
     # combine preEE and postEE and convert to root
     for sample in samples:
@@ -645,15 +641,13 @@ if __name__ == "__main__":
         "GGJets",
         "DDQCDGJET",
         "TTGG",
-        #"ttHtoGG_M_125",
-        #"BBHto2G_M_125",
-        #"GluGluHToGG_M_125",
-        #"VBFHToGG_M_125",
-        #"VHtoGG_M_125",
+        "ttHtoGG_M_125",
+        "BBHto2G_M_125",
+        "GluGluHToGG_M_125",
+        "VBFHToGG_M_125",
+        "VHtoGG_M_125",
         "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00",
-        "VBFHHto2B2G_CV_1_C2V_1_C3_1",
-        #"GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00",
-        #"GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00"
+        #"VBFHHto2B2G_CV_1_C2V_1_C3_1"
     ]
     
     samples_input = load_samples(args.base_path, samples_list)
@@ -679,6 +673,5 @@ if __name__ == "__main__":
         data_folder = f"{args.base_path}/optuna_categorization/{folder}"
         out_path = f"{args.base_path}/optuna_categorization/{folder}"
         variables = ["mass", "nonRes_dijet_mass"]
-        print("INFO: Plotting the stacked histogram for ", folder)
-        plot_stacked_histogram(sim_folder, data_folder, samples_list, variables, out_path, signal_scale=100)
-        #convert_to_root(out_path)
+        #plot_stacked_histogram(sim_folder, data_folder, samples_list, variables, out_path, signal_scale=100)
+        convert_to_root(out_path)
