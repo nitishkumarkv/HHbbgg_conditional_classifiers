@@ -11,7 +11,7 @@ def merge_parquet_files(file_list):
     arrays = []
     for fname in file_list:
         try:
-            arrays.append(ak.from_parquet(fname, columns=["mass", "rel_w"]))
+            arrays.append(ak.from_parquet(fname, columns=["mass", "dijet_mass", "weight_tot"]))
         except Exception as e:
             print(f"Warning: Could not read {fname}: {e}")
     if len(arrays) == 0:
