@@ -1,0 +1,27 @@
+{
+    "sample_to_class": {
+        "GGJets": "is_non_resonant_bkg",
+        "DDQCDGJET": "is_non_resonant_bkg",
+        "TTGG": "is_non_resonant_bkg",
+        "ttHtoGG_M_125": "is_ttH_bkg",
+        "BBHto2G_M_125": "is_single_H_bkg",
+        "GluGluHToGG_M_125": "is_single_H_bkg",
+        "VBFHToGG_M_125": "is_single_H_bkg",
+        "VHtoGG_M_125": "is_single_H_bkg",
+        "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": "is_GluGluToHH_sig",
+        "VBFHHto2B2G_CV_1_C2V_1_C3_1": "is_VBFToHH_sig"
+        },
+    "class_num": {
+        "is_non_resonant_bkg": 0,
+        "is_ttH_bkg": 1,
+        "is_single_H_bkg": 2,
+        "is_GluGluToHH_sig": 3,
+        "is_VBFToHH_sig": 4
+    },
+    "classes": ["is_non_resonant_bkg", "is_ttH_bkg", "is_single_H_bkg", "is_GluGluToHH_sig", "is_VBFToHH_sig"],
+    "samples_data": {"Data_EraE": null, "Data_EraF": null, "Data_EraG": null, "DataC_2022": null, "DataD_2022": null},
+    "sample_to_class_pred": {
+        "VHtoGG_M_125": "is_single_H_bkg",
+        "VBFHToGG_M_125": "is_single_H_bkg"
+        }
+}

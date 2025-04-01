@@ -1,0 +1,14 @@
+{
+    "sample_to_class": {
+        "GJetPt40": "is_non_resonant_bkg"
+        },
+    "class_num": {
+        "is_non_resonant_bkg": 0,
+        "is_ttH_bkg": 1,
+        "is_single_H_bkg": 2,
+        "is_GluGluToHH_sig": 3,
+        "is_VBFToHH_sig": 4
+    },
+    "classes": ["is_non_resonant_bkg", "is_ttH_bkg", "is_single_H_bkg", "is_GluGluToHH_sig", "is_VBFToHH_sig"],
+    "samples_data": {"Data_EraE": null}
+}
