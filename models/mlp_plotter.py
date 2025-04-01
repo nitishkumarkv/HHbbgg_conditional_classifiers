@@ -17,264 +17,544 @@ import mplhep as hep
 from mlp import MLP
 import pickle
 
-def load_checkpoint(file_path, model, optimizer, scheduler):
+def load_checkpoint(file_path):
     checkpoint = torch.load(file_path)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+    #model.load_state_dict(checkpoint['model_state_dict'])
+    #optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    #scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
     train_loss_hist = checkpoint['train_loss_hist']
     val_loss_hist = checkpoint['val_loss_hist']
     train_acc_hist = checkpoint['train_acc_hist']
+    #train_loss_hist_no_aboslute = checkpoint['train_loss_hist_no_aboslute']
     val_acc_hist = checkpoint['val_acc_hist']
+    lr_hist = checkpoint['lr_hist']
     best_weights = checkpoint['best_weights']
     best_loss = checkpoint['best_loss']
     start_epoch = checkpoint['epoch']
     print(f'Checkpoint loaded from {file_path}, resuming from epoch {start_epoch + 1}')
-    return start_epoch, train_loss_hist, val_loss_hist, train_acc_hist, val_acc_hist, best_weights, best_loss
+    return start_epoch, train_loss_hist, val_loss_hist, train_acc_hist, val_acc_hist, lr_hist, best_weights, best_loss
 
-input_path="/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/models/training_inputs_for_mlp_wnorm/"
 
-X_train = np.load(f'{input_path}/X_train.npy')
-X_val = np.load(f'{input_path}/X_val.npy')
-X_test = np.load(f'{input_path}/X_test.npy')
-y_train = np.load(f'{input_path}/y_train.npy')
-y_val = np.load(f'{input_path}/y_val.npy')
-y_test = np.load(f'{input_path}/y_test.npy')
-rel_w_train = np.load(f'{input_path}/rel_w_train.npy')
-rel_w_val = np.load(f'{input_path}/rel_w_val.npy')
-rel_w_test = np.load(f'{input_path}/rel_w_test.npy')
-class_weights_for_training = np.load(f'{input_path}/class_weights_for_training.npy')
-class_weights_for_val = np.load(f'{input_path}/class_weights_for_val.npy')
-class_weights_for_test = np.load(f'{input_path}/class_weights_for_test.npy')
+if __name__ == "__main__":
 
-classes=["non resonant bkg", "ttH bkg", "GluGluToHH sig", "VBFToHH sig"]
+    import argparse
+    parser = argparse.ArgumentParser(description='Plot the results of the MLP')
+    parser.add_argument('--input_path', type=str, help='Path to the inputs')
+    args = parser.parse_args()
 
-X_train[X_train == -999] = -9
-X_val[X_val == -999] = -9
-X_test[X_test == -999] = -9
+    #inputs_for_MLP = "../data/inputs_for_MLP_202411226/"
+    #input_path="train_inputs_for_MLP_202411226/after_random_search_best1/"
+    inputs_for_MLP = args.input_path
+    input_path = f"{inputs_for_MLP}/after_random_search_best1/"
+    path_for_plots = f"{input_path}/plots/"
+    os.makedirs(path_for_plots, exist_ok=True)
+    path_to_checkpoint = f"{input_path}/mlp.pth"
 
-# Use GPU if available
-device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
-print('INFO: Used device is', device)
 
-X_train = torch.tensor(X_train, dtype=torch.float32).to(device)
-X_test = torch.tensor(X_test, dtype=torch.float32).to(device)
-X_val = torch.tensor(X_val, dtype=torch.float32).to(device)
-y_train = torch.tensor(y_train, dtype=torch.float32).to(device)
-y_test = torch.tensor(y_test, dtype=torch.float32).to(device)
-y_val = torch.tensor(y_val, dtype=torch.float32).to(device)
-rel_w_train = torch.tensor(rel_w_train, dtype=torch.float32).to(device)
-rel_w_test = torch.tensor(rel_w_test, dtype=torch.float32).to(device)
-rel_w_val = torch.tensor(rel_w_val, dtype=torch.float32).to(device)
-class_weights_for_training = torch.tensor(class_weights_for_training, dtype=torch.float32).to(device)
-class_weights_for_val = torch.tensor(class_weights_for_val, dtype=torch.float32).to(device)
-class_weights_for_test = torch.tensor(class_weights_for_test, dtype=torch.float32).to(device)
 
-best_params_path = '/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/models/test_best_hyperparams.json'
 
-with open(best_params_path, 'r') as f:
-    best_params = json.load(f)
-    print(best_params)
 
-best_num_layers = best_params['num_layers']
-best_num_nodes = best_params['num_nodes']
-best_act_fn_name = best_params['act_fn_name']
-best_act_fn = getattr(nn, best_act_fn_name)
-best_lr = best_params['lr']
-best_weight_decay = best_params['weight_decay']
-best_dropout_prob = best_params['dropout_prob']
-weight_increase = best_params['weight_increase']
-input_size = X_train.shape[1]
-output_size = 4
 
-best_model = MLP(input_size, best_num_layers, best_num_nodes, output_size, best_act_fn, best_dropout_prob).to(device)
-best_optimizer = optim.Adam(best_model.parameters(), lr=best_lr, weight_decay=best_weight_decay)
-best_scheduler = ReduceLROnPlateau(best_optimizer, mode='min', factor=0.5, patience=20, min_lr=1e-6)
 
-path_to_checkpoint = "/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/models/mlp_checkpoint/"
-start_epoch, train_loss_hist, val_loss_hist, train_acc_hist, val_acc_hist, best_weights, best_loss = load_checkpoint(f'{path_to_checkpoint}/mlp.pth', best_model, best_optimizer, best_scheduler)
+    start_epoch, train_loss_hist, val_loss_hist, train_acc_hist, val_acc_hist, lr_hist, best_weights, best_loss = load_checkpoint(path_to_checkpoint)
 
-y_pred_val = np.load(f"{path_to_checkpoint}/y_pred_val.npy")
-y_pred_val = torch.tensor(y_pred_val, dtype=torch.float32).to(device)
-y_pred_np = np.load(f"{path_to_checkpoint}/y_pred_np.npy")
-y_val_np = np.load(f"{path_to_checkpoint}/y_val_np.npy")
 
-path_for_plots = "/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/models/performance_test/"
-colors = ['royalblue', 'darkorange', 'darkviolet', 'seagreen']
 
-#plot loss function
-plt.plot(train_loss_hist, label="train")
-plt.plot(val_loss_hist, label="validation")
-plt.xlabel("epochs")
-plt.ylabel("cross entropy")
-plt.legend()
-plt.savefig(f'{path_for_plots}/loss_plot')
-plt.clf()
 
-#plot accuracy
-plt.plot(train_acc_hist, label="train")
-plt.plot(val_acc_hist, label="validation")
-plt.xlabel("epochs")
-plt.ylabel("accuracy")
-plt.legend()
-plt.savefig(f'{path_for_plots}/acc_plot')
-plt.clf()
+    colors = ['royalblue', 'darkorange', 'darkviolet', 'seagreen']
 
-#plot misidentified signal
-input_vars_path = "/home/home1/institut_3a/seiler/HHbbgg_conditional_classifiers/data/input_variables.json"
-with open(input_vars_path, 'r') as f:
-    data = json.load(f)
-var_names = data["mlp"]["vars"]
+    #plot loss function
+    plt.plot(train_loss_hist, label="train")
+    plt.plot(val_loss_hist, label="validation")
+    plt.xlabel("epochs")
+    plt.ylabel("cross entropy")
+    plt.legend()
+    plt.savefig(f'{path_for_plots}/loss_plot.png')
+    plt.clf()
 
-def get_var_index(var_name):
-    return var_names.index(var_name)
+    #plot loss function
+    #plt.plot(train_loss_hist_no_aboslute, label="train")
+    #plt.plot(val_loss_hist, label="validation")
+    #plt.xlabel("epochs")
+    #plt.ylabel("cross entropy")
+    #plt.legend()
+    #plt.savefig(f'{path_for_plots}/true_loss_plot.png')
+    #plt.clf()
 
-with open('/home/home1/institut_3a/seiler/HHbbgg_conditional_classifiers/models/training_inputs_for_mlp_wnorm/mean_std_dict.pkl', 'rb') as f:
-    mean_std_dict = pickle.load(f)
+    # plot learning rate
+    plt.plot(lr_hist)
+    plt.xlabel("epochs")
+    plt.ylabel("learning rate")
+    plt.savefig(f'{path_for_plots}/lr_plot.png')
+    plt.clf()
 
-mean = mean_std_dict["mean"]
-std = mean_std_dict["std_dev"]
+    #plot accuracy
+    plt.plot(train_acc_hist, label="train")
+    plt.plot(val_acc_hist, label="validation")
+    plt.xlabel("epochs")
+    plt.ylabel("accuracy")
+    plt.legend()
+    plt.savefig(f'{path_for_plots}/acc_plot.png')
+    plt.clf()
 
-var_list=["pt", "lead_eta", "sublead_pt", "sublead_eta", "lead_bjet_eta", "lead_bjet_phi",
-            "lead_bjet_btagPNetB", "sublead_bjet_eta", "sublead_bjet_phi", "DeltaR_j1g1", "DeltaR_j2g1",
-            "absCosThetaStar_gg", "n_leptons", "n_jets", "pholead_PtOverM", "phosublead_PtOverM",
-            "dijet_pt", "chi_t0", "M_X", "DeltaPhi_j1MET", "DeltaPhi_j2MET", "VBF_first_jet_pt", "VBF_first_jet_eta", "VBF_first_jet_phi", "VBF_first_jet_mass", "VBF_first_jet_charge",
-            "VBF_first_jet_btagPNetB", "VBF_second_jet_pt", "VBF_second_jet_eta", "VBF_second_jet_phi", "VBF_second_jet_mass", "VBF_second_jet_charge", "VBF_second_jet_btagPNetB", "VBF_dijet_pt", "VBF_dijet_eta", "VBF_dijet_phi",
-            "VBF_dijet_mass", "VBF_dijet_charge", "VBF_first_jet_PtOverM", "VBF_second_jet_PtOverM", "VBF_first_jet_index", "VBF_second_jet_index"]
 
-# , "VBF_DeltaR_jb_min", "VBF_DeltaR_jg_min", "VBF_Cgg", "VBF_Cbb"
-class_3_as_2_idx = (y_val_np == 3) & (y_pred_np == 2)
-class_2_as_3_idx = (y_val_np == 2) & (y_pred_np == 3)
-class_2_as_2_idx = (y_val_np == 2) & (y_pred_np == 2)
-class_3_as_3_idx = (y_val_np == 3) & (y_pred_np == 3)
+    # load predictions
+    y_pred_val_ = np.load(f"{input_path}/y_pred_val.npy")
+    y_val_ = np.load(f'{inputs_for_MLP}/y_val.npy')
+    #rel_w_val = np.load(f'{inputs_for_MLP}/rel_w_val.npy')
+    rel_w_val_ = np.load(f'{inputs_for_MLP}/class_weights_for_val.npy')
+    y_pred_val = y_pred_val_
+    y_val = y_val_
+    rel_w_val = rel_w_val_
 
-X_val_flt = X_val.clone()
-X_val_flt[X_val < -8] = -999
-X_val_unsc = (X_val_flt.cpu() * std) + mean
+    #rel_w_val = np.zeros_like(rel_w_val)
+    #for i in range(y_val.shape[1]):
+    #    class_bool = (y_val[:, i] == 1)
+    #    rel_w_val += (class_bool / (sum(class_bool)))
+    #for i in range(y_val.shape[1]):
+    #    print(f"(number of events: sum of rel_w_val) for class number {i+1} = ({sum(y_val[:, i])}: {sum(rel_w_val[y_val[:, i] == 1])})")
+    #
+    #for i in range(y_val.shape[1]):
+    #    a = rel_w_val[y_val[:, i] == 1]
+    #    print("negative weights", i)
+    #    print(a[a<0])
+    #    print(sum(a[a<0]))
 
-path_for_hists="/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/models/selected_signal_hists/"
-def plot_misidentified_signal(var_name, n_bins):
-    index = get_var_index(var_name)
-    var_class_3_as_2 = X_val_unsc[class_3_as_2_idx, index].cpu().numpy()
-    var_class_3_as_2 = var_class_3_as_2[var_class_3_as_2 > -10]
-    var_class_2_as_3 = X_val_unsc[class_2_as_3_idx, index].cpu().numpy()
-    var_class_2_as_3 = var_class_2_as_3[var_class_2_as_3 > -10]
-    var_class_2_as_2 = X_val_unsc[class_2_as_2_idx, index].cpu().numpy()
-    var_class_2_as_2 = var_class_2_as_2[var_class_2_as_2 > -10]
-    var_class_3_as_3 = X_val_unsc[class_3_as_3_idx, index].cpu().numpy()
-    var_class_3_as_3 = var_class_3_as_3[var_class_3_as_3 > -10]
+    y_pred_train = np.load(f"{input_path}/y_pred_train.npy")
+    y_train = np.load(f'{inputs_for_MLP}/y_train.npy')
+    #rel_w_train = np.load(f'{inputs_for_MLP}/rel_w_train.npy')
+    rel_w_train = np.load(f'{inputs_for_MLP}/class_weights_for_train_no_aboslute.npy')
 
-    if len(var_class_3_as_2) == 0 or len(var_class_2_as_3) == 0 or len(var_class_2_as_2) == 0 or len(var_class_3_as_3) == 0:
-        print(f"Skipping {var_name} because one of the arrays is empty after filtering.")
-        return index
+    #rel_w_train = np.zeros_like(rel_w_train)
+    #for i in range(y_train.shape[1]):
+    #    class_bool = (y_train[:, i] == 1)
+    #    rel_w_train += (class_bool / (sum(class_bool)))
+    #for i in range(y_train.shape[1]):
+    #    print(f"(number of events: sum of rel_w_train) for class number {i+1} = ({sum(y_train[:, i])}: {sum(rel_w_train[y_train[:, i] == 1])})")
 
-    minx = int(min(var_class_3_as_2.min(), var_class_2_as_3.min(), var_class_2_as_2.min(), var_class_3_as_3.min()) -1)
-    maxx = int(max(var_class_3_as_2.max(), var_class_2_as_3.max(), var_class_2_as_2.max(), var_class_3_as_3.max()) +1)
-    plt.figure()
-    binning = np.linspace(int(minx), int(maxx), int(n_bins))
-    Hist, Edges = np.histogram(var_class_3_as_2, bins=binning, density=True)
-    hep.histplot((Hist, Edges), histtype='step', color=colors[0], label=f'{classes[3]} predicted as {classes[2]}')
-    Hist, Edges = np.histogram(var_class_2_as_3, bins=binning, density=True)
-    hep.histplot((Hist, Edges), histtype='step', color=colors[1], label=f'{classes[2]} predicted as {classes[3]}')
-    Hist, Edges = np.histogram(var_class_2_as_2, bins=binning, density=True)
-    hep.histplot((Hist, Edges), histtype='step', color=colors[2], label=f'{classes[2]} correctly predicted as {classes[2]}')
-    Hist, Edges = np.histogram(var_class_3_as_3, bins=binning, density=True)
-    hep.histplot((Hist, Edges), histtype='step', color=colors[3], label=f'{classes[3]} correctly predicted as {classes[3]}')
-    plt.xlabel(f"{var_name}")
-    plt.ylabel("Events per bin")
-    plt.xlim([int(minx), int(maxx)])
-    plt.ylim(bottom=0)
-    plt.legend(loc='lower center')
-    hep.cms.label("Private work", data=False, year="2022", com=13.6)
-    plt.savefig(f'{path_for_hists}/MisIdSignal_plot_{var_name}')
+
+
+
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from sklearn.metrics import roc_curve, auc
+    from itertools import combinations
+
+    # Load your data
+    # Replace the paths with your actual paths or ensure the data is already loaded
+    # y_pred_val: shape (n_samples, n_classes)
+    # y_val: shape (n_samples, n_classes), one-hot encoded
+    # rel_w_val: shape (n_samples,)
+
+    # Example loading code (uncomment and adjust as necessary)
+    # y_pred_val = np.load(f"{path_to_checkpoint}/y_pred_val.npy")
+    # y_val = np.load(f'{input_path}/y_val.npy')
+    # rel_w_val = np.load(f'{input_path}/rel_w_val.npy')
+
+
+
+    # Class names
+    class_names = ["non_resonant_bkg", "ttH", "other_single_H", "GluGluToHH", "VBFToHH_sig"]
+    n_classes = len(class_names)
+
+    # Ensure that y_val is one-hot encoded. If not, convert it.
+    # If y_val contains class indices (0, 1, 2, 3), uncomment the following line:
+    # y_val = np.eye(n_classes)[y_val]
+
+    # One-vs-All ROC Curves
+    one_vs_all_auc_dict = {}
+    plt.figure(figsize=(8, 6))
+    for i in range(n_classes):
+        class_name = class_names[i]
+        y_true_binary = y_val[:, i]
+        y_score = y_pred_val[:, i]
+        # Compute ROC curve and ROC area
+        fpr, tpr, thresholds = roc_curve(y_true_binary, y_score, sample_weight=rel_w_val)
+        fpr, tpr = zip(*sorted(zip(fpr, tpr)))
+        roc_auc = auc(fpr, tpr)
+        plt.plot(fpr, tpr, label=f'{class_name} (AUC = {roc_auc:0.4f})')
+
+        # Store the AUC for this class
+        one_vs_all_auc_dict[f"{class_name}_fpr"] = fpr
+        one_vs_all_auc_dict[f"{class_name}_tpr"] = tpr
+
+    plt.plot([0, 1], [0, 1], 'k--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('FPR', fontsize=12)
+    plt.ylabel('TPR', fontsize=12)
+    #plt.title('One-vs-All ROC Curves', fontsize=14)
+    plt.legend(loc="lower right", fontsize=10)
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(f'{path_for_plots}/roc_curve_one_vs_all.png')
+    plt.clf()
+
+    # save auc scores
+    with open(f'{path_for_plots}/roc_curve_one_vs_all.json', 'w') as f:
+        json.dump(one_vs_all_auc_dict, f)
+
+
+    # One-vs-One ROC Curves
+    # For each pair of classes
+    glu_idx = class_names.index("GluGluToHH")
+
+    # List of other class indices
+    other_classes = [i for i in range(n_classes) if i != glu_idx]
+
+    # Iterate over GluGluToHH vs each other class individually
+    plt.figure(figsize=(8, 6))
+
+    GluGluToHH_one_vs_one_roc = {}
+    # Iterate over GluGluToHH vs each other class individually
+    for j in other_classes:
+        i = glu_idx  # Index of GluGluToHH
+        class_name_i = class_names[i]
+        class_name_j = class_names[j]
+        # Select samples belonging to class i or class j
+        idx = (y_val[:, i] == 1) | (y_val[:, j] == 1)
+        y_true_binary = y_val[idx, i]
+        y_score = y_pred_val[idx, i]  # Use the probability for class i (GluGluToHH)
+        weights = rel_w_val[idx]
+        # Compute ROC curve and ROC area
+        fpr, tpr, thresholds = roc_curve(y_true_binary, y_score, sample_weight=weights)
+        fpr, tpr = zip(*sorted(zip(fpr, tpr)))
+        roc_auc = auc(fpr, tpr)
+        # Plot the ROC curve on the same figure
+        plt.plot(fpr, tpr, label=f'{class_name_i} vs {class_name_j} (AUC = {roc_auc:0.4f})')
+
+        # store the AUC
+        GluGluToHH_one_vs_one_roc[f"{class_name}_fpr"] = fpr
+        GluGluToHH_one_vs_one_roc[f"{class_name}_tpr"] = tpr
+
+    # Plot the diagonal line representing random guessing
+    plt.plot([0, 1], [0, 1], 'k--')
+
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('FPR', fontsize=12)
+    plt.ylabel('TPR', fontsize=12)
+    #plt.title(f'ROC Curves: {class_name_i} vs Each Other Class Individually', fontsize=14)
+    plt.legend(loc="lower right", fontsize=10)
+    plt.grid(True)
+    plt.tight_layout()
+
+    # Save the combined plot
+    plt.savefig(f'{path_for_plots}/roc_curve_{class_name_i}_vs_all_individual.png')
+    plt.clf()
+
+    #save the auc scores
+    with open(f'{path_for_plots}/GluGluToHH_vs_all.json', 'w') as f:
+        json.dump(GluGluToHH_one_vs_one_roc, f)
+
+
+    # One-vs-One ROC Curves
+    # For each pair of classes
+    glu_idx = class_names.index("VBFToHH_sig")
+
+    VBFToHH_one_vs_one_roc = {}
+    # List of other class indices
+    other_classes = [i for i in range(n_classes) if i != glu_idx]
+
+    # Iterate over GluGluToHH vs each other class individually
+    plt.figure(figsize=(8, 6))
+
+    # Iterate over GluGluToHH vs each other class individually
+    for j in other_classes:
+        i = glu_idx  # Index of GluGluToHH
+        class_name_i = class_names[i]
+        class_name_j = class_names[j]
+        # Select samples belonging to class i or class j
+        idx = (y_val[:, i] == 1) | (y_val[:, j] == 1)
+        y_true_binary = y_val[idx, i]
+        y_score = y_pred_val[idx, i]  # Use the probability for class i (GluGluToHH)
+        weights = rel_w_val[idx]
+        # Compute ROC curve and ROC area
+        fpr, tpr, thresholds = roc_curve(y_true_binary, y_score, sample_weight=weights)
+        fpr, tpr = zip(*sorted(zip(fpr, tpr)))
+        roc_auc = auc(fpr, tpr)
+        # Plot the ROC curve on the same figure
+        plt.plot(fpr, tpr, label=f'{class_name_i} vs {class_name_j} (AUC = {roc_auc:0.4f})')
+
+        # store the AUC
+        VBFToHH_one_vs_one_roc[f"{class_name}_fpr"] = fpr
+        VBFToHH_one_vs_one_roc[f"{class_name}_tpr"] = tpr
+
+    # Plot the diagonal line representing random guessing
+    plt.plot([0, 1], [0, 1], 'k--')
+
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('FPR', fontsize=12)
+    plt.ylabel('TPR', fontsize=12)
+    #plt.title(f'ROC Curves: {class_name_i} vs Each Other Class Individually', fontsize=14)
+    plt.legend(loc="lower right", fontsize=10)
+    plt.grid(True)
+    plt.tight_layout()
+
+    # Save the combined plot
+    plt.savefig(f'{path_for_plots}/roc_curve_{class_name_i}_vs_all_individual.png')
+    plt.clf()
+
+    # save AUC scores
+    with open(f'{path_for_plots}/VBFToHH_vs_all.json', 'w') as f:
+        json.dump(VBFToHH_one_vs_one_roc, f)
+
+
+
+
+
+
+    y_val = y_train
+    y_pred_val = y_pred_train
+    rel_w_val = rel_w_train
+
+    plt.figure(figsize=(8, 6))
+    for i in range(n_classes):
+        class_name = class_names[i]
+        y_true_binary = y_val[:, i]
+        y_score = y_pred_val[:, i]
+        # Compute ROC curve and ROC area
+        fpr, tpr, thresholds = roc_curve(y_true_binary, y_score, sample_weight=rel_w_val)
+        fpr, tpr = zip(*sorted(zip(fpr, tpr)))
+        roc_auc = auc(fpr, tpr)
+        plt.plot(fpr, tpr, label=f'{class_name} (AUC = {roc_auc:0.4f})')
+
+    plt.plot([0, 1], [0, 1], 'k--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('FPR', fontsize=12)
+    plt.ylabel('TPR', fontsize=12)
+    #plt.title('One-vs-All ROC Curves', fontsize=14)
+    plt.legend(loc="lower right", fontsize=10)
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(f'{path_for_plots}/train_roc_curve_one_vs_all.png')
+    plt.clf()
+
+    # One-vs-One ROC Curves
+    # For each pair of classes
+    glu_idx = class_names.index("VBFToHH_sig")
+
+    # List of other class indices
+    other_classes = [i for i in range(n_classes) if i != glu_idx]
+
+    # Iterate over GluGluToHH vs each other class individually
+    plt.figure(figsize=(8, 6))
+
+    # Iterate over GluGluToHH vs each other class individually
+    for j in other_classes:
+        i = glu_idx  # Index of GluGluToHH
+        class_name_i = class_names[i]
+        class_name_j = class_names[j]
+        # Select samples belonging to class i or class j
+        idx = (y_val[:, i] == 1) | (y_val[:, j] == 1)
+        y_true_binary = y_val[idx, i]
+        y_score = y_pred_val[idx, i]  # Use the probability for class i (GluGluToHH)
+        weights = rel_w_val[idx]
+        # Compute ROC curve and ROC area
+        fpr, tpr, thresholds = roc_curve(y_true_binary, y_score, sample_weight=weights)
+        fpr, tpr = zip(*sorted(zip(fpr, tpr)))
+        roc_auc = auc(fpr, tpr)
+        # Plot the ROC curve on the same figure
+        plt.plot(fpr, tpr, label=f'{class_name_i} vs {class_name_j} (AUC = {roc_auc:0.4f})')
+
+    # Plot the diagonal line representing random guessing
+    plt.plot([0, 1], [0, 1], 'k--')
+
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('FPR', fontsize=12)
+    plt.ylabel('TPR', fontsize=12)
+    #plt.title(f'ROC Curves: {class_name_i} vs Each Other Class Individually', fontsize=14)
+    plt.legend(loc="lower right", fontsize=10)
+    plt.grid(True)
+    plt.tight_layout()
+
+    # Save the combined plot
+    plt.savefig(f'{path_for_plots}/train_roc_curve_{class_name_i}_vs_all_individual.png')
     plt.close()
-    return index
 
-for i in range(len(var_list)):
-    plot_misidentified_signal(var_list[i], 41)
+    # One-vs-One ROC Curves
+    # For each pair of classes
+    glu_idx = class_names.index("GluGluToHH")
 
-threshhold=0.5
-mask = torch.max(y_pred_val, dim=1)[0] > threshhold
-y_pred_flt = y_pred_np[mask.cpu().numpy()]
-y_val_flt = y_val_np[mask.cpu().numpy()]
-rel_w_val_np = class_weights_for_val.cpu().numpy()
-rel_w_val_flt = rel_w_val_np[mask.cpu().numpy()]
+    # List of other class indices
+    other_classes = [i for i in range(n_classes) if i != glu_idx]
 
-# Plot confusion matrix
-cm = confusion_matrix(y_val_flt, y_pred_flt, normalize='true', sample_weight=rel_w_val_flt)
-plt.figure(figsize=(10, 7))
-sns.heatmap(cm, annot=True, fmt='.2g', cmap='Blues', xticklabels=classes, yticklabels=classes)
-plt.xlabel('Predicted Labels')
-plt.ylabel('True Labels')
-plt.title(f'Confusion Matrix, threshhold = {threshhold}')
-plt.savefig(f'{path_for_plots}/cm_plot')
-plt.clf()
+    # Iterate over GluGluToHH vs each other class individually
+    plt.figure(figsize=(8, 6))
 
-#ROC one vs. all
-y_val_bin = label_binarize(y_val_np, classes = range(output_size))
-fpr = dict()
-tpr = dict()
-roc_auc = dict()
-for i in range(output_size):
-    fpr[i], tpr[i], _ = roc_curve(y_val_bin[:, i], y_pred_val[:, i].cpu().detach(), sample_weight=rel_w_val.cpu().numpy())
-    # Ensure fpr is strictly increasing
-    fpr[i], tpr[i] = zip(*sorted(zip(fpr[i], tpr[i])))
-    fpr[i] = np.array(fpr[i])
-    tpr[i] = np.array(tpr[i])
-    roc_auc[i] = auc(fpr[i], tpr[i])
+    # Iterate over GluGluToHH vs each other class individually
+    for j in other_classes:
+        i = glu_idx  # Index of GluGluToHH
+        class_name_i = class_names[i]
+        class_name_j = class_names[j]
+        # Select samples belonging to class i or class j
+        idx = (y_val[:, i] == 1) | (y_val[:, j] == 1)
+        y_true_binary = y_val[idx, i]
+        y_score = y_pred_val[idx, i]  # Use the probability for class i (GluGluToHH)
+        weights = rel_w_val[idx]
+        # Compute ROC curve and ROC area
+        fpr, tpr, thresholds = roc_curve(y_true_binary, y_score, sample_weight=weights)
+        fpr, tpr = zip(*sorted(zip(fpr, tpr)))
+        roc_auc = auc(fpr, tpr)
+        # Plot the ROC curve on the same figure
+        plt.plot(fpr, tpr, label=f'{class_name_i} vs {class_name_j} (AUC = {roc_auc:0.4f})')
 
-out_path = "/.automount/home/home__home1/institut_3a/seiler/HHbbgg_conditional_classifiers/models/"
-with open(f"{out_path}/fpr_dict.pkl", 'wb') as f:
-    pickle.dump(fpr, f)
+    # Plot the diagonal line representing random guessing
+    plt.plot([0, 1], [0, 1], 'k--')
 
-with open(f"{out_path}/tpr_dict.pkl", 'wb') as f:
-    pickle.dump(tpr, f)
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('FPR', fontsize=12)
+    plt.ylabel('TPR', fontsize=12)
+    #plt.title(f'ROC Curves: {class_name_i} vs Each Other Class Individually', fontsize=14)
+    plt.legend(loc="lower right", fontsize=10)
+    plt.grid(True)
+    plt.tight_layout()
 
-# Plot ROC curves
-plt.figure()
-for i, color in zip(range(output_size), colors):
-    plt.plot(fpr[i], tpr[i], color=color, lw=2, label=f'{classes[i]} (AUC = {roc_auc[i]:.2f})' ''.format(i, roc_auc[i]))
-plt.plot([0, 1], [0, 1], 'k--', lw=2)
-plt.xlim([0.0, 1.0])
-plt.ylim([0.0, 1.05])
-plt.xlabel('False Positive Rate')
-plt.ylabel('True Positive Rate')
-plt.title('Receiver Operating Characteristic (One-vs-All)')
-plt.legend(loc="lower right")
-plt.savefig(f'{path_for_plots}/roc_plot')
-plt.clf()
+    # Save the combined plot
+    plt.savefig(f'{path_for_plots}/train_roc_curve_{class_name_i}_vs_all_individual.png')
+    plt.close()
 
-#ROC one vs. one
-fpr = dict()
-tpr = dict()
-roc_auc = dict()
-combinations_to_plot = [(2, 0), (2, 1), (3, 0), (3, 1)]
+"""    # plot for each class scores, the distributions of the scores for the all classes for train and validation
+    colours = ['blue', 'red', 'green', 'orange', 'purple']
+    for i in range(n_classes):
+        plt.figure(figsize=(8, 6))
+        class_name = class_names[i]
+        for j in range(n_classes):
+            plt.hist(y_pred_train[y_train[:, j] == 1, i], bins=25, alpha=0.5, label=f' Train {class_names[j]}', histtype='step', density=True, color=colours[j], weights=rel_w_train[y_train[:, j] == 1], linewidth=2)
+        for j in range(n_classes):
+            hist_values, bin_edges = np.histogram(y_pred_val_[y_val_[:, j] == 1, i], bins=25, density=True, 
+                                              weights=rel_w_val_[y_val_[:, j] == 1])
+            bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])  # Get bin centers
+        
+            # Plot validation data as dots
+            plt.plot(bin_centers, hist_values, 'o', label=f'Valid {class_names[j]}', 
+                    color=colours[j], markersize=5)
 
-plt.figure()
+        plt.xlabel(f'{class_name} score')
+        plt.ylabel('a.u.')
+        plt.yscale('log')
+        plt.legend(ncol=2)
+        plt.savefig(f'{path_for_plots}/{class_name}_score.png')"""
 
-for (i, j) in combinations_to_plot:
-    # Extract the binary labels for classes i and j
-    mask = np.logical_or(y_val_np == i, y_val_np == j)
-    y_true_bin = y_val_bin[mask][:, [i, j]]
-    y_scores = y_pred_val[mask][:, [i, j]].cpu().detach().numpy()
+import numpy as np
+import matplotlib.pyplot as plt
+
+colours = ['blue', 'red', 'green', 'orange', 'purple']
+
+import numpy as np
+import matplotlib.pyplot as plt
+import mplhep
+
+plt.style.use(mplhep.style.CMS)  # Use CMS-like style
+
+colours = ['blue', 'red', 'green', 'orange', 'purple']
+
+import numpy as np
+import matplotlib.pyplot as plt
+import mplhep
+
+plt.style.use(mplhep.style.CMS)
+
+colours = ['blue', 'red', 'green', 'orange', 'purple']
+
+for i in range(n_classes):
+    fig, ax = plt.subplots(figsize=(8, 6))
+    class_name = class_names[i]
+
+    max_y = 0  # Track max y for ylim
+
+    # --- TRAIN: step plot with shaded uncertainty ---
+    for j in range(n_classes):
+        mask = y_train[:, j] == 1
+        y_vals = y_pred_train[mask, i]
+        weights = rel_w_train[mask]
+        weights_sq = weights**2
+
+        hist_raw, bin_edges = np.histogram(y_vals, bins=25, weights=weights)
+        hist_sq_raw, _ = np.histogram(y_vals, bins=bin_edges, weights=weights_sq)
+        bin_widths = np.diff(bin_edges)
+
+        total_weight = np.sum(hist_raw)
+        if total_weight == 0:
+            continue  # Avoid division by zero for empty bins/classes
+
+        # Normalize to density
+        hist_density = hist_raw / (total_weight * bin_widths)
+        uncertainty_density = np.sqrt(hist_sq_raw) / (total_weight * bin_widths)
+        bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+
+        max_y = max(max_y, np.max(hist_density + uncertainty_density))
+
+        # Step line
+        ax.step(
+            bin_centers,
+            hist_density,
+            where='mid',
+            label=f'Train {class_names[j]}',
+            color=colours[j],
+            linewidth=2,
+        )
+
+        # Shaded uncertainty band
+        ax.fill_between(
+            bin_centers,
+            hist_density - uncertainty_density,
+            hist_density + uncertainty_density,
+            step='mid',
+            color=colours[j],
+            alpha=0.3,
+        )
+
+    # --- VALIDATION: dots with error bars ---
+    for j in range(n_classes):
+        mask = y_val_[:, j] == 1
+        y_vals = y_pred_val_[mask, i]
+        weights = rel_w_val_[mask]
+        weights_sq = weights**2
+
+        hist_raw, bin_edges = np.histogram(y_vals, bins=25, weights=weights)
+        hist_sq_raw, _ = np.histogram(y_vals, bins=bin_edges, weights=weights_sq)
+        bin_widths = np.diff(bin_edges)
+
+        total_weight = np.sum(hist_raw)
+        if total_weight == 0:
+            continue
+
+        hist_density = hist_raw / (total_weight * bin_widths)
+        uncertainty_density = np.sqrt(hist_sq_raw) / (total_weight * bin_widths)
+        bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+
+        max_y = max(max_y, np.max(hist_density + uncertainty_density))
+
+        ax.errorbar(
+            bin_centers,
+            hist_density,
+            yerr=uncertainty_density,
+            fmt='o',
+            label=f'Valid {class_names[j]}',
+            color=colours[j],
+            markersize=5,
+            capsize=2,
+            elinewidth=1,
+        )
+
+    # Labels and style
+    ax.set_xlabel(f'{class_name} score')
+    ax.set_ylabel('a.u.')
+    ax.set_yscale('log')
+    ax.set_ylim(bottom=1e-3, top=max_y * 100)
+    ax.set_xlim(left=0, right=1)
+
+    ax.legend(ncol=2, fontsize=10)
+    # Uncomment this if you want the CMS label
+    # mplhep.cms.label(loc=0, data=True, label='Preliminary')
+
+    fig.tight_layout()
+    fig.savefig(f'{path_for_plots}/{class_name}_score.png')
+    plt.close(fig)
+
     
-    # True labels: i -> 0, j -> 1
-    y_true = np.argmax(y_true_bin, axis=1)
-    y_score = y_scores[:, 1]  # Score for class j
-
-    # Compute ROC curve and ROC area for this pair
-    fpr[(i, j)], tpr[(i, j)], _ = roc_curve(y_true, y_score)
-    roc_auc[(i, j)] = auc(fpr[(i, j)], tpr[(i, j)])
-    
-    # Plot the ROC curve
-    plt.plot(fpr[(i, j)], tpr[(i, j)], lw=2,
-             label=f'ROC curve {classes[i]} vs. {classes[j]} (area = {roc_auc[(i, j)]:.2f})')
-plt.plot([0, 1], [0, 1], 'k--', lw=2)
-plt.xlim([0.0, 1.0])
-plt.ylim([0.0, 1.05])
-plt.xlabel('False Positive Rate')
-plt.ylabel('True Positive Rate')
-plt.title('ROC Curves for Selected Class Pairs')
-plt.legend(loc="lower right")
-plt.savefig(f'{path_for_plots}/combined_roc_curves')
-plt.clf()

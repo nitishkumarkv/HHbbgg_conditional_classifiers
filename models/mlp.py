@@ -19,7 +19,7 @@ class MLP(nn.Module):
 
         # Output layer
         layers.append(nn.Linear(num_nodes, output_size))
-        layers.append(nn.Softmax(dim=1))
+        #layers.append(nn.Softmax(dim=1))
 
         # Combine all layers into a sequential model
         self.model = nn.Sequential(*layers)

@@ -20,6 +20,7 @@ class GAT_classifier(torch.nn.Module):
         super(GAT_classifier, self).__init__()
 
         self.global_pooling = global_pooling
+        self.num_extra_feat = num_extra_feat
 
         self.activation_dict = {
             'relu': nn.ReLU(),
@@ -85,7 +86,8 @@ class GAT_classifier(torch.nn.Module):
         
 
         # Final MLP layers for classification
-        x = torch.cat([x, extra_feat], dim=1)
+        if self.num_extra_feat !=0:
+            x = torch.cat([x, extra_feat], dim=1)
 
         for mlp_layer in self.mlp_final_layers:
             x = mlp_layer(x)
@@ -105,7 +107,7 @@ if __name__ == "__main__":
     num_final_mlp_layers = 2
     num_gat_layers = 2
     num_message_passing_layers = 2
-    num_extra_feat = 3
+    num_extra_feat = 0
     output_dim = 4
 
     gat = GAT_classifier(input_dim = input_dim,
