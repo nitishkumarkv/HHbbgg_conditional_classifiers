@@ -36,7 +36,7 @@ def objective(trial):
     act_fn = getattr(nn, act_fn_name)
     lr = trial.suggest_float('lr', 1e-6, 1e-2, log=True)
     weight_decay = trial.suggest_float('weight_decay', 1e-6, 1e-4, log=True)
-    dropout_prob = trial.suggest_categorical('dropout_prob', [0.1, 0.2, 0.3, 0.4, 0.5])
+    dropout_prob = trial.suggest_categorical('dropout_prob', [0.15, 0.2, 0.3, 0.4, 0.5])
 
     # create model
     input_size = X_train.shape[1]
@@ -204,6 +204,7 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description='Preform MLP based classification')
     parser.add_argument('--input_path', type=str, help='Path to the input files')
+    parser.add_argument('--n_trials', type=int, default=10, help='Number of trials for random search')
     args = parser.parse_args()
 
     input_path= args.input_path
@@ -240,7 +241,7 @@ if __name__ == "__main__":
     #class_weights_for_test = torch.tensor(class_weights_for_test, dtype=torch.float32).to(device)
 
     # Optuna study
-    n_trials = 15
+    n_trials = args.n_trials
     study_name = f"{path_for_plots}_{n_trials}_trials____"
     storage = optuna.storages.RDBStorage('sqlite:///example.db')
     study = optuna.create_study(storage=storage, sampler=RandomSampler(), study_name=study_name, direction='minimize')

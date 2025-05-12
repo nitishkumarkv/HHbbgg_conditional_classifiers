@@ -15,16 +15,20 @@ import torch.nn.functional as F
 
 # Define custom dataset
 class CustomDataset(Dataset):
-    def __init__(self, X, y, sample_weights):
+    def __init__(self, X, y, sample_weights, no_aboslute_weights=None):
         self.X = X
         self.y = y
         self.sample_weights = sample_weights
+        self.no_aboslute_weights = no_aboslute_weights
 
     def __len__(self):
         return len(self.X)
 
     def __getitem__(self, idx):
-        return self.X[idx], self.y[idx], self.sample_weights[idx]
+        if self.no_aboslute_weights is not None:
+            return self.X[idx], self.y[idx], self.sample_weights[idx], self.no_aboslute_weights[idx]
+        else:
+            return self.X[idx], self.y[idx], self.sample_weights[idx]
 
 
 
@@ -33,12 +37,14 @@ def train_one_epoch(model, optimizer, data_loader, loss_fn, device):
     model.train()
     batch_losses = []
     batch_accs = []
+    batch_losses_no_abs = []
 
     progress_bar = tqdm(data_loader, desc=f"Epoch {epoch} [Training]", leave=False)
-    for X_batch, y_batch, weights_batch in progress_bar:
+    for X_batch, y_batch, weights_batch, weights_batch_no in progress_bar:
         X_batch = X_batch.to(device)
         y_batch = y_batch.to(device)
         weights_batch = weights_batch.to(device)
+        weights_batch_no = weights_batch_no.to(device)
 
         optimizer.zero_grad()
         y_pred = model(X_batch)
@@ -47,20 +53,24 @@ def train_one_epoch(model, optimizer, data_loader, loss_fn, device):
         weighted_loss.backward()
         optimizer.step()
 
+        weighted_loss_no_abs = (loss * weights_batch_no).sum() / weights_batch_no.sum()
+
         # compute weighted accuracy
         correct = (torch.argmax(y_pred, dim=1) == y_batch).float()
         weighted_acc = (correct * weights_batch).sum() / weights_batch.sum()
 
         batch_losses.append(weighted_loss.item())
         batch_accs.append(weighted_acc.item())
+        batch_losses_no_abs.append(weighted_loss_no_abs.item())
 
         # Update progress bar
         progress_bar.set_postfix({
             'Loss': f'{weighted_loss.item():.4f}',
-            'Acc': f'{weighted_acc.item():.4f}'
+            'Acc': f'{weighted_acc.item():.4f}',
+            'Loss_no_abs': f'{weighted_loss_no_abs.item():.4f}'
         })
 
-    return np.mean(batch_losses), np.mean(batch_accs)
+    return np.mean(batch_losses), np.mean(batch_accs), np.mean(batch_losses_no_abs)
 
 def evaluate(model, data_loader, loss_fn, device):
     model.eval()
@@ -100,13 +110,14 @@ def evaluate(model, data_loader, loss_fn, device):
 
 
 # Save the best model
-def save_checkpoint(epoch, model, optimizer, scheduler, train_loss_hist, val_loss_hist, train_acc_hist, val_acc_hist, best_weights, best_loss, file_path):
+def save_checkpoint(epoch, model, optimizer, scheduler, train_loss_hist, train_loss_hist_no_absolute_weights, val_loss_hist, train_acc_hist, val_acc_hist, best_weights, best_loss, file_path):
     checkpoint = {
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
         'scheduler_state_dict': scheduler.state_dict(),
         'train_loss_hist': train_loss_hist,
+        'train_loss_hist_no_absolute_weights': train_loss_hist_no_absolute_weights,
         'val_loss_hist': val_loss_hist,
         'train_acc_hist': train_acc_hist,
         'val_acc_hist': val_acc_hist,
@@ -183,7 +194,7 @@ def train(input_path):
     output_size = len(np.unique(y_train))  # Number of classes
 
     # Create datasets
-    train_dataset = CustomDataset(X_train, y_train, class_weights_for_training)
+    train_dataset = CustomDataset(X_train, y_train, class_weights_for_training, class_weights_for_train_no_aboslute)
     val_dataset = CustomDataset(X_val, y_val, class_weights_for_val)
 
     # Create data loaders
@@ -209,13 +220,15 @@ def train(input_path):
     val_loss_hist = []
     val_acc_hist = []
     lr_hist = []
+    train_loss_hist_no_absolute_weights = []
 
     # Training loop
     for epoch in range(n_epochs):
         # Training
-        train_loss, train_acc = train_one_epoch(best_model, best_optimizer, train_loader, loss_fn, device)
+        train_loss, train_acc, train_loss_no_abs = train_one_epoch(best_model, best_optimizer, train_loader, loss_fn, device)
         train_loss_hist.append(train_loss)
         train_acc_hist.append(train_acc)
+        train_loss_hist_no_absolute_weights.append(train_loss_no_abs)
 
         # Validation
         val_loss, val_acc = evaluate(best_model, val_loader, loss_fn, device)
@@ -348,7 +361,7 @@ if __name__ == "__main__":
     output_size = len(np.unique(y_train))  # Number of classes
 
     # Create datasets
-    train_dataset = CustomDataset(X_train, y_train, class_weights_for_training)
+    train_dataset = CustomDataset(X_train, y_train, class_weights_for_training, class_weights_for_train_no_aboslute)
     val_dataset = CustomDataset(X_val, y_val, class_weights_for_val)
 
     # Create data loaders
@@ -370,6 +383,7 @@ if __name__ == "__main__":
     counter = 0
 
     train_loss_hist = []
+    train_loss_hist_no_absolute_weights = []
     train_acc_hist = []
     val_loss_hist = []
     val_acc_hist = []
@@ -378,9 +392,10 @@ if __name__ == "__main__":
     # Training loop
     for epoch in range(n_epochs):
         # Training
-        train_loss, train_acc = train_one_epoch(best_model, best_optimizer, train_loader, loss_fn, device)
+        train_loss, train_acc, train_loss_no_absolute = train_one_epoch(best_model, best_optimizer, train_loader, loss_fn, device)
         train_loss_hist.append(train_loss)
         train_acc_hist.append(train_acc)
+        train_loss_hist_no_absolute_weights.append(train_loss_no_absolute)
 
         # Validation
         val_loss, val_acc = evaluate(best_model, val_loader, loss_fn, device)
@@ -407,9 +422,10 @@ if __name__ == "__main__":
 
         print(f"Epoch {epoch} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
         print(f"Epoch {epoch} - Train Acc: {train_acc:.4f}, Val Acc: {val_acc:.4f}", '\n')
+        print(f"Epoch {epoch} - Train Loss no abs: {train_loss_no_absolute:.4f}", '\n')
 
     save_checkpoint(epoch, best_model, best_optimizer, best_scheduler, 
-                train_loss_hist, val_loss_hist, train_acc_hist, val_acc_hist, 
+                train_loss_hist, train_loss_hist_no_absolute_weights, val_loss_hist, train_acc_hist, val_acc_hist, 
                 best_weights, best_loss, f"{path_to_checkpoint}/mlp.pth")
 
     # Load the best state of the model

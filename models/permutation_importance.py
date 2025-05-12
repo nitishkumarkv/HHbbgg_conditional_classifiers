@@ -91,7 +91,7 @@ class ModelEstimatorWrapper:
         best_act_fn_name = best_params['act_fn_name']
         best_act_fn = getattr(nn, best_act_fn_name)
         best_dropout_prob = best_params['dropout_prob']
-        output_size = best_params.get('output_size', 5)  # Adjust as per your problem
+        output_size = best_params.get('output_size', 4)  # Adjust as per your problem
 
         # Define the model
         self.model = MLP(
@@ -152,7 +152,11 @@ def plot_permutation_importance_log_loss(importances, stds, feature_names):
 
 
 if __name__ == "__main__":
-    input_path="MLP_multiclass_with_mjj_vbfmass_20250308/"
+    import argparse
+    parser = argparse.ArgumentParser(description='Permutation Importance for MLP')
+    parser.add_argument('--input_path', type=str, required=True, help='Path to the input data')
+    args = parser.parse_args()
+    input_path= args.input_path
 
     # load data
     print("INFO: Loading inputs")

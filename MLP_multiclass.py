@@ -28,19 +28,19 @@ def prepare_inputs(config_path, samples_path, out_path):
     prep_inputs.prep_input_for_mlp(samples_path, out_path)
 
     # Prepare the inputs for prediction sim
-    print('INFO: Preparing the inputs for prediction sim')
+    #print('INFO: Preparing the inputs for prediction sim')
     prep_inputs_pred = PrepareInputsPred(input_var_json=input_vars_path,
                                          sample_to_class = samples_and_classes["sample_to_class_pred"],
                                          class_num = samples_and_classes["class_num_pred"],
                                          classes = samples_and_classes["classes"],)
     prep_inputs_pred.prep_input_for_mlp(samples_path, out_path)
 
-    #print('INFO: Preparing the inputs for prediction sim')
-    #prep_inputs_pred = PrepareInputsPred(input_var_json=input_vars_path,
-    #                                     sample_to_class = samples_and_classes["sample_to_class_pred"],
-    #                                     class_num = samples_and_classes["class_num"],
-    #                                     classes = samples_and_classes["classes"],)
-    #prep_inputs_pred.prep_input_for_mlp(samples_path, out_path)
+    ##print('INFO: Preparing the inputs for prediction sim')
+    ##prep_inputs_pred = PrepareInputsPred(input_var_json=input_vars_path,
+    ##                                     sample_to_class = samples_and_classes["sample_to_class_pred"],
+    ##                                     class_num = samples_and_classes["class_num"],
+    ##                                     classes = samples_and_classes["classes"],)
+    ##prep_inputs_pred.prep_input_for_mlp(samples_path, out_path)
 
     # prepare the inputs for prediction data
     print('INFO: Preparing the inputs for prediction data')
@@ -58,7 +58,7 @@ def end_to_end_commands(out_path, config_path):
 
     # do random search
     print('INFO: Performing random search')
-    subprocess.run(f"python3 models/random_search.py --input_path {out_path}", shell=True)
+    subprocess.run(f"python3 models/random_search.py --input_path {out_path} --n_trials 1", shell=True)
 
     # do training for the best model
     print('INFO: Training the best model')
@@ -68,6 +68,10 @@ def end_to_end_commands(out_path, config_path):
     print('INFO: Getting the results plots')
     subprocess.run(f"python3 models/mlp_plotter.py --input_path {out_path}", shell=True)
 
+    # get permutaion importance
+    print('INFO: Getting permutation importance')
+    subprocess.run(f"python3 models/permutation_importance.py --input_path {out_path}", shell=True)
+
     # get the predictions
     print('INFO: Getting the predictions')
     subprocess.run(f"python3 models/get_prediction.py --model_folder {out_path}/after_random_search_best1/ --samples_path {out_path} --config_path {config_path}", shell=True)
@@ -75,6 +79,12 @@ def end_to_end_commands(out_path, config_path):
     # get non resonant mass for different ggFHH score cuts
     print('INFO: Getting non resonant mass for different ggFHH score cuts')
     subprocess.run(f"python3 test_cor_mass.py --input_path {out_path} --config_path {config_path}", shell=True)
+
+    # get data-MC plots
+    print('INFO: Getting data-MC plots')
+    subprocess.run(f"python3 plotting/plotting_utils.py --base-path {out_path}", shell=True)
+
+    
 
     # categorisation
 
@@ -91,4 +101,4 @@ if __name__ == "__main__":
     parser.add_argument('--out_path', type=str, help='Path to save the inputs')
     args = parser.parse_args()
     prepare_inputs(args.config_path, args.samples_path, args.out_path)
-    end_to_end_commands(args.out_path, args.config_path)
+    #end_to_end_commands(args.out_path, args.config_path)

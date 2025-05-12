@@ -25,14 +25,14 @@ def load_checkpoint(file_path):
     train_loss_hist = checkpoint['train_loss_hist']
     val_loss_hist = checkpoint['val_loss_hist']
     train_acc_hist = checkpoint['train_acc_hist']
-    #train_loss_hist_no_aboslute = checkpoint['train_loss_hist_no_aboslute']
+    train_loss_hist_no_aboslute = checkpoint['train_loss_hist_no_absolute_weights']
     val_acc_hist = checkpoint['val_acc_hist']
     lr_hist = checkpoint['lr_hist']
     best_weights = checkpoint['best_weights']
     best_loss = checkpoint['best_loss']
     start_epoch = checkpoint['epoch']
     print(f'Checkpoint loaded from {file_path}, resuming from epoch {start_epoch + 1}')
-    return start_epoch, train_loss_hist, val_loss_hist, train_acc_hist, val_acc_hist, lr_hist, best_weights, best_loss
+    return start_epoch, train_loss_hist, train_loss_hist_no_aboslute, val_loss_hist, train_acc_hist, val_acc_hist, lr_hist, best_weights, best_loss
 
 
 if __name__ == "__main__":
@@ -56,7 +56,7 @@ if __name__ == "__main__":
 
 
 
-    start_epoch, train_loss_hist, val_loss_hist, train_acc_hist, val_acc_hist, lr_hist, best_weights, best_loss = load_checkpoint(path_to_checkpoint)
+    start_epoch, train_loss_hist, train_loss_hist_no_absolute_weights, val_loss_hist, train_acc_hist, val_acc_hist, lr_hist, best_weights, best_loss = load_checkpoint(path_to_checkpoint)
 
 
 
@@ -70,6 +70,14 @@ if __name__ == "__main__":
     plt.ylabel("cross entropy")
     plt.legend()
     plt.savefig(f'{path_for_plots}/loss_plot.png')
+    plt.clf()
+
+    plt.plot(train_loss_hist_no_absolute_weights, label="train")
+    plt.plot(val_loss_hist, label="validation")
+    plt.xlabel("epochs")
+    plt.ylabel("cross entropy")
+    plt.legend()
+    plt.savefig(f'{path_for_plots}/loss_plot_no_abs.png')
     plt.clf()
 
     #plot loss function
@@ -155,7 +163,8 @@ if __name__ == "__main__":
 
     # Class names
     class_names = ["non_resonant_bkg", "ttH", "other_single_H", "GluGluToHH", "VBFToHH_sig"]
-    n_classes = len(class_names)
+    #n_classes = len(class_names)
+    n_classes = y_val.shape[1]
 
     # Ensure that y_val is one-hot encoded. If not, convert it.
     # If y_val contains class indices (0, 1, 2, 3), uncomment the following line:
@@ -247,58 +256,58 @@ if __name__ == "__main__":
     with open(f'{path_for_plots}/GluGluToHH_vs_all.json', 'w') as f:
         json.dump(GluGluToHH_one_vs_one_roc, f)
 
+    if n_classes>4:
+        # One-vs-One ROC Curves
+        # For each pair of classes
+        glu_idx = class_names.index("VBFToHH_sig")
 
-    # One-vs-One ROC Curves
-    # For each pair of classes
-    glu_idx = class_names.index("VBFToHH_sig")
+        VBFToHH_one_vs_one_roc = {}
+        # List of other class indices
+        other_classes = [i for i in range(n_classes) if i != glu_idx]
 
-    VBFToHH_one_vs_one_roc = {}
-    # List of other class indices
-    other_classes = [i for i in range(n_classes) if i != glu_idx]
+        # Iterate over GluGluToHH vs each other class individually
+        plt.figure(figsize=(8, 6))
 
-    # Iterate over GluGluToHH vs each other class individually
-    plt.figure(figsize=(8, 6))
+        # Iterate over GluGluToHH vs each other class individually
+        for j in other_classes:
+            i = glu_idx  # Index of GluGluToHH
+            class_name_i = class_names[i]
+            class_name_j = class_names[j]
+            # Select samples belonging to class i or class j
+            idx = (y_val[:, i] == 1) | (y_val[:, j] == 1)
+            y_true_binary = y_val[idx, i]
+            y_score = y_pred_val[idx, i]  # Use the probability for class i (GluGluToHH)
+            weights = rel_w_val[idx]
+            # Compute ROC curve and ROC area
+            fpr, tpr, thresholds = roc_curve(y_true_binary, y_score, sample_weight=weights)
+            fpr, tpr = zip(*sorted(zip(fpr, tpr)))
+            roc_auc = auc(fpr, tpr)
+            # Plot the ROC curve on the same figure
+            plt.plot(fpr, tpr, label=f'{class_name_i} vs {class_name_j} (AUC = {roc_auc:0.4f})')
 
-    # Iterate over GluGluToHH vs each other class individually
-    for j in other_classes:
-        i = glu_idx  # Index of GluGluToHH
-        class_name_i = class_names[i]
-        class_name_j = class_names[j]
-        # Select samples belonging to class i or class j
-        idx = (y_val[:, i] == 1) | (y_val[:, j] == 1)
-        y_true_binary = y_val[idx, i]
-        y_score = y_pred_val[idx, i]  # Use the probability for class i (GluGluToHH)
-        weights = rel_w_val[idx]
-        # Compute ROC curve and ROC area
-        fpr, tpr, thresholds = roc_curve(y_true_binary, y_score, sample_weight=weights)
-        fpr, tpr = zip(*sorted(zip(fpr, tpr)))
-        roc_auc = auc(fpr, tpr)
-        # Plot the ROC curve on the same figure
-        plt.plot(fpr, tpr, label=f'{class_name_i} vs {class_name_j} (AUC = {roc_auc:0.4f})')
+            # store the AUC
+            VBFToHH_one_vs_one_roc[f"{class_name}_fpr"] = fpr
+            VBFToHH_one_vs_one_roc[f"{class_name}_tpr"] = tpr
 
-        # store the AUC
-        VBFToHH_one_vs_one_roc[f"{class_name}_fpr"] = fpr
-        VBFToHH_one_vs_one_roc[f"{class_name}_tpr"] = tpr
+        # Plot the diagonal line representing random guessing
+        plt.plot([0, 1], [0, 1], 'k--')
 
-    # Plot the diagonal line representing random guessing
-    plt.plot([0, 1], [0, 1], 'k--')
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('FPR', fontsize=12)
+        plt.ylabel('TPR', fontsize=12)
+        #plt.title(f'ROC Curves: {class_name_i} vs Each Other Class Individually', fontsize=14)
+        plt.legend(loc="lower right", fontsize=10)
+        plt.grid(True)
+        plt.tight_layout()
 
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.05])
-    plt.xlabel('FPR', fontsize=12)
-    plt.ylabel('TPR', fontsize=12)
-    #plt.title(f'ROC Curves: {class_name_i} vs Each Other Class Individually', fontsize=14)
-    plt.legend(loc="lower right", fontsize=10)
-    plt.grid(True)
-    plt.tight_layout()
+        # Save the combined plot
+        plt.savefig(f'{path_for_plots}/roc_curve_{class_name_i}_vs_all_individual.png')
+        plt.clf()
 
-    # Save the combined plot
-    plt.savefig(f'{path_for_plots}/roc_curve_{class_name_i}_vs_all_individual.png')
-    plt.clf()
-
-    # save AUC scores
-    with open(f'{path_for_plots}/VBFToHH_vs_all.json', 'w') as f:
-        json.dump(VBFToHH_one_vs_one_roc, f)
+        # save AUC scores
+        with open(f'{path_for_plots}/VBFToHH_vs_all.json', 'w') as f:
+            json.dump(VBFToHH_one_vs_one_roc, f)
 
 
 
@@ -332,48 +341,50 @@ if __name__ == "__main__":
     plt.savefig(f'{path_for_plots}/train_roc_curve_one_vs_all.png')
     plt.clf()
 
-    # One-vs-One ROC Curves
-    # For each pair of classes
-    glu_idx = class_names.index("VBFToHH_sig")
-
-    # List of other class indices
-    other_classes = [i for i in range(n_classes) if i != glu_idx]
-
-    # Iterate over GluGluToHH vs each other class individually
-    plt.figure(figsize=(8, 6))
-
-    # Iterate over GluGluToHH vs each other class individually
-    for j in other_classes:
-        i = glu_idx  # Index of GluGluToHH
-        class_name_i = class_names[i]
-        class_name_j = class_names[j]
-        # Select samples belonging to class i or class j
-        idx = (y_val[:, i] == 1) | (y_val[:, j] == 1)
-        y_true_binary = y_val[idx, i]
-        y_score = y_pred_val[idx, i]  # Use the probability for class i (GluGluToHH)
-        weights = rel_w_val[idx]
-        # Compute ROC curve and ROC area
-        fpr, tpr, thresholds = roc_curve(y_true_binary, y_score, sample_weight=weights)
-        fpr, tpr = zip(*sorted(zip(fpr, tpr)))
-        roc_auc = auc(fpr, tpr)
-        # Plot the ROC curve on the same figure
-        plt.plot(fpr, tpr, label=f'{class_name_i} vs {class_name_j} (AUC = {roc_auc:0.4f})')
-
-    # Plot the diagonal line representing random guessing
-    plt.plot([0, 1], [0, 1], 'k--')
-
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.05])
-    plt.xlabel('FPR', fontsize=12)
-    plt.ylabel('TPR', fontsize=12)
-    #plt.title(f'ROC Curves: {class_name_i} vs Each Other Class Individually', fontsize=14)
-    plt.legend(loc="lower right", fontsize=10)
-    plt.grid(True)
-    plt.tight_layout()
-
-    # Save the combined plot
-    plt.savefig(f'{path_for_plots}/train_roc_curve_{class_name_i}_vs_all_individual.png')
-    plt.close()
+    if n_classes>4:
+            
+        # One-vs-One ROC Curves
+        # For each pair of classes
+        glu_idx = class_names.index("VBFToHH_sig")
+    
+        # List of other class indices
+        other_classes = [i for i in range(n_classes) if i != glu_idx]
+    
+        # Iterate over GluGluToHH vs each other class individually
+        plt.figure(figsize=(8, 6))
+    
+        # Iterate over GluGluToHH vs each other class individually
+        for j in other_classes:
+            i = glu_idx  # Index of GluGluToHH
+            class_name_i = class_names[i]
+            class_name_j = class_names[j]
+            # Select samples belonging to class i or class j
+            idx = (y_val[:, i] == 1) | (y_val[:, j] == 1)
+            y_true_binary = y_val[idx, i]
+            y_score = y_pred_val[idx, i]  # Use the probability for class i (GluGluToHH)
+            weights = rel_w_val[idx]
+            # Compute ROC curve and ROC area
+            fpr, tpr, thresholds = roc_curve(y_true_binary, y_score, sample_weight=weights)
+            fpr, tpr = zip(*sorted(zip(fpr, tpr)))
+            roc_auc = auc(fpr, tpr)
+            # Plot the ROC curve on the same figure
+            plt.plot(fpr, tpr, label=f'{class_name_i} vs {class_name_j} (AUC = {roc_auc:0.4f})')
+    
+        # Plot the diagonal line representing random guessing
+        plt.plot([0, 1], [0, 1], 'k--')
+    
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('FPR', fontsize=12)
+        plt.ylabel('TPR', fontsize=12)
+        #plt.title(f'ROC Curves: {class_name_i} vs Each Other Class Individually', fontsize=14)
+        plt.legend(loc="lower right", fontsize=10)
+        plt.grid(True)
+        plt.tight_layout()
+    
+        # Save the combined plot
+        plt.savefig(f'{path_for_plots}/train_roc_curve_{class_name_i}_vs_all_individual.png')
+        plt.close()
 
     # One-vs-One ROC Curves
     # For each pair of classes

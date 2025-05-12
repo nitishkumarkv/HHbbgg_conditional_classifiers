@@ -21,7 +21,7 @@ def get_prediction(model_dict_path, model_path, X):
     best_act_fn = getattr(nn, best_act_fn_name)
     best_dropout_prob = best_params['dropout_prob']
     input_size = X.shape[1]
-    output_size = 5
+    output_size = 4
 
     model = MLP(input_size, best_num_layers, best_num_nodes, output_size, best_act_fn, best_dropout_prob).to(device)
     model.to(device)
@@ -108,7 +108,7 @@ if __name__ == "__main__":
     samples_path = args.samples_path
     samples = samples_and_classes["sample_to_class_pred"].keys()
 
-    for era in ["preEE", "postEE"]:
+    for era in ["preEE", "postEE", "preBPix", "postBPix"]:
             for sample in samples:
                 inputs_path = f"{samples_path}/individual_samples/{era}/{sample}"
 

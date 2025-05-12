@@ -83,7 +83,7 @@ class PrepareInputs:
 #        return events, sum_genw_beforesel
 
     def load_parquet(self, path, columns, N_files=-1):
-        columns = columns + ["mass", "nonRes_dijet_mass", "nonRes_has_two_btagged_jets", "weight", "pt", "nonRes_dijet_pt", "nonRes_HHbbggCandidate_mass", "eta"]
+        columns = columns + ["mass", "nonRes_dijet_mass", "nonRes_has_two_btagged_jets", "weight", "pt", "nonRes_dijet_pt", "nonRes_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "Res_mjj_regressed"]
 
         file_list = glob.glob(path + '*.parquet')
         if N_files == -1:
@@ -102,18 +102,43 @@ class PrepareInputs:
 
         return events
 
-    def add_var(self, events):
+    def add_var(self, events, era):
 
+        collection = "nonres"
         # add variables
-        events["diphoton_PtOverM_ggjj"] = events.pt / events.nonRes_HHbbggCandidate_mass
-        events["dijet_PtOverM_ggjj"] = events.nonRes_dijet_pt / events.nonRes_HHbbggCandidate_mass
+        if collection == "nonres":
+            events["dijet_mass"] = events.nonRes_mjj_regressed
+        else:
+            events["dijet_mass"] = events.Res_mjj_regressed
+
+        events["nonRes_lead_bjet_pt_over_M_regressed"] = events.nonRes_lead_bjet_pt / events.dijet_mass
+        events["nonRes_sublead_bjet_pt_over_M_regressed"] = events.nonRes_sublead_bjet_pt / events.dijet_mass
+        events["nonRes_diphoton_PtOverM_ggjj"] = events.pt / events.nonRes_HHbbggCandidate_mass
+        events["nonRes_dijet_PtOverM_ggjj"] = events.nonRes_dijet_pt / events.nonRes_HHbbggCandidate_mass
+        
+        events["Res_lead_bjet_pt_over_M_regressed"] = events.Res_lead_bjet_pt / events.dijet_mass
+        events["Res_sublead_bjet_pt_over_M_regressed"] = events.Res_sublead_bjet_pt / events.dijet_mass
+        events["Res_diphoton_PtOverM_ggjj"] = events.pt / events.Res_HHbbggCandidate_mass
+        events["Res_dijet_PtOverM_ggjj"] = events.Res_dijet_pt / events.Res_HHbbggCandidate_mass
+
+        # add deltaR between lead and sublead photon
+        events["deltaR_gg"] = np.sqrt((events.lead_eta - events.sublead_eta) ** 2 + (events.lead_phi - events.sublead_phi) ** 2)
+        # add deltaR between lead and sublead bjet
+        if era == "preEE":
+            events["era"] = 0
+        elif era == "postEE":
+            events["era"] = 1
+        elif era == "preBPix":
+            events["era"] = 2
+        elif era == "postBPix":
+            events["era"] = 3
 
         return events
 
     def plot_pt_variables(self, comb_inputs, vars_for_training):
         for var in vars_for_training:
             if 'pt' in var or 'Pt' in var:
-                plt.figure()
+                plt.figure(figsize=(10, 8))
                 for cls in self.classes:
                     class_events = comb_inputs[comb_inputs[cls] == 1]
                     data_to_plot = class_events[var]
@@ -141,15 +166,18 @@ class PrepareInputs:
             "GluGluHToGG_M_125": 52.23e3 * 0.00227,  # cross sectio of GluGluHToGG * BR(HToGG)
             "VBFHToGG_M_125": 4.078e3 * 0.00227,
             "VHtoGG_M_125": 2.4009e3 * 0.00227,
-            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": 0.0311e3 * 0.00227 * 0.582 * 2,  # cross sectio of GluGluToHH * BR(HToGG) * BR(HToGG) * 2 for two combination ### have to recheck if this is correct. 
+            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": 0.034e3 * 0.00227 * 0.582 * 2,#0.02964e3 * 0.00227 * 0.582 * 2,  # cross sectio of GluGluToHH * BR(HToGG) * BR(HToGG) * 2 for two combination ### have to recheck if this is correct. 
             "VBFHHto2B2G_CV_1_C2V_1_C3_1": 0.00173e3 * 0.00227 * 0.582 * 2,  # cross sectio of VBFToHH * BR(HToGG) * BR(HTobb) * 2 for two combination ### have to recheck if this is correct.
             "DDQCDGJET": 1.0,
-            "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": 0.08373 * 0.00227 * 0.582 * 2,
-            "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": 0.06531 * 0.00227 * 0.582 * 2
+            "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": 0.08373e3 * 0.00227 * 0.582 * 2,
+            "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": 0.06531e3 * 0.00227 * 0.582 * 2,
+            "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": 0.01285e3 * 0.00227 * 0.582 * 2
         }
         luminosities = {
         "preEE": 7.98,  # Integrated luminosity for preEE in fb^-1
-        "postEE": 26.67  # Integrated luminosity for postEE in fb^-1
+        "postEE": 26.67,  # Integrated luminosity for postEE in fb^-1
+        "preBPix": 17.794,  # Integrated luminosity for preEE in fb^-1
+        "postBPix": 9.451  # Integrated luminosity for postEE in fb^-1
         }
 
         lumi = luminosities[era]
@@ -239,6 +267,19 @@ class PrepareInputs:
         plt.savefig(f'{out_path}', dpi=300, )
         plt.clf()
 
+    
+    def preselection(self, events):
+        
+        mass_bool = ((events.mass > 100) & (events.mass < 180))
+        dijet_mass_bool = ((events.dijet_mass > 70) & (events.dijet_mass < 190))
+        #lead_mvaID_bool = ((events.lead_mvaID > 0.0439603) & (events.lead_isScEtaEB == True)) | ((events.lead_mvaID > -0.249526) & (events.lead_isScEtaEE == True))
+        #sublead_mvaID_bool = ((events.sublead_mvaID > 0.0439603) & (events.sublead_isScEtaEB == True)) | ((events.sublead_mvaID > -0.249526) & (events.sublead_isScEtaEE == True))
+
+        #events = events[mass_bool & dijet_mass_bool & lead_mvaID_bool & sublead_mvaID_bool]
+        events = events[mass_bool & dijet_mass_bool]
+
+        return events
+
 
             
 
@@ -254,7 +295,10 @@ class PrepareInputs:
         vars_for_training = vars_config["vars"] #+ ["era"]
         vars_for_log = vars_config["vars_for_log_transform"]
 
-        for era in ["preEE", "postEE"]:
+        #for era in ["preEE", "postEE"]:
+        for era in ["preEE", "postEE", "preBPix", "postBPix"]:
+        #for era in ["preBPix", "postBPix"]:
+        #for era in ["2022preEE", "2022postEE"]:
             for samples in self.sample_to_class.keys():
 
                 #events, sum_genw_beforesel = self.load_parquet(f"{samples_path}/{era}/{samples}/nominal/", -1)
@@ -266,53 +310,109 @@ class PrepareInputs:
                 #else:
                 #    path_for_w = f"/net/scratch_cms3a/kasaraguppe/work/HDNA/HHbbgg_updates/for_production/HiggsDNA/postEE/{samples}/nominal/"
                 #print(f"{samples_path}/sim/{era}/{samples}/nominal")
-                if (era == "postEE") and (samples in ["TTGG", "VBFHHto2B2G_CV_1_C2V_1_C3_1"]):
-                    print(f"data/samples/{era}/{samples}/")
-                    events = self.load_parquet(f"data/samples/{era}/{samples}/", vars_for_training, -1)
-                elif (era == "postEE") and (samples in ["GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00"]):
-                    events = self.load_parquet(f"data/samples/{era}/GluGlutoHHto2B2G_kl-1p00_kt-1p00_c2-0p00/", vars_for_training, -1)
-                elif (era == "postEE") and ("125" in samples):
-                    temp_samples_dict = {
-                        "ttHtoGG_M_125": "ttHToGG",
-                        "BBHto2G_M_125": "BBHto2G_M_125",
-                        "GluGluHToGG_M_125": "GluGluHToGG",
-                        "VBFHToGG_M_125": "VBFHToGG",
-                        "VHtoGG_M_125": "VHToGG"
-                    }
-                    temp_samples = temp_samples_dict[samples]
-                    print(f"{samples_path}/sim/{era}/{temp_samples}/nominal/")
-                    events = self.load_parquet(f"{samples_path}/sim/{era}/{temp_samples}/nominal/", vars_for_training, -1)
-                elif "DDQCDGJET" in samples:
-                    events = self.load_parquet(f"{samples_path}/sim/{era}/DDQCDGJets_to_be_updated/", vars_for_training, -1)
-                else: 
-                    events = self.load_parquet(f"{samples_path}/sim/{era}/{samples}/nominal/", vars_for_training, -1)
+                sample_name_to_file_name = {
+                    "GGJets": "GGJets_Rescaled_mbb_reg.parquet",
+                    "DDQCDGJET": {"preEE": "DDQCDGJET_Rescaled_mbb_reg.parquet", "postEE": "DDQCDGJets_Rescaled_mbb_reg.parquet"},
+                    "TTGG": "TTGG_merged_mbb_reg.parquet",
+                    "ttHtoGG_M_125": "ttHtoGG_M-125_merged_mbb_reg.parquet",
+                    "BBHto2G_M_125": "BBHto2G_M-125_merged_mbb_reg.parquet",
+                    "GluGluHToGG_M_125": "GluGluHtoGG_M-125_merged_mbb_reg.parquet",
+                    "VBFHToGG_M_125": "VBFHtoGG_M-125_merged_mbb_reg.parquet",
+                    "VHtoGG_M_125": "VHtoGG_M-125_merged_mbb_reg.parquet",
+                    "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": "GluGlutoHHto2B2G_kl-1p00_kt-1p00_c2-0p00_merged_mbb_reg.parquet",
+                    "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": "GluGlutoHHto2B2G_kl-5p00_kt-1p00_c2-0p00_merged_mbb_reg.parquet",
+                    "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": "GluGlutoHHto2B2G_kl-0p00_kt-1p00_c2-0p00_merged_mbb_reg.parquet",
+                    "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": "GluGlutoHHto2B2G_kl-2p45_kt-1p00_c2-0p00_merged_mbb_reg.parquet",
+                }
+                sample_name_to_file_name = {
+                    "GGJets": "GGJets_Rescaled.parquet",
+                    "DDQCDGJET": "DDQCDGJET_Rescaled.parquet",
+                    "TTGG": "TTGG.parquet",
+                    "ttHtoGG_M_125": "ttHtoGG.parquet",
+                    "BBHto2G_M_125": "bbHToGG.parquet",
+                    "GluGluHToGG_M_125": "GluGluHtoGG.parquet",
+                    "VBFHToGG_M_125": "VBFHtoGG.parquet",
+                    "VHtoGG_M_125": "VHtoGG.parquet",
+                    "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": "GluGlutoHHto2B2G_kl-1p00_kt-1p00_c2-0p00.parquet",
+                    "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": "GluGlutoHHto2B2G_kl-5p00_kt-1p00_c2-0p00.parquet",
+                    "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": "GluGlutoHHto2B2G_kl-0p00_kt-1p00_c2-0p00.parquet",
+                    "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": "GluGlutoHHto2B2G_kl-2p45_kt-1p00_c2-0p00.parquet",
+                }
 
-                # event selection
-                diphoton_mass_cut = ((events.mass > 100) & (events.mass < 180))
-                dijet_mass_cut = ((events.nonRes_dijet_mass > 70) & (events.nonRes_dijet_mass < 190))
-                nonRes = (events.nonRes_has_two_btagged_jets == True)
-                events = events[diphoton_mass_cut & dijet_mass_cut & nonRes]
+                #events = self.load_parquet(f"data/samples/{era}/{samples}/", vars_for_training, -1)
+                vars_to_load = vars_for_training + ["mass", "nonRes_dijet_mass", "nonRes_has_two_btagged_jets", "weight", "pt", "nonRes_dijet_pt", "Res_dijet_pt", "Res_lead_bjet_pt", "Res_sublead_bjet_pt", "nonRes_HHbbggCandidate_mass", "Res_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "Res_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE"]
+                year = "2023" if "BPix" in era else "2022"
+                if isinstance(sample_name_to_file_name[samples], dict):
+                    events = ak.from_parquet(f"{samples_path}/Run3_{year}{era}/{sample_name_to_file_name[samples][era]}")
+                else:
+                    events = ak.from_parquet(f"{samples_path}/Run3_{year}{era}/{sample_name_to_file_name[samples]}")
 
-                ### we need to select only the events with lead and sublead mva score > -0.7
-                mva_score_cut = ((events.lead_mvaID > -0.7) & (events.sublead_mvaID > -0.7))
-                events = events[mva_score_cut]
+                #if (era == "postEE") and (samples in ["TTGG", "VBFHHto2B2G_CV_1_C2V_1_C3_1"]):
+                #    print(f"data/samples/{era}/{samples}/")
+                #    events = self.load_parquet(f"data/samples/{era}/{samples}/", vars_for_training, -1)
+                #elif (era == "postEE") and (samples in ["GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00"]):
+                #    events = self.load_parquet(f"data/samples/{era}/GluGlutoHHto2B2G_kl-1p00_kt-1p00_c2-0p00/", vars_for_training, -1)
+                #elif (era == "postEE") and ("125" in samples):
+                #    temp_samples_dict = {
+                #        "ttHtoGG_M_125": "ttHToGG",
+                #        "BBHto2G_M_125": "BBHto2G_M_125",
+                #        "GluGluHToGG_M_125": "GluGluHToGG",
+                #        "VBFHToGG_M_125": "VBFHToGG",
+                #        "VHtoGG_M_125": "VHToGG"
+                #    }
+                #    temp_samples = temp_samples_dict[samples]
+                #    print(f"{samples_path}/sim/{era}/{temp_samples}/nominal/")
+                #    events = self.load_parquet(f"{samples_path}/sim/{era}/{temp_samples}/nominal/", vars_for_training, -1)
+                #elif "DDQCDGJET" in samples:
+                #    events = self.load_parquet(f"{samples_path}/sim/{era}/DDQCDGJets_to_be_updated/", vars_for_training, -1)
+                #else: 
+                #    events = self.load_parquet(f"{samples_path}/sim/{era}/{samples}/nominal/", vars_for_training, -1)
 
-                print(f"INFO: Number of events in {samples} after selection for {era}: {len(events)}")
-
+                ## event selection
+                #diphoton_mass_cut = ((events.mass > 100) & (events.mass < 180))
+                ##dijet_mass_cut = ((events.nonRes_dijet_mass > 70) & (events.nonRes_dijet_mass < 190))
+                #dijet_mass_cut = ((events.nonRes_mjj_regressed > 70) & (events.nonRes_mjj_regressed < 190))
+                #nonRes = (events.nonRes_has_two_btagged_jets == True)
+                #nBLoose = (events.nBLoose >= 2)
+                #events = events[diphoton_mass_cut & dijet_mass_cut & nonRes]
+                ##events = events[diphoton_mass_cut & dijet_mass_cut & nonRes & nBLoose]
+#
+                #### we need to select only the events with lead and sublead mva score > -0.7
+                #mva_score_cut = ((events.lead_mvaID > -0.7) & (events.sublead_mvaID > -0.7))
+                #events = events[mva_score_cut]
+                    
                 # add more variables
-                events = self.add_var(events)
+                events = self.add_var(events, era)
+
+                events = self.preselection(events)
+
+                
+
+                
 
                 # get relative weights according to cross section of the process
                 events = self.get_relative_xsec_weight(events, samples, era)
+
+                print(f"INFO: Number of MC events in {samples} after selection for {era}: {len(events)}")
+                print(f"INFO: Sum of weight_tot in {samples} after selection for {era}: {sum(events.weight_tot)}")
+
+                # efficiency of slecting events with atleast two medium btagged jets
+                # 'nBTight','nBMedium','nBLoose
+                #print(f"INFO: {era}/{samples}/ Efficiency wrt after applying the diphoton mass cut, dijet mass cut and nonRes cut")
+                #print(f"nBTight >= 2: {sum(events[events.nBTight >= 2].weight_tot) / sum(events.weight_tot)}")
+                #print(f"nBMedium >= 2: {sum(events[events.nBMedium >= 2].weight_tot) / sum(events.weight_tot)}")
+                #print(f"nBLoose >= 2: {sum(events[events.nBLoose >= 2].weight_tot) / sum(events.weight_tot)}")
+                #print("")
 
                 # add the bools for each class
                 for cls in self.classes:  # first intialize everything to zero
                     events[cls] = ak.zeros_like(events.eta)
 
-                events["era"] = ak.zeros_like(events.eta) if era == "preEE" else ak.ones_like(events.eta)
+                #events["era"] = ak.zeros_like(events.eta) if era == "preEE" else ak.ones_like(events.eta)
 
                 events[self.sample_to_class[samples]] = ak.ones_like(events.pt) # one-hot encoded
                 comb_inputs.append(events)
+                events["sample_type"] = samples
 
                 # plot_correlation_matrix
                 os.makedirs(f"{out_path}/correlation_matrix/", exist_ok=True)
@@ -333,6 +433,10 @@ class PrepareInputs:
         comb_inputs = ak.concatenate(comb_inputs, axis=0)
 
         comb_inputs = pd.DataFrame(ak.to_list(comb_inputs))
+
+        plot_path = f"{out_path}/var_plots/"
+        os.makedirs(plot_path, exist_ok=True)
+        self.plot_variables(comb_inputs, vars_for_training, plot_path)
 
         for cls in self.classes:
             print("\n", f"INFO: Number of events in {cls}: {sum(comb_inputs[cls])}")
@@ -415,6 +519,133 @@ class PrepareInputs:
             pickle.dump(mean_std_dict, f)
 
         return 0
+    
+
+    def plot_variables(self, comb_inputs, vars_for_training, plot_path):
+
+        # add color scheme for each class
+        color_list = [
+            "#882255",  # Deep Burgundy
+            "#117733",  # Dark Green
+            "#332288",  # Deep Indigo
+            "#AA4499",  # Soft Magenta
+            "#DDCC77",  # Light Mustard
+            "#661100",  # Dark Brown
+            "#6699CC",  # Dusty Blue
+            "#888888",  # Neutral Gray
+            "#AA3377",  # Vivid Pink
+            "#44AA77",  # Medium Teal
+            "#774411",  # Earthy Brown
+            "#DDDDDD",  # Pale Gray
+            "#E69F00",  # Orange
+            "#56B4E9",  # Sky Blue
+            "#009E73",  # Bluish Green
+            "#F0E442",  # Yellow
+            "#0072B2",  # Royal Blue
+            "#D55E00",  # Vermillion
+            "#CC79A7",  # Reddish Purple
+            "#000000",  # Black
+            "#CC6677",  # Muted Red
+            "#88CCEE",  # Light Blue
+            "#44AA99",  # Teal
+            "#999999",  # Medium Gray
+            "#FF8A50",  # Darker Peach
+            "#FFB300",  # Golden Yellow
+            "#66BB6A",  # Rich Green
+            "#42A5F5",  # Deeper Sky Blue
+            "#AB47BC",  # Strong Lavender Purple
+            "#EC407A",  # Deeper Pink
+            "#C0CA33",  # Darker Lime
+            "#26A69A",  # Deep Teal
+            "#FB8C00",  # Vibrant Orange
+            "#795548",  # Deep Brown
+            "#757575",  # Medium Gray
+            "#8E24AA",  # Medium-Dark Purple
+        ]
+        color_list = [
+            "#882255",  # Deep Burgundy
+            "#117733",  # Dark Green
+            "#332288",  # Deep Indigo
+            "#AA4499",  # Soft Magenta
+            "#DDCC77",  # Light Mustard
+            "#6699CC",  # Dusty Blue
+            "#888888",  # Neutral Gray
+            "black",  # Vivid Pink
+            "#44AA77",  # Medium Teal
+            "#774411",  # Earthy Brown
+            "#DDDDDD",  # Pale Gray
+            "#E69F00",  # Orange
+            "#56B4E9",  # Sky Blue
+            "#009E73",  # Bluish Green
+            "#F0E442",  # Yellow
+            "#0072B2",  # Royal Blue
+            "#D55E00",  # Vermillion
+            "#CC79A7",  # Reddish Purple
+            "#000000",  # Black
+            "#CC6677",  # Muted Red
+            "#88CCEE",  # Light Blue
+            "#44AA99",  # Teal
+            "#999999",  # Medium Gray
+            "#FF8A50",  # Darker Peach
+            "#FFB300",  # Golden Yellow
+            "#66BB6A",  # Rich Green
+            "#42A5F5",  # Deeper Sky Blue
+            "#AB47BC",  # Strong Lavender Purple
+            "#EC407A",  # Deeper Pink
+            "#C0CA33",  # Darker Lime
+            "#26A69A",  # Deep Teal
+            "#FB8C00",  # Vibrant Orange
+            "#795548",  # Deep Brown
+            "#757575",  # Medium Gray
+            "#8E24AA",  # Medium-Dark Purple
+        ]
+
+        for var in vars_for_training:
+            plt.figure(figsize=(10, 8))
+            sample_num = 0
+            data_to_plot_dict = {}
+            range_list = []
+            for sample in self.sample_to_class.keys():
+                if sample in ["DDQCDGJET", ]:
+                    continue
+
+                sample_events = comb_inputs[comb_inputs["sample_type"] == sample]
+                data_to_plot = sample_events[var]
+                mask = (data_to_plot > -998.0)
+                data_to_plot = data_to_plot[mask]
+                data_to_plot_dict[sample] = data_to_plot
+
+                if range_list == []:
+                    range_list = [min(data_to_plot), max(data_to_plot)]
+                else:
+                    range_list[0] = min(range_list[0], min(data_to_plot))
+                    range_list[1] = max(range_list[1], max(data_to_plot))
+
+            for sample in self.sample_to_class.keys():
+                if sample in ["DDQCDGJET", ]:
+                    continue
+                data_to_plot = data_to_plot_dict[sample]
+                
+                # use mplhep to plot the histogram
+                hist_ = np.histogram(ak.to_numpy(data_to_plot), bins=30, range=range_list, density=True)
+                plt.style.use(hep.style.CMS)
+                hep.histplot(hist_, histtype='step', label=sample, color=color_list[sample_num], linestyle='solid', linewidth=1.5)
+                sample_num += 1
+
+            plt.xlabel(f"{var}")
+            plt.ylabel("a.u.")
+            plt.legend(ncols=2, fontsize=10, loc='upper right')
+            plt.tight_layout()
+            plt.savefig(f"{plot_path}/{var}.png")
+            plt.yscale('log')
+            plt.tight_layout()
+            plt.savefig(f"{plot_path}/{var}_log.png")
+            plt.clf()
+
+
+                
+
+                
 
 if __name__ == "__main__":
     out = PrepareInputs()
