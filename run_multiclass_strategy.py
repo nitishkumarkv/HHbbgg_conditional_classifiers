@@ -95,9 +95,30 @@ def perform_categorisation(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Preform MLP based classification')
     parser.add_argument('--config_path', type=str, help='Path to the configuration files')
-    parser.add_argument('--samples_path', type=str, help='Path to the samples, Eg: /eos/cms/store/group/phys_b2g/HHbbgg/HiggsDNA_parquet/v2/Run3_2022')
     parser.add_argument('--out_path', type=str, help='Path to save the inputs')
+    parser.add_argument('--prep_inputs_for_training', action='store_true', help='Prepare inputs for training')
+    parser.add_argument('--prepare_inputs_pred_sim', action='store_true', help='Prepare inputs for prediction')
+    parser.add_argument('--prepare_inputs_pred_data', action='store_true', help='Prepare inputs for prediction data')
+    parser.add_argument('--do_random_search', action='store_true', help='Perform random search')
+    parser.add_argument('--perform_training', action='store_true', help='Perform training')
+    parser.add_argument('--get_data_mc_plots', action='store_true', help='Get data-MC plots')
+    parser.add_argument('--perform_categorisation', action='store_true', help='Perform categorisation')
+    parser.add_argument('--prepare_inputs', type=str, help='Prepare all inputs')
+    parser.add_argument('--do_all', action='store_true', help='Perform all steps')
     args = parser.parse_args()
+
+    if args.prepare_inputs:
+        args.prep_inputs_for_training = True
+        args.prepare_inputs_pred_sim = True
+        args.prepare_inputs_pred_data = True
+
+    if args.do_all:
+        args.prep_inputs_for_training = True
+        args.prepare_inputs_pred_sim = True
+        args.prepare_inputs_pred_data = True
+        args.perform_training = True
+        args.get_data_mc_plots = True
+        args.perform_categorisation = True
 
     # prepare inputs
     prepare_inputs(args)
