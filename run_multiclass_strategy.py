@@ -119,7 +119,7 @@ if __name__ == "__main__":
         args.prepare_inputs_pred_data = True
 
     if args.perform_training:
-        args.train_best_model
+        args.train_best_model = True
         args.plot_training_results = True
         args.get_permutation_importance = True
         args.get_predictions = True
