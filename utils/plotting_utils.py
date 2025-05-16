@@ -4,11 +4,12 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import mplhep as hep
 import awkward as ak
+import yaml
 
 # Apply CMS style
 hep.style.use("CMS")
 
-def plot_stacked_histogram(sim_folder, data_folder, sim_samples, variables, out_path, bins=40, mass_window=(120, 130), signal_scale=100, include_2023=True, only_MC=False):
+def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, bins=40, mass_window=(120, 130), signal_scale=100, only_MC=False):
     """
     Load data first, then loop over variables to plot stacked histograms with MC and Data, including ratio plots.
 
@@ -71,37 +72,19 @@ def plot_stacked_histogram(sim_folder, data_folder, sim_samples, variables, out_
 
     class_names = ["non_resonant_bkg_score", "ttH_score", "other_single_H_score", "GluGluToHH_score", "VBFToHH_sig_score"]
 
+    sim_folder_events = samples_info["samples_path"]
+    eras = samples_info["eras"]
     for sample in sim_samples:
-        # Load MC events
-        sample_preEE = ak.from_parquet(f"{sim_folder}/preEE/{sample}/events.parquet", columns=variables + ["weight_tot"])
-        sample_postEE = ak.from_parquet(f"{sim_folder}/postEE/{sample}/events.parquet", columns=variables + ["weight_tot"])
-        if include_2023:
-            sample_preBPix = ak.from_parquet(f"{sim_folder}/preBPix/{sample}/events.parquet", columns=variables + ["weight_tot"])
-            sample_postBPix = ak.from_parquet(f"{sim_folder}/postBPix/{sample}/events.parquet", columns=variables + ["weight_tot"])
-
-        if os.path.exists(f"{sim_folder}/preEE/{sample}/y.npy"):
-            score_preEE = np.load(f"{sim_folder}/preEE/{sample}/y.npy")
-            score_postEE = np.load(f"{sim_folder}/postEE/{sample}/y.npy")
-            if include_2023:
-                score_preBPix = np.load(f"{sim_folder}/preBPix/{sample}/y.npy")
-                score_postBPix = np.load(f"{sim_folder}/postBPix/{sample}/y.npy")
-
-            num_classes = score_preEE.shape[1]
-
+        sample_combined = []
+        for era in eras:
+            events_ = ak.from_parquet(f"{sim_folder_events}/{samples_info[era][sample]}", columns=variables + ["weight_tot"])
+            scores_ = np.load(f"{sim_folder}/{era}/{sample}/y.npy")
             for i, class_name in enumerate(class_names):
-                if i < num_classes:
-                    sample_preEE[class_name] = score_preEE[:, i]
-                    sample_postEE[class_name] = score_postEE[:, i]
-                    if include_2023:
-                        sample_preBPix[class_name] = score_preBPix[:, i]
-                        sample_postBPix[class_name] = score_postBPix[:, i]
+                if i < scores_.shape[1]:
+                    events_[class_name] = scores_[:, i]
+            sample_combined.append(events_)
+        sample_combined = ak.concatenate(sample_combined, axis=0)
 
-
-        # Merge preEE and postEE
-        if include_2023:
-            sample_combined = ak.concatenate([sample_preEE, sample_postEE, sample_preBPix, sample_postBPix], axis=0)
-        else:
-            sample_combined = ak.concatenate([sample_preEE, sample_postEE], axis=0)
         if "minMVAID" in variables:
             sample_combined["minMVAID"] = np.min([sample_combined.lead_mvaID, sample_combined.sublead_mvaID], axis = 0)
             sample_combined["maxMVAID"] = np.max([sample_combined.lead_mvaID, sample_combined.sublead_mvaID], axis = 0)
@@ -372,16 +355,24 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Plot stacked histograms for MC and Data.")
     parser.add_argument("--base-path", type=str, required=True, help="Path to the base directory containing MC and Data folders.")
+    parser.add_argument("--training_config_path", type=str, required=True, help="Path to the training config file.")
     args = parser.parse_args()
+
+    # Load training configuration
+    with open(f"{args.training_config_path}", 'r') as f:
+        training_config = yaml.safe_load(f)
+    
+    samples_info = training_config["samples_info"]
 
     base_path = args.base_path
     sim_folder = f"{base_path}/individual_samples"
     data_folder = f"{base_path}/individual_samples_data"
-    sim_samples = ["GGJets", "DDQCDGJET", "TTGG", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "VBFHToGG_M_125", "VHtoGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "VBFHHto2B2G_CV_1_C2V_1_C3_1"]
-    #sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "VBFHHto2B2G_CV_1_C2V_1_C3_1", "TTGG", "GGJets", "DDQCDGJET"]
+
+    # sim_samples = ["GGJets", "DDQCDGJET", "TTGG", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "VBFHToGG_M_125", "VHtoGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "VBFHHto2B2G_CV_1_C2V_1_C3_1"]
+    # sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "VBFHHto2B2G_CV_1_C2V_1_C3_1", "TTGG", "GGJets", "DDQCDGJET"]
     sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET"]
     variables = ["dijet_mass", "Res_mjj_regressed", "Res_dijet_mass", "nonRes_mjj_regressed", "mass", "nonRes_dijet_mass", "minMVAID", "maxMVAID", "n_jets", "sublead_eta", "lead_eta", "sublead_pt", "lead_pt", "pt", "eta", "lead_mvaID", "sublead_mvaID"]
     out_path = f"{base_path}/"
 
-    plot_stacked_histogram(sim_folder, data_folder, sim_samples, variables, out_path, signal_scale=1000, include_2023=True)
-    plot_stacked_histogram(sim_folder, data_folder, sim_samples, variables, out_path, signal_scale=1000, include_2023=True, only_MC=True)
+    plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, signal_scale=1000, include_2023=True)
+    plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, signal_scale=1000, include_2023=True, only_MC=True)

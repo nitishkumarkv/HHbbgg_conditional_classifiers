@@ -163,8 +163,8 @@ if __name__ == "__main__":
     X_train = np.load(f'{input_path}/X_train.npy')
     y_train = np.load(f'{input_path}/y_train.npy')
     rel_w_train = np.load(f'{input_path}/rel_w_train.npy')
-    class_weights_for_training = np.load(f'{input_path}/class_weights_for_training.npy')
-    class_weights_for_train_no_aboslute = np.load(f'{input_path}/class_weights_for_train_no_aboslute.npy')
+
+    class_weights_for_train_no_aboslute = np.load(f'{input_path}/true_class_weights.npy')
 
     X_val = np.load(f'{input_path}/X_val.npy')
     y_val = np.load(f'{input_path}/y_val.npy')

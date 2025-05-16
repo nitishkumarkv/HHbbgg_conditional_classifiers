@@ -55,28 +55,28 @@ def perform_training(args):
         print('INFO: Performing random search')
         subprocess.run(f"python3 models/random_search.py --input_path {out_path} --training_config_path {training_config_path}", shell=True)        
 
+    # perform trainging
     if args.train_best_model:
-        # perform trainging
         print('INFO: Training the best model')
         subprocess.run(f"python3 models/training_utils.py --input_path {out_path} --training_config_path {training_config_path}", shell=True)
 
+    # plot the training results
     if args.plot_training_results:
-        # plot the training results
         print('INFO: Getting the results plots')
-        subprocess.run(f"python3 utils/mlp_plotter.py --input_path {out_path}", shell=True)
-
+        subprocess.run(f"python3 models/mlp_plotter.py --input_path {out_path}", shell=True)
+        
+    # get permutaion importance
     if args.get_permutation_importance:
-        # get permutaion importance
         print('INFO: Getting permutation importance')
-        subprocess.run(f"python3 utils/permutation_importance.py --input_path {out_path}", shell=True)
-
+        subprocess.run(f"python3 models/permutation_importance.py --input_path {out_path}", shell=True)
+    
+    # get the predictions
     if args.get_predictions:
-        # get the predictions
         print('INFO: Getting the predictions')
         subprocess.run(f"python3 models/get_prediction.py --model_folder {out_path}/after_random_search_best1/ --samples_path {out_path} --config_path {config_path}", shell=True)
 
+    # get non resonant mass for different ggFHH score cuts
     if args.test_mass_sculpting:
-        # get non resonant mass for different ggFHH score cuts
         print('INFO: Getting non resonant mass for different ggFHH score cuts')
         subprocess.run(f"python3 utils/test_cor_mass.py --input_path {out_path} --config_path {config_path}", shell=True)
 

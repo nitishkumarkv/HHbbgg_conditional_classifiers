@@ -464,10 +464,11 @@ class PrepareInputs:
 
         vars_to_load = vars_for_training + self.extra_vars
 
+        samples_path = training_info["samples_info"]["samples_path"]
+
         for era in training_info["samples_info"]["eras"]:
             for samples in training_info["samples_info"][era].keys():
                 
-                samples_path = training_info["samples_info"]["samples_path"]
                 parquet_path = training_info["samples_info"][era][samples]
                 events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
                 
@@ -553,9 +554,12 @@ class PrepareInputs:
 
         vars_to_load = vars_for_training + self.extra_vars
 
-        for data in training_info["samples_info"]["data"]:
+        samples_path = training_info["samples_info"]["samples_path"]
+        datas = training_info["samples_info"]["data"]
 
-            events = ak.from_parquet(f"{self.samples_path}/{data}", columns=vars_to_load)
+        for data in datas:
+
+            events = ak.from_parquet(f"{samples_path}/{datas[data]}", columns=vars_to_load)
 
             sample_to_era = {"2022_EraE": "postEE", 
                                  "2022_EraF": "postEE", 
@@ -605,9 +609,9 @@ class PrepareInputs:
 
 
             # save all the numpy arrays
-            print("INFO: saving inputs for mlp")
+            print(f"INFO: saving inputs for {data}")
             #full_path_to_save = f"{out_path}/"
-            full_path_to_save = f"{out_path}/{samples}/"
+            full_path_to_save = f"{out_path}/{data}/"
             os.makedirs(full_path_to_save, exist_ok=True)
 
             np.save(f"{full_path_to_save}/X", X)

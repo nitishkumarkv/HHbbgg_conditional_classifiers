@@ -4,6 +4,7 @@ import numpy as np
 import json
 import torch.nn as nn
 import torch.nn.functional as F
+import yaml
 
 
 def get_prediction(model_dict_path, model_path, X):
@@ -92,15 +93,17 @@ if __name__ == "__main__":
     model_folder = args.model_folder
     model_dict_path = f"{model_folder}/params.json"
     model_path = f"{model_folder}/mlp.pth"
-    
-    # open config file
-    with open(f"{args.config_path}/samples_and_classes.json", 'r') as f:
-        samples_and_classes = json.load(f)
+
+    # load the configuration yaml files
+    training_config_path = f"{args.config_path}/training_config.yaml"
+    with open(f"{training_config_path}", 'r') as f:
+        training_config = yaml.safe_load(f)
 
     samples_path = args.samples_path
-    samples = samples_and_classes["sample_to_class_pred"].keys()
+    eras = training_config["samples_info"]["eras"]
 
-    for era in ["preEE", "postEE", "preBPix", "postBPix"]:
+    for era in eras:
+            samples = training_config["samples_info"][era].keys()
             for sample in samples:
                 inputs_path = f"{samples_path}/individual_samples/{era}/{sample}"
 
@@ -117,7 +120,7 @@ if __name__ == "__main__":
                 print(f"Saving prediction for {sample} in {era} era \n")
                 np.save(f"{samples_path}/individual_samples/{era}/{sample}/y.npy", pred)
 
-    data_samples = samples_and_classes["samples_data"].keys()
+    data_samples = training_config["samples_info"]["data"].keys()
     for data_sample in data_samples:
         inputs_path = f"{samples_path}/individual_samples_data/{data_sample}"
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
