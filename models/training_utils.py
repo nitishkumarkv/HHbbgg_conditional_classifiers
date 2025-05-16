@@ -10,6 +10,7 @@ from tqdm.auto import tqdm
 import copy
 from mlp import MLP
 import torch.nn.functional as F
+import yaml
 
 
 # Define custom dataset
@@ -127,11 +128,16 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description='Preform MLP based classification')
     parser.add_argument('--input_path', type=str, help='Path to the input files')
-    parser.add_argument('--random_seed', type=int, default=42, help='Random seed for reproducibility')
+    parser.add_argument('--training_config_path', type=str, default=10, help='Training configuration path')
     #parser.add_argument('', type=str, help='Path to the best parameters')
     args = parser.parse_args()
 
-    seed = args.random_seed
+    # Load training configuration
+    with open(f"{args.training_config_path}", 'r') as f:
+        training_config = yaml.safe_load(f)
+
+    seed = training_config["random_seed"]
+    weight_scheme = training_config["weight_scheme"]
 
     # --- REPROD SETUP ---
     import random, numpy as np, torch
@@ -165,8 +171,23 @@ if __name__ == "__main__":
     X_val = np.load(f'{input_path}/X_val.npy')
     y_train = np.load(f'{input_path}/y_train.npy')
     y_val = np.load(f'{input_path}/y_val.npy')
-    class_weights_for_training = np.load(f'{input_path}/class_weights_for_training.npy')
-    class_weights_for_train_no_aboslute = np.load(f'{input_path}/class_weights_for_train_no_aboslute.npy')
+
+    # set weight scheme for training
+    if weight_scheme == "weighted_abs":
+        class_weights_for_training = np.load(f'{input_path}/class_weights_for_training_abs.npy')
+
+    elif weight_scheme == "weighted_only_positive":
+        class_weights_for_training = np.load(f'{input_path}/class_weights_only_positive.npy')
+
+    elif weight_scheme == "weighted_CRUW_abs":
+        # to be completed
+        pass
+
+    elif weight_scheme == "weighted_CRUW_only_positive":
+        # to be completed
+        pass
+
+    class_weights_for_train_no_aboslute = np.load(f'{input_path}/true_class_weights.npy')
     class_weights_for_val = np.load(f'{input_path}/class_weights_for_val.npy')
 
     # Convert targets to class indices (if one-hot encoded)

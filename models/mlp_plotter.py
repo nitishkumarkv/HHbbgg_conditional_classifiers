@@ -102,7 +102,7 @@ if __name__ == "__main__":
 
     y_pred_train = np.load(f"{input_path}/y_pred_train.npy")
     y_train = np.load(f'{inputs_for_MLP}/y_train.npy')
-    rel_w_train = np.load(f'{inputs_for_MLP}/class_weights_for_train_no_aboslute.npy')
+    rel_w_train = np.load(f'{inputs_for_MLP}/true_class_weights.npy')
 
     import numpy as np
     import matplotlib.pyplot as plt

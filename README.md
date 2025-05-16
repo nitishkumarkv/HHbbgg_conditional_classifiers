@@ -14,7 +14,7 @@ micromamba activate HHbbgg_classifier
 # Example usage
 
 ```
-python3 MLP_multiclass.py --config_path config/example_config/ --do_all
+python3 run_multiclass_strategy.py --config_path config/example_config/ --out_path example_folder --do_all
 ```
 
-Config path has json files which define the input variables to use, the classes... 
+Config path has yaml files which define the input variables to use, the classes, the training config, etc.

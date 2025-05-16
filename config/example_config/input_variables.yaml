@@ -52,9 +52,8 @@ mlp:
     - VBF_dijet_mass
     - Res_HHbbggCandidate_eta
     - sigma_m_over_m_smeared_decorr
-    - diphoton_PtOverM_ggjj
-    - dijet_PtOverM_ggjj
+    - Res_diphoton_PtOverM_ggjj
+    - Res_dijet_PtOverM_ggjj
     - Res_lead_bjet_pt_over_M_regressed
     - Res_sublead_bjet_pt_over_M_regressed
     - deltaR_gg
-    - era

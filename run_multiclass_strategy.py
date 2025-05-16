@@ -18,14 +18,9 @@ def prepare_inputs(args):
     with open(f"{config_path}/training_config.yaml", 'r') as f:
         training_config = yaml.safe_load(f)
 
-    
     prep_inputs = PrepareInputs(input_var_json=input_vars_path,
-                                sample_to_class = training_config["sample_to_class"],
-                                class_num = training_config["class_num"],
-                                classes = training_config["classes"],
-                                sample_to_class_for_pred = training_config["sample_to_class_for_pred"],
-                                outpath=out_path,
-                                random_seed = training_config["random_seed"],)
+                                training_info = training_config,
+                                outpath=out_path,)
     
     # prepare the inputs for training
     if args.prep_inputs_for_training:
@@ -49,36 +44,38 @@ def perform_training(args):
     config_path = args.config_path
 
     # Load the configuration yaml files
-    with open(f"{config_path}/training_config.yaml", 'r') as f:
+    training_config_path = f"{config_path}/training_config.yaml"
+    with open(f"{training_config_path}", 'r') as f:
         training_config = yaml.safe_load(f)
 
     do_random_search = training_config["do_random_search"]
-    random_seed = training_config["random_seed"]
 
     # do random search
-    if (do_random_search) and (args.do_random_search):
-        num_random_search = training_config["num_random_search"]
+    if do_random_search:
         print('INFO: Performing random search')
-        subprocess.run(f"python3 models/random_search.py --input_path {out_path} --n_trials {num_random_search}", shell=True)
+        subprocess.run(f"python3 models/random_search.py --input_path {out_path} --training_config_path {training_config_path}", shell=True)        
 
-    # do training for the best model
-    if args.perform_training:
+    if args.train_best_model:
         # perform trainging
         print('INFO: Training the best model')
-        subprocess.run(f"python3 models/training_utils.py --input_path {out_path} --random_seed {random_seed}", shell=True)
+        subprocess.run(f"python3 models/training_utils.py --input_path {out_path} --training_config_path {training_config_path}", shell=True)
 
+    if args.plot_training_results:
         # plot the training results
         print('INFO: Getting the results plots')
         subprocess.run(f"python3 models/mlp_plotter.py --input_path {out_path}", shell=True)
 
+    if args.get_permutation_importance:
         # get permutaion importance
         print('INFO: Getting permutation importance')
         subprocess.run(f"python3 models/permutation_importance.py --input_path {out_path}", shell=True)
 
+    if args.get_predictions:
         # get the predictions
         print('INFO: Getting the predictions')
         subprocess.run(f"python3 models/get_prediction.py --model_folder {out_path}/after_random_search_best1/ --samples_path {out_path} --config_path {config_path}", shell=True)
 
+    if args.test_mass_sculpting:
         # get non resonant mass for different ggFHH score cuts
         print('INFO: Getting non resonant mass for different ggFHH score cuts')
         subprocess.run(f"python3 utils/test_cor_mass.py --input_path {out_path} --config_path {config_path}", shell=True)
@@ -99,26 +96,35 @@ if __name__ == "__main__":
     parser.add_argument('--prep_inputs_for_training', action='store_true', help='Prepare inputs for training')
     parser.add_argument('--prepare_inputs_pred_sim', action='store_true', help='Prepare inputs for prediction')
     parser.add_argument('--prepare_inputs_pred_data', action='store_true', help='Prepare inputs for prediction data')
-    parser.add_argument('--do_random_search', action='store_true', help='Perform random search')
+    parser.add_argument('--train_best_model', action='store_true', help='Train the best model')
+    parser.add_argument('--plot_training_results', action='store_true', help='Plot training results')
+    parser.add_argument('--get_permutation_importance', action='store_true', help='Get permutation importance')
+    parser.add_argument('--get_predictions', action='store_true', help='Get feature importance')
+    parser.add_argument('--test_mass_sculpting', action='store_true', help='Test mass sculpting')
     parser.add_argument('--perform_training', action='store_true', help='Perform training')
     parser.add_argument('--get_data_mc_plots', action='store_true', help='Get data-MC plots')
     parser.add_argument('--perform_categorisation', action='store_true', help='Perform categorisation')
-    parser.add_argument('--prepare_inputs', type=str, help='Prepare all inputs')
+    parser.add_argument('--prepare_inputs', action='store_true', help='Prepare all inputs')
     parser.add_argument('--do_all', action='store_true', help='Perform all steps')
     args = parser.parse_args()
+
+    if args.do_all:
+        args.prepare_inputs = True
+        args.perform_training = True
+        args.perform_categorisation = True
 
     if args.prepare_inputs:
         args.prep_inputs_for_training = True
         args.prepare_inputs_pred_sim = True
         args.prepare_inputs_pred_data = True
 
-    if args.do_all:
-        args.prep_inputs_for_training = True
-        args.prepare_inputs_pred_sim = True
-        args.prepare_inputs_pred_data = True
-        args.perform_training = True
+    if args.perform_training:
+        args.train_best_model
+        args.plot_training_results = True
+        args.get_permutation_importance = True
+        args.get_predictions = True
+        args.test_mass_sculpting = True
         args.get_data_mc_plots = True
-        args.perform_categorisation = True
 
     # prepare inputs
     prepare_inputs(args)

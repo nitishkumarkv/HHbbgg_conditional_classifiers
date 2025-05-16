@@ -16,52 +16,45 @@ class PrepareInputs:
     def __init__(
         self,
         input_var_json: None,
-        sample_to_class: None,
-        class_num: None,
-        classes: None,
-        samples_info: None,
-        random_seed: None,
+        training_info: None,
         outpath: None,
         ) -> None:
         self.model_type = "mlp"
         self.input_var_json = input_var_json
-        self.sample_to_class = sample_to_class
-        self.class_num = class_num
-        self.classes = classes
-        self.samples_info = samples_info
-        self.random_seed = random_seed
+        self.training_info = training_info
         self.outpath = outpath
         
+        self.sample_to_class = self.training_info["sample_to_class"]
+        self.classes = self.training_info["classes"]
+        self.random_seed = self.training_info["random_seed"]
+        self.fill_nan = -9
+        self.extra_vars = ["mass", "nonRes_dijet_mass", "Res_dijet_mass", "nonRes_has_two_btagged_jets", "weight", "pt", "nonRes_dijet_pt", "Res_dijet_pt", "Res_lead_bjet_pt", "Res_sublead_bjet_pt", "Res_lead_bjet_ptPNetCorr", "Res_sublead_bjet_ptPNetCorr", "nonRes_HHbbggCandidate_mass", "Res_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "Res_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID"]
+
 
     def load_vars(self, path):
-        print(path)
         with open(path, 'r') as f:
             vars = yaml.safe_load(f)
         return vars
 
-    def load_parquet(self, path, columns, N_files=-1):
-        columns = columns + ["mass", "nonRes_dijet_mass", "nonRes_has_two_btagged_jets", "weight", "pt", "nonRes_dijet_pt", "nonRes_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "Res_mjj_regressed"]
-
-        file_list = glob.glob(path + '*.parquet')
-        if N_files == -1:
-            file_list_ = file_list
-        else:
-            file_list_ = file_list[:N_files]
-
-        events = ak.from_parquet(file_list_, columns=columns)
-        print(f"INFO: loaded parquet files from the path {path}")
-
-        return events
-
     def add_var(self, events, era):
+        
+        events["nonRes_lead_bjet_pt_over_M_regressed"] = events.nonRes_lead_bjet_pt / events.nonRes_mjj_regressed
+        events["nonRes_sublead_bjet_ptover_M_regressed"] = events.nonRes_sublead_bjet_pt / events.nonRes_mjj_regressed
 
-        events["nonRes_lead_bjet_pt_over_M_regressed"] = events.nonRes_lead_bjet_pt / events.dijet_mass
-        events["nonRes_sublead_bjet_pt_over_M_regressed"] = events.nonRes_sublead_bjet_pt / events.dijet_mass
+        #events["nonRes_lead_bjet_ptPNetCorr_over_M_regressed"] = events.nonRes_lead_bjet_ptPNetCorr / events.nonRes_mjj_regressed
+        #events["nonRes_sublead_bjet_ptPNetCorr_over_M_regressed"] = events.nonRes_sublead_bjet_ptPNetCorr / events.nonRes_mjj_regressed
+
         events["nonRes_diphoton_PtOverM_ggjj"] = events.pt / events.nonRes_HHbbggCandidate_mass
         events["nonRes_dijet_PtOverM_ggjj"] = events.nonRes_dijet_pt / events.nonRes_HHbbggCandidate_mass
+        #events["nonRes_dijet_PtPNetCorrOverM_ggjj"] = events.nonRes_dijet_ptPNetCorr / events.nonRes_HHbbggCandidate_mass
         
-        events["Res_lead_bjet_pt_over_M_regressed"] = events.Res_lead_bjet_pt / events.dijet_mass
-        events["Res_sublead_bjet_pt_over_M_regressed"] = events.Res_sublead_bjet_pt / events.dijet_mass
+
+        events["Res_lead_bjet_pt_over_M_regressed"] = events.Res_lead_bjet_pt / events.Res_mjj_regressed
+        events["Res_sublead_bjet_pt_over_M_regressed"] = events.Res_sublead_bjet_pt / events.Res_mjj_regressed
+
+        #events["Res_lead_bjet_ptPNetCorr_over_M_regressed"] = events.Res_lead_bjet_ptPNetCorr / events.Res_mjj_regressed
+        #events["Res_sublead_bjet_ptPNetCorr_over_M_regressed"] = events.Res_sublead_bjet_ptPNetCorr / events.Res_mjj_regressed
+
         events["Res_diphoton_PtOverM_ggjj"] = events.pt / events.Res_HHbbggCandidate_mass
         events["Res_dijet_PtOverM_ggjj"] = events.Res_dijet_pt / events.Res_HHbbggCandidate_mass
 
@@ -208,11 +201,11 @@ class PrepareInputs:
         plt.imshow(corr_matrix, vmin=-1, vmax=1, cmap='coolwarm')
         # annotate the values
         for i in range(len(vars_for_training)):
-            for j in range(2):
+            for j in range(5):
                 # format the value to 2 decimal places
                 plt.text(j, i, f"{corr_matrix[i, j]:.2f}", ha='center', va='center', color='b')
 
-        plt.xticks([0, 1], ['mass', 'nonRes_dijet_mass', 'nonRes_mjj_regressed', 'Res_dijet_mass', 'Res_mjj_regressed'])
+        plt.xticks([0, 1, 2, 3, 4], ['mass', 'nonRes_dijet_mass', 'nonRes_mjj_regressed', 'Res_dijet_mass', 'Res_mjj_regressed'], rotation=90)
         plt.yticks(range(len(vars_for_training)), vars_for_training)
         plt.colorbar()
         plt.savefig(f'{out_path}', dpi=300, )
@@ -223,7 +216,11 @@ class PrepareInputs:
         
         mass_bool = ((events.mass > 100) & (events.mass < 180))
         dijet_mass_bool = ((events.Res_mjj_regressed > 70) & (events.Res_mjj_regressed < 190))
-        events = events[mass_bool & dijet_mass_bool]
+        
+        lead_mvaID_bool = ((events.lead_mvaID > 0.0439603) & (events.lead_isScEtaEB == True)) | ((events.lead_mvaID > -0.249526) & (events.lead_isScEtaEE == True))
+        sublead_mvaID_bool = ((events.sublead_mvaID > 0.0439603) & (events.sublead_isScEtaEB == True)) | ((events.sublead_mvaID > -0.249526) & (events.sublead_isScEtaEE == True))
+
+        events = events[mass_bool & dijet_mass_bool & lead_mvaID_bool & sublead_mvaID_bool]
 
         return events
     
@@ -269,7 +266,7 @@ class PrepareInputs:
         ]
 
         for var in vars_for_training:
-            plt.figure(figsize=(10, 8))
+            plt.figure(figsize=(10, 9))
             sample_num = 0
             data_to_plot_dict = {}
             range_list = []
@@ -302,19 +299,25 @@ class PrepareInputs:
 
             plt.xlabel(f"{var}")
             plt.ylabel("a.u.")
+            # add extra y range by getting the y range of the plot
+            y_range = plt.ylim()
+            plt.ylim(0, y_range[1] * 1.3)
             plt.legend(ncols=2, fontsize=13, loc='upper right')
             plt.tight_layout()
             plt.savefig(f"{plot_path}/{var}.png")
             plt.yscale('log')
+            plt.ylim(0.01, y_range[1] * 6)
             plt.tight_layout()
             plt.savefig(f"{plot_path}/{var}_log.png")
             plt.clf()
 
 
-    def prep_inputs_for_training(self, fill_nan = -9):
+    def prep_inputs_for_training(self):
+
+        fill_nan = self.fill_nan
 
         out_path = self.outpath
-        os.makedirs(self.out_path, exist_ok=True)
+        os.makedirs(out_path, exist_ok=True)
 
         comb_inputs = []
 
@@ -322,16 +325,15 @@ class PrepareInputs:
         vars_config = self.load_vars(self.input_var_json)[self.model_type]
 
         vars_for_training = vars_config["vars"] 
-        vars_for_log = vars_config["vars_for_log_transform"]
+        # vars_for_log = vars_config["vars_for_log_transform"]
 
-        for era in self.samples_info["eras"]:
-            for samples in self.sample_to_class.keys():
+        vars_to_load = vars_for_training + self.extra_vars
 
-                #events = self.load_parquet(f"data/samples/{era}/{samples}/", vars_for_training, -1)
-                vars_to_load = vars_for_training + ["mass", "nonRes_dijet_mass", "nonRes_has_two_btagged_jets", "weight", "pt", "nonRes_dijet_pt", "Res_dijet_pt", "Res_lead_bjet_pt", "Res_sublead_bjet_pt", "nonRes_HHbbggCandidate_mass", "Res_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "Res_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE"]
+        for era in self.training_info["samples_info"]["eras"]:
+            for samples in self.sample_to_class.keys():                
 
-                samples_path = self.samples_info["samples_path"]
-                parquet_path = self.samples_info[era][samples]
+                samples_path = self.training_info["samples_info"]["samples_path"]
+                parquet_path = self.training_info["samples_info"][era][samples]
                 events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
 
                 # add more variables
@@ -370,22 +372,18 @@ class PrepareInputs:
         for cls in self.classes:
             print("\n", f"INFO: Number of events in {cls}: {sum(comb_inputs[cls])}")
 
-
-
         X = comb_inputs[vars_for_training]
         Y = comb_inputs[[cls for cls in self.classes]]
         relative_weights = comb_inputs["rel_xsec_weight"]
 
         # perform log transformation for variables if needed
-        for var in vars_for_log:
-            X[var] = np.log(X[var])
-
+        # for var in vars_for_log:
+        #     X[var] = np.log(X[var])
 
         X = X.values
         Y = Y.values
         relative_weights = relative_weights.values
         
-
         # mask -999.0 to nan
         mask = (X < -998.0)
         X[mask] = np.nan
@@ -412,7 +410,6 @@ class PrepareInputs:
             X_test = np.nan_to_num(X_test, nan=fill_nan)
             class_weights_for_test = self.get_weights_for_val_test(y_test, rel_w_test)
         
-
         # save all the numpy arrays
         print("\n INFO: saving inputs for mlp")
         # save str of input variables
@@ -449,9 +446,10 @@ class PrepareInputs:
 
         return 0
     
-    def prep_inputs_for_prediction_sim(self, fill_nan = -9):
+    def prep_inputs_for_prediction_sim(self):
 
-        samples_info = self.samples_info
+        fill_nan = self.fill_nan
+        training_info = self.training_info
         inputs_path = self.outpath
         out_path = f"{inputs_path}/individual_samples/"
         os.makedirs(out_path, exist_ok=True)
@@ -462,14 +460,16 @@ class PrepareInputs:
             vars = json.load(f)
         vars_for_training = vars
 
-        vars_for_log = vars_config["vars_for_log_transform"]
+        # vars_for_log = vars_config["vars_for_log_transform"]
 
-        for era in samples_info["eras"]:
-            for samples in samples_info[era].keys():
+        vars_to_load = vars_for_training + self.extra_vars
+
+        for era in training_info["samples_info"]["eras"]:
+            for samples in training_info["samples_info"][era].keys():
                 
-                samples_path = samples_info["samples_path"]
-                parquet_path = samples_info[era][samples]
-                events = ak.from_parquet(f"{samples_path}/{parquet_path}")
+                samples_path = training_info["samples_info"]["samples_path"]
+                parquet_path = training_info["samples_info"][era][samples]
+                events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
                 
                 print(f"INFO: Number of events in {samples} after selection for {era}: {len(events)}")
 
@@ -489,8 +489,8 @@ class PrepareInputs:
                 relative_weights = comb_inputs["rel_xsec_weight"]
 
                 # perform log transformation for variables if needed
-                for var in vars_for_log:
-                    X[var] = np.log(X[var])
+                # for var in vars_for_log:
+                #     X[var] = np.log(X[var])
 
                 X = X.values
                 #Y = Y.values
@@ -523,7 +523,7 @@ class PrepareInputs:
                 np.save(f"{full_path_to_save}/rel_w", relative_weights)
 
                 # also save the event
-                ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
+                # ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
 
                 # save the training mean ans std_dev. This will be used for standardizing data
                 mean_std_dict = {
@@ -535,9 +535,10 @@ class PrepareInputs:
 
         return 0
     
-    def prep_inputs_for_prediction_data(self, samples_path, inputs_path, fill_nan = -9):
+    def prep_inputs_for_prediction_data(self):
 
-        samples_info = self.samples_info
+        fill_nan = self.fill_nan
+        training_info = self.training_info
         inputs_path = self.outpath
         out_path = f"{inputs_path}/individual_samples_data/"
         os.makedirs(out_path, exist_ok=True)
@@ -548,15 +549,13 @@ class PrepareInputs:
             vars = json.load(f)
         vars_for_training = vars
 
-        vars_for_log = vars_config["vars_for_log_transform"]
+        # vars_for_log = vars_config["vars_for_log_transform"]
 
-        comb_inputs = []
+        vars_to_load = vars_for_training + self.extra_vars
 
+        for data in training_info["samples_info"]["data"]:
 
-        #for era in ["preEE"]:
-        for data in samples_info["data"]:
-
-            events = ak.from_parquet(f"{self.samples_path}/{data}")
+            events = ak.from_parquet(f"{self.samples_path}/{data}", columns=vars_to_load)
 
             sample_to_era = {"2022_EraE": "postEE", 
                                  "2022_EraF": "postEE", 
@@ -579,8 +578,8 @@ class PrepareInputs:
             X = comb_inputs[vars_for_training]
 
             # perform log transformation for variables if needed
-            for var in vars_for_log:
-                X[var] = np.log(X[var])
+            # for var in vars_for_log:
+            #     X[var] = np.log(X[var])
 
 
             X = X.values
@@ -613,7 +612,13 @@ class PrepareInputs:
 
             np.save(f"{full_path_to_save}/X", X)
 
-            ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
+            # ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
+            mean_std_dict = {
+                    "mean": mean,
+                    "std_dev": std
+                }
+            with open(f"{out_path}/mean_std_dict.pkl", 'wb') as f:
+                pickle.dump(mean_std_dict, f)
 
         return 0
     

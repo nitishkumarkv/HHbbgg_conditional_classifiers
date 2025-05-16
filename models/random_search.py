@@ -23,6 +23,7 @@ from optuna.visualization.matplotlib import plot_rank
 from optuna.visualization.matplotlib import plot_slice
 from optuna.visualization.matplotlib import plot_timeline
 import os
+import yaml
 
 from mlp import MLP
 
@@ -204,8 +205,15 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description='Preform MLP based classification')
     parser.add_argument('--input_path', type=str, help='Path to the input files')
-    parser.add_argument('--n_trials', type=int, default=10, help='Number of trials for random search')
+    parser.add_argument('--training_config_path', type=str, default=10, help='Training configuration path')
     args = parser.parse_args()
+
+    # Load training configuration
+    with open(f"{args.training_config_path}", 'r') as f:
+        training_config = yaml.safe_load(f)
+
+    n_trials = training_config["num_random_search"]
+    weight_scheme = training_config["weight_scheme"]
 
     input_path= args.input_path
     path_for_plots = f'{input_path}/random_search_1/'
@@ -221,7 +229,22 @@ if __name__ == "__main__":
     rel_w_train = np.load(f'{input_path}/rel_w_train.npy')
     rel_w_val = np.load(f'{input_path}/rel_w_val.npy')
     #rel_w_test = np.load(f'{input_path}/rel_w_test.npy')
-    class_weights_for_training = np.load(f'{input_path}/class_weights_for_training.npy')
+
+    # set weight scheme for training
+    if weight_scheme == "weighted_abs":
+        class_weights_for_training = np.load(f'{input_path}/class_weights_for_training_abs.npy')
+
+    elif weight_scheme == "weighted_only_positive":
+        class_weights_for_training = np.load(f'{input_path}/class_weights_only_positive.npy')
+
+    elif weight_scheme == "weighted_CRUW_abs":
+        # to be completed
+        pass
+
+    elif weight_scheme == "weighted_CRUW_only_positive":
+        # to be completed
+        pass
+
     class_weights_for_val = np.load(f'{input_path}/class_weights_for_val.npy')
     #class_weights_for_test = np.load(f'{input_path}/class_weights_for_test.npy')
 
@@ -241,7 +264,6 @@ if __name__ == "__main__":
     #class_weights_for_test = torch.tensor(class_weights_for_test, dtype=torch.float32).to(device)
 
     # Optuna study
-    n_trials = args.n_trials
     study_name = f"{path_for_plots}_{n_trials}_trials____"
     storage = optuna.storages.RDBStorage('sqlite:///example.db')
     study = optuna.create_study(storage=storage, sampler=RandomSampler(), study_name=study_name, direction='minimize')
