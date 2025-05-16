@@ -83,7 +83,7 @@ def perform_training(args):
     # get the predictions for data
     if args.get_data_mc_plots:
         print('INFO: Getting data-MC plots')
-        subprocess.run(f"python3 utils/plotting_utils.py --base-path {out_path}", shell=True)
+        subprocess.run(f"python3 utils/plotting_utils.py --base-path {out_path} --training_config_path {training_config_path}", shell=True)
 
 def perform_categorisation(args):
     pass

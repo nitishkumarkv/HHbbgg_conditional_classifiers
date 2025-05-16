@@ -71,16 +71,18 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
         return events
 
     class_names = ["non_resonant_bkg_score", "ttH_score", "other_single_H_score", "GluGluToHH_score", "VBFToHH_sig_score"]
-
-    sim_folder_events = samples_info["samples_path"]
+    events_path = samples_info["samples_path"]
     eras = samples_info["eras"]
     for sample in sim_samples:
         sample_combined = []
         for era in eras:
-            events_ = ak.from_parquet(f"{sim_folder_events}/{samples_info[era][sample]}", columns=variables + ["weight_tot"])
+            events_ = ak.from_parquet(f"{events_path}/{samples_info[era][sample]}", columns=variables)
             scores_ = np.load(f"{sim_folder}/{era}/{sample}/y.npy")
+            rel_w_ = np.load(f"{sim_folder}/{era}/{sample}/rel_w.npy")
+            events_["weight_tot"] = rel_w_
             for i, class_name in enumerate(class_names):
                 if i < scores_.shape[1]:
+                    num_classes = scores_.shape[1]
                     events_[class_name] = scores_[:, i]
             sample_combined.append(events_)
         sample_combined = ak.concatenate(sample_combined, axis=0)
@@ -106,14 +108,12 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
             stack_mc_dict[label_dict[sample]] = sample_combined
 
     # Load Data First
-    if include_2023:
-        data_samples = ["2022_EraE", "2022_EraF", "2022_EraG", "2022_EraC", "2022_EraD", "2023_EraCv1to3", "2023_EraCv4", "2023_EraD"]
-    else:
-        data_samples = ["2022_EraE", "2022_EraF", "2022_EraG", "2022_EraC", "2022_EraD"]
     data_combined = None
 
-    for data_sample in data_samples:
-        data_part = ak.from_parquet(f"{data_folder}/{data_sample}/events.parquet", columns=variables)
+    data_samples = training_config["samples_info"]["data"]
+
+    for data_sample, path in data_samples.items():
+        data_part = ak.from_parquet(f"{events_path}/{path}", columns=variables)
         if os.path.exists(f"{data_folder}/{data_sample}/y.npy"):
             data_score = np.load(f"{data_folder}/{data_sample}/y.npy")
             for i, class_name in enumerate(class_names):
@@ -232,12 +232,20 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
             fig, axs = plt.subplots(2, 1, gridspec_kw={'height_ratios': [3, 1], 'hspace': 0.05}, figsize=(10, 10), sharex=True )
             ax, ax_ratio = axs
 
+        luminosities = {
+        "preEE": 7.98,  # Integrated luminosity for preEE in fb^-1
+        "postEE": 26.67,  # Integrated luminosity for postEE in fb^-1
+        "preBPix": 17.794,  # Integrated luminosity for preEE in fb^-1
+        "postBPix": 9.451  # Integrated luminosity for postEE in fb^-1
+        }
+
+        lumi = 0
+        for era in eras:
+            if era in luminosities:
+                lumi += luminosities[era]
+
         # set luminosity, CMS label, and legend
-        #hep.cms.label(data=True, lumi=34.65, ax=ax, loc=0, fontsize=16, label="Private Work", com=13.6)
-        if include_2023:
-            hep.cms.label(data=True, lumi=61.90, ax=ax, loc=0, fontsize=16, label="Private Work", com=13.6)
-        else:
-            hep.cms.label(data=True, lumi=34.65, ax=ax, loc=0, fontsize=16, label="Private Work", com=13.6)
+        hep.cms.label(data=True, lumi=lumi, ax=ax, loc=0, fontsize=16, label="Private Work", com=13.6)
         
 
         # Stacked MC histograms
@@ -278,7 +286,6 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
         # Plot signal as step histogram
         for signal, hist in signal_histograms.items():
             if "ggHH" in signal:
-                print(signal)
                 ax.step(
                     (bin_edges[:-1] + bin_edges[1:]) / 2,
                     hist,
@@ -371,8 +378,8 @@ if __name__ == "__main__":
     # sim_samples = ["GGJets", "DDQCDGJET", "TTGG", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "VBFHToGG_M_125", "VHtoGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "VBFHHto2B2G_CV_1_C2V_1_C3_1"]
     # sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "VBFHHto2B2G_CV_1_C2V_1_C3_1", "TTGG", "GGJets", "DDQCDGJET"]
     sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET"]
-    variables = ["dijet_mass", "Res_mjj_regressed", "Res_dijet_mass", "nonRes_mjj_regressed", "mass", "nonRes_dijet_mass", "minMVAID", "maxMVAID", "n_jets", "sublead_eta", "lead_eta", "sublead_pt", "lead_pt", "pt", "eta", "lead_mvaID", "sublead_mvaID"]
+    variables = ["Res_mjj_regressed", "Res_dijet_mass", "nonRes_mjj_regressed", "mass", "nonRes_dijet_mass", "minMVAID", "maxMVAID", "n_jets", "sublead_eta", "lead_eta", "sublead_pt", "lead_pt", "pt", "eta", "lead_mvaID", "sublead_mvaID"]
     out_path = f"{base_path}/"
 
-    plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, signal_scale=1000, include_2023=True)
-    plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, signal_scale=1000, include_2023=True, only_MC=True)
+    plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, signal_scale=1000)
+    plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, signal_scale=1000, only_MC=True)
