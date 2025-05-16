@@ -484,4 +484,3 @@ for i in range(n_classes):
     fig.savefig(f'{path_for_plots}/{class_name}_score.png')
     plt.close(fig)
 
-    

@@ -63,12 +63,12 @@ def perform_training(args):
     if args.plot_training_results:
         # plot the training results
         print('INFO: Getting the results plots')
-        subprocess.run(f"python3 models/mlp_plotter.py --input_path {out_path}", shell=True)
+        subprocess.run(f"python3 utils/mlp_plotter.py --input_path {out_path}", shell=True)
 
     if args.get_permutation_importance:
         # get permutaion importance
         print('INFO: Getting permutation importance')
-        subprocess.run(f"python3 models/permutation_importance.py --input_path {out_path}", shell=True)
+        subprocess.run(f"python3 utils/permutation_importance.py --input_path {out_path}", shell=True)
 
     if args.get_predictions:
         # get the predictions

@@ -242,6 +242,3 @@ if __name__ == "__main__":
     plt.ylabel('Permutation importance')
     plt.tight_layout()
     plt.savefig(f'{path_to_importance_plots}/permutation_importance_log_loss_vertical_cleaned.png', dpi=300)
-
-
-
