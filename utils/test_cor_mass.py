@@ -5,6 +5,10 @@ import argparse
 import json
 import os
 import yaml
+import numpy as np
+import matplotlib.pyplot as plt
+import mplhep as hep
+plt.style.use(hep.style.CMS)  # Apply mlhep CMS style
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Check for correlation between mass and ggFHH score')
@@ -21,7 +25,7 @@ if __name__ == "__main__":
     eras = training_config["samples_info"]["eras"]
     events_path = training_config["samples_info"]["samples_path"]
 
-    non_resonant_samples = ["TTGG", "GGJets", "DDQCDGJET"]
+    non_resonant_samples = ["TTGG", "GGJets"]
     sample = [s for s in samples_in_config if s in non_resonant_samples]
     #sample = ["GGJets"]
     path = args.input_path
@@ -42,20 +46,75 @@ if __name__ == "__main__":
     events = []
     for era in eras:
         for s in sample:
-            events.append(ak.from_parquet(f"{events_path}/{training_config['samples_info'][era][s]}", columns=["mass", "Res_mjj_regressed"]))
+            if os.path.exists(f"{path}/individual_samples/{era}/{s}/events.parquet"):
+                events.append(ak.from_parquet(f"{path}/individual_samples/{era}/{s}/events.parquet", columns=["mass", "Res_mjj_regressed"]))
+            else:
+                events.append(ak.from_parquet(f"{events_path}/{training_config['samples_info'][era][s]}", columns=["mass", "Res_mjj_regressed"]))
     events = ak.concatenate(events)
 
-    # plot di_photon and dijet mass for various ggFHH score cuts
+
+    def plot_with_errorbars(data, weights, bins, range_, label, ax):
+        hist, bin_edges = np.histogram(data, bins=bins, range=range_, weights=weights)
+        sumw2, _ = np.histogram(data, bins=bins, range=range_, weights=weights**2)
+
+        bin_centers = 0.5 * (bin_edges[1:] + bin_edges[:-1])
+        bin_widths = np.diff(bin_edges)
+
+        # Normalize to density if requested
+        norm_factor = np.sum(hist * bin_widths)
+        if norm_factor > 0:
+            hist /= norm_factor
+            sumw2 /= norm_factor**2
+
+        errors = np.sqrt(sumw2)
+        hep.histplot(
+            hist,
+            bin_edges,
+            yerr=errors,
+            label=label,
+            histtype='step',
+            ax=ax,
+            linewidth=2
+        )
+
+    # Di-photon mass plot
+    fig, ax = plt.subplots()
     for cut in [0, 0.6, 0.9, 0.95]:
-        plt.hist(np.array(events.mass)[y[:, 3] > cut], bins=30, range=(100, 180), weights=rel_w[y[:, 3] > cut], histtype='step', label=f"ggFHH score > {cut}", density=True)
-    plt.legend()
-    plt.xlabel("di-photon mass")
-    plt.savefig(f"{out_path}/nonResSamples_diphoton_mass_ggFHH_score_cuts.png")
+        mask = y[:, 3] > cut
+        plot_with_errorbars(
+            data=np.array(events.mass)[mask],
+            weights=rel_w[mask],
+            bins=30,
+            range_=(100, 180),
+            label=f"ggFHH score > {cut}",
+            ax=ax
+        )
+    ax.set_xlabel("di-photon mass [GeV]")
+    ax.set_ylabel("Normalized events")
+    ax.legend()
+    #hep.cms.text("Private Work", ax=ax)
+    plt.title("GGJets+TTGG")
+    plt.tight_layout()
+    fig.savefig(f"{out_path}/nonResSamples_diphoton_mass_ggFHH_score_cuts.png")
     plt.clf()
 
+    # Dijet mass plot
+    fig, ax = plt.subplots()
     for cut in [0, 0.6, 0.9, 0.95]:
-        plt.hist(np.array(events.Res_mjj_regressed)[y[:, 3] > cut], bins=30, range=(70, 190), weights=rel_w[y[:, 3] > cut], histtype='step', label=f"ggFHH score > {cut}", density=True)
-    plt.legend()
-    plt.xlabel("Res_mjj_regressed")
-    plt.savefig(f"{out_path}/nonResSamples_Res_mjj_regressed_score_cuts.png")
+        mask = y[:, 3] > cut
+        plot_with_errorbars(
+            data=np.array(events.Res_mjj_regressed)[mask],
+            weights=rel_w[mask],
+            bins=30,
+            range_=(70, 190),
+            label=f"ggFHH score > {cut}",
+            ax=ax
+        )
+    ax.set_xlabel("Res_mjj_regressed [GeV]")
+    ax.set_ylabel("Normalized events")
+    ax.legend()
+    #hep.cms.text("Private Work", ax=ax)
+    plt.title("GGJets+TTGG")
+    plt.tight_layout()
+    fig.savefig(f"{out_path}/nonResSamples_Res_mjj_regressed_score_cuts.png")
     plt.clf()

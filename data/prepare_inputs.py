@@ -11,30 +11,50 @@ import mplhep as hep
 import matplotlib.pyplot as plt
 import pandas as pd
 import pickle
+from vector import register_awkward
+register_awkward()
 
 class PrepareInputs:
     def __init__(
         self,
-        input_var_json: None,
-        training_info: None,
-        outpath: None,
+        input_var_json: Optional[Dict[str, Any]] = None,
+        training_info: Optional[Dict[str, Any]] = None,
+        outpath: Optional[Dict[str, Any]] = None,
+        predict_parquet_info: Optional[Dict[str, Any]] = None,
         ) -> None:
         self.model_type = "mlp"
         self.input_var_json = input_var_json
         self.training_info = training_info
         self.outpath = outpath
+        self.predict_parquet_info = predict_parquet_info
         
-        self.sample_to_class = self.training_info["sample_to_class"]
-        self.classes = self.training_info["classes"]
-        self.random_seed = self.training_info["random_seed"]
+        if self.training_info is not None:
+            self.sample_to_class = self.training_info["sample_to_class"]
+            self.classes = self.training_info["classes"]
+            self.random_seed = self.training_info["random_seed"]
         self.fill_nan = -9
-        self.extra_vars = ["mass", "nonRes_dijet_mass", "Res_dijet_mass", "nonRes_has_two_btagged_jets", "weight", "pt", "nonRes_dijet_pt", "Res_dijet_pt", "Res_lead_bjet_pt", "Res_sublead_bjet_pt", "Res_lead_bjet_ptPNetCorr", "Res_sublead_bjet_ptPNetCorr", "nonRes_HHbbggCandidate_mass", "Res_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "Res_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID"]
-
+        self.extra_vars = ["mass", "nonRes_dijet_mass", "Res_dijet_mass", "nonRes_has_two_btagged_jets", "weight", "pt", "nonRes_dijet_pt", "Res_dijet_pt", "Res_lead_bjet_pt", "Res_sublead_bjet_pt", "Res_lead_bjet_ptPNetCorr", "Res_sublead_bjet_ptPNetCorr", "nonRes_HHbbggCandidate_mass", "Res_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "Res_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "jet1_mass", "jet2_mass", "jet3_mass", "jet4_mass", "jet5_mass", "jet6_mass", "Res_lead_bjet_jet_idx", "Res_sublead_bjet_jet_idx", "jet1_index", "jet2_index", "jet3_index", "jet4_index", "jet5_index", "jet6_index",
+                           "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet1_eta", "jet2_eta", "jet3_eta", "jet4_eta", "jet5_eta", "jet6_eta", "jet1_phi", "jet2_phi", "jet3_phi", "jet4_phi", "jet5_phi", "jet6_phi"]
 
     def load_vars(self, path):
         with open(path, 'r') as f:
             vars = yaml.safe_load(f)
         return vars
+    
+    def deltaR(self, eta1, phi1, eta2, phi2, fill_none=True):
+        eta1 = ak.mask(eta1, (eta1 != -999) & (phi1 != -999) & (eta2 != -999) & (phi2 != -999))
+        phi1 = ak.mask(phi1, (eta1 != -999) & (phi1 != -999) & (eta2 != -999) & (phi2 != -999))
+        eta2 = ak.mask(eta2, (eta1 != -999) & (phi1 != -999) & (eta2 != -999) & (phi2 != -999))
+        phi2 = ak.mask(phi2, (eta1 != -999) & (phi1 != -999) & (eta2 != -999) & (phi2 != -999))
+
+        dphi = (phi1 - phi2 + np.pi) % (2 * np.pi) - np.pi
+        deta = eta1 - eta2
+        delta_r = np.sqrt(deta**2 + dphi**2)
+
+        if fill_none:
+            return ak.fill_none(delta_r, -999.0)
+        else:
+            return delta_r
 
     def add_var(self, events, era):
         
@@ -52,14 +72,15 @@ class PrepareInputs:
         events["Res_lead_bjet_pt_over_M_regressed"] = events.Res_lead_bjet_pt / events.Res_mjj_regressed
         events["Res_sublead_bjet_pt_over_M_regressed"] = events.Res_sublead_bjet_pt / events.Res_mjj_regressed
 
-        #events["Res_lead_bjet_ptPNetCorr_over_M_regressed"] = events.Res_lead_bjet_ptPNetCorr / events.Res_mjj_regressed
-        #events["Res_sublead_bjet_ptPNetCorr_over_M_regressed"] = events.Res_sublead_bjet_ptPNetCorr / events.Res_mjj_regressed
+        events["Res_lead_bjet_ptPNetCorr_over_M_regressed"] = events.Res_lead_bjet_ptPNetCorr / events.Res_mjj_regressed
+        events["Res_sublead_bjet_ptPNetCorr_over_M_regressed"] = events.Res_sublead_bjet_ptPNetCorr / events.Res_mjj_regressed
 
         events["Res_diphoton_PtOverM_ggjj"] = events.pt / events.Res_HHbbggCandidate_mass
         events["Res_dijet_PtOverM_ggjj"] = events.Res_dijet_pt / events.Res_HHbbggCandidate_mass
 
         # add deltaR between lead and sublead photon
-        events["deltaR_gg"] = np.sqrt((events.lead_eta - events.sublead_eta) ** 2 + (events.lead_phi - events.sublead_phi) ** 2)
+        #events["deltaR_gg"] = np.sqrt((events.lead_eta - events.sublead_eta) ** 2 + (events.lead_phi - events.sublead_phi) ** 2)
+        events["deltaR_gg"] = self.deltaR(events.lead_eta, events.lead_phi, events.sublead_eta, events.sublead_phi)
         # add deltaR between lead and sublead bjet
         if era == "preEE":
             events["era"] = 0
@@ -70,7 +91,98 @@ class PrepareInputs:
         elif era == "postBPix":
             events["era"] = 3
 
+        # add jet related mass
+            
+        # Build awkward array of jets
+        jets = ak.zip({
+            "pt": ak.concatenate([events[f"jet{i}_pt"][:, None] for i in range(1, 7)], axis=1),
+            "eta": ak.concatenate([events[f"jet{i}_eta"][:, None] for i in range(1, 7)], axis=1),
+            "phi": ak.concatenate([events[f"jet{i}_phi"][:, None] for i in range(1, 7)], axis=1),
+            "mass": ak.concatenate([events[f"jet{i}_mass"][:, None] for i in range(1, 7)], axis=1),
+            "index": ak.concatenate([events[f"jet{i}_index"][:, None] for i in range(1, 7)], axis=1),
+        }, with_name="Momentum4D")
+        
+        # Mask out jets that are b-jets
+        is_not_bjet = (jets.index != events.Res_lead_bjet_jet_idx[:, None]) & \
+                      (jets.index != events.Res_sublead_bjet_jet_idx[:, None])
+        jets_clean = jets[is_not_bjet]
+
+        # Select up to 4 jets
+        selected_jets = jets_clean[:, :4]
+        
+        # ΔR to objects
+        def min_deltaR_to(obj_eta, obj_phi):
+            min = ak.min(self.deltaR(selected_jets.eta, selected_jets.phi, obj_eta[:, None], obj_phi[:, None], fill_none=False), axis=1)
+            return ak.fill_none(min, -999.0)
+
+        events["min_deltaR_jet_b1"] = min_deltaR_to(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi)
+        events["min_deltaR_jet_b2"] = min_deltaR_to(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi)
+        events["min_deltaR_jet_g1"] = min_deltaR_to(events.lead_eta, events.lead_phi)
+        events["min_deltaR_jet_g2"] = min_deltaR_to(events.sublead_eta, events.sublead_phi)
+
+        # deltaR betwreen the jets anf photons, bjets
+        events["deltaR_g1_j1"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
+        events["deltaR_g1_j2"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
+        events["deltaR_g1_j3"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
+        events["deltaR_g1_j4"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
+        events["deltaR_g2_j1"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
+        events["deltaR_g2_j2"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
+        events["deltaR_g2_j3"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
+        events["deltaR_g2_j4"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
+        events["deltaR_b1_j1"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
+        events["deltaR_b1_j2"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
+        events["deltaR_b1_j3"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
+        events["deltaR_b1_j4"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
+        events["deltaR_b2_j1"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
+        events["deltaR_b2_j2"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
+        events["deltaR_b2_j3"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
+        events["deltaR_b2_j4"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
+
+        # add jet pt, eta, phi
+        events["j1_pt"] = selected_jets.pt[:, 0]
+        events["j2_pt"] = selected_jets.pt[:, 1]
+        events["j3_pt"] = selected_jets.pt[:, 2]
+        events["j4_pt"] = selected_jets.pt[:, 3]
+        events["j1_eta"] = selected_jets.eta[:, 0]
+        events["j2_eta"] = selected_jets.eta[:, 1]
+        events["j3_eta"] = selected_jets.eta[:, 2]
+        events["j4_eta"] = selected_jets.eta[:, 3]
+        events["j1_phi"] = selected_jets.phi[:, 0]
+        events["j2_phi"] = selected_jets.phi[:, 1]
+        events["j3_phi"] = selected_jets.phi[:, 2]
+        events["j4_phi"] = selected_jets.phi[:, 3]
+        
+
+
+        # Build Lorentz vectors from selected_jets
+        jets_vec = selected_jets
+
+        # Pair indices for 4 jets
+        pair_indices = [(0, 1), (0, 2), (0, 3),
+                        (1, 2), (1, 3),
+                        (2, 3)]
+
+        pair_names = ["j1_j2", "j1_j3", "j1_j4", "j2_j3", "j2_j4", "j3_j4"]
+
+        for (i, j), name in zip(pair_indices, pair_names):
+            # Mask if either jet is invalid (pt == -999)
+            valid = (selected_jets.pt[:, i] != -999) & (selected_jets.pt[:, j] != -999)
+
+            # Sum vectors and get invariant mass
+            m_pair = (jets_vec[:, i] + jets_vec[:, j]).mass
+
+            # Set to -999 if invalid
+            events[f"mass_{name}"] = ak.where(valid, m_pair, -999.0)
+
+            # Compute ΔR for the pair using your self.deltaR
+            delta_r = self.deltaR(
+                selected_jets.eta[:, i], selected_jets.phi[:, i],
+                selected_jets.eta[:, j], selected_jets.phi[:, j]
+            )
+            events[f"deltaR_{name}"] = ak.where(valid, delta_r, -999.0)
+
         return events
+
 
     def get_relative_xsec_weight(self, events, sample_type, era):
 
@@ -89,7 +201,11 @@ class PrepareInputs:
             "DDQCDGJET": 1.0,
             "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": 0.08373e3 * 0.00227 * 0.582 * 2,
             "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": 0.06531e3 * 0.00227 * 0.582 * 2,
-            "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": 0.01285e3 * 0.00227 * 0.582 * 2
+            "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": 0.01285e3 * 0.00227 * 0.582 * 2,
+            "TTG_10_100": 4.334e3,
+            "TTG_100_200": 0.44e3,
+            "TTG_200": 0.12e3,
+            "TT": 730e3,
         }
         luminosities = {
         "preEE": 7.98,  # Integrated luminosity for preEE in fb^-1
@@ -217,9 +333,15 @@ class PrepareInputs:
         mass_bool = ((events.mass > 100) & (events.mass < 180))
         dijet_mass_bool = ((events.Res_mjj_regressed > 70) & (events.Res_mjj_regressed < 190))
         
-        lead_mvaID_bool = ((events.lead_mvaID > 0.0439603) & (events.lead_isScEtaEB == True)) | ((events.lead_mvaID > -0.249526) & (events.lead_isScEtaEE == True))
-        sublead_mvaID_bool = ((events.sublead_mvaID > 0.0439603) & (events.sublead_isScEtaEB == True)) | ((events.sublead_mvaID > -0.249526) & (events.sublead_isScEtaEE == True))
+        #lead_mvaID_bool = ((events.lead_mvaID > 0.0439603) & (events.lead_isScEtaEB == True)) | ((events.lead_mvaID > -0.249526) & (events.lead_isScEtaEE == True))
+        #sublead_mvaID_bool = ((events.sublead_mvaID > 0.0439603) & (events.sublead_isScEtaEB == True)) | ((events.sublead_mvaID > -0.249526) & (events.sublead_isScEtaEE == True))
 
+        lead_mvaID_bool = (events.lead_mvaID > -0.7)
+        sublead_mvaID_bool = (events.sublead_mvaID > -0.7)
+
+        #if( samples_type is not None) and "TTG_" in samples_type:
+        #    to_prompt_photon = ((events.lead_genPartFlav==1) & (events.sublead_genPartFlav==1))
+        #else:
         events = events[mass_bool & dijet_mass_bool & lead_mvaID_bool & sublead_mvaID_bool]
 
         return events
@@ -299,17 +421,19 @@ class PrepareInputs:
 
             plt.xlabel(f"{var}")
             plt.ylabel("a.u.")
-            # add extra y range by getting the y range of the plot
-            y_range = plt.ylim()
-            plt.ylim(0, y_range[1] * 1.3)
             plt.legend(ncols=2, fontsize=13, loc='upper right')
-            plt.tight_layout()
-            plt.savefig(f"{plot_path}/{var}.png")
             plt.yscale('log')
-            plt.ylim(0.01, y_range[1] * 6)
+            #plt.ylim(0.001, plt.ylim()[1] * 6)
             plt.tight_layout()
             plt.savefig(f"{plot_path}/{var}_log.png")
+
+            plt.yscale('linear')
+            yrange = plt.ylim()
+            plt.ylim(0, yrange[1] * 1.3)
+            plt.tight_layout()
+            plt.savefig(f"{plot_path}/{var}.png")
             plt.clf()
+            
 
 
     def prep_inputs_for_training(self):
@@ -336,10 +460,10 @@ class PrepareInputs:
                 parquet_path = self.training_info["samples_info"][era][samples]
                 events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
 
+                events = self.preselection(events)
+
                 # add more variables
                 events = self.add_var(events, era)
-
-                events = self.preselection(events)
 
                 # get relative weights according to cross section of the process
                 events = self.get_relative_xsec_weight(events, samples, era)
@@ -470,15 +594,15 @@ class PrepareInputs:
             for samples in training_info["samples_info"][era].keys():
                 
                 parquet_path = training_info["samples_info"][era][samples]
-                events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
+                events = ak.from_parquet(f"{samples_path}/{parquet_path}")#, columns=vars_to_load)
                 
-                print(f"INFO: Number of events in {samples} after selection for {era}: {len(events)}")
+                print(f"INFO: Number of events in {samples} for {era}: {len(events)}")
+
+                # add preselection
+                events = self.preselection(events)
 
                 # add more variables
                 events = self.add_var(events, era)
-
-                # add preselection
-                # events = self.preselection(events)
 
                 # get relative weights according to cross section of the process
                 events = self.get_relative_xsec_weight(events, samples, era)
@@ -524,7 +648,7 @@ class PrepareInputs:
                 np.save(f"{full_path_to_save}/rel_w", relative_weights)
 
                 # also save the event
-                # ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
+                ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
 
                 # save the training mean ans std_dev. This will be used for standardizing data
                 mean_std_dict = {
@@ -570,12 +694,11 @@ class PrepareInputs:
                                  "2023_EraCv4": "preBPix", 
                                  "2023_EraD": "postBPix"}
 
+            # add preselection
+            events = self.preselection(events)
+
             # add more variables
             events = self.add_var(events, sample_to_era[data])
-
-            # add preselection
-            # events = self.preselection(events)
-
 
             comb_inputs = pd.DataFrame(ak.to_list(events))
 
@@ -623,6 +746,84 @@ class PrepareInputs:
                 }
             with open(f"{out_path}/mean_std_dict.pkl", 'wb') as f:
                 pickle.dump(mean_std_dict, f)
+
+            ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
+
+        return 0
+    
+    def add_var_pred(self, events):
+
+        collection = "res"
+        # add variables
+        if collection == "nonres":
+            events["dijet_mass"] = events.nonRes_mjj_regressed
+        else:
+            events["dijet_mass"] = events.Res_mjj_regressed
+        
+        events["Res_lead_bjet_pt_over_M_regressed"] = events.Res_lead_bjet_pt / events.dijet_mass
+        events["Res_sublead_bjet_pt_over_M_regressed"] = events.Res_sublead_bjet_pt / events.dijet_mass
+        events["Res_diphoton_PtOverM_ggjj"] = events.pt / events.Res_HHbbggCandidate_mass
+        events["Res_dijet_PtOverM_ggjj"] = events.Res_dijet_pt / events.Res_HHbbggCandidate_mass
+        events["diphoton_PtOverM_ggjj"] = events.pt / events.Res_HHbbggCandidate_mass
+        events["dijet_PtOverM_ggjj"] = events.Res_dijet_pt / events.Res_HHbbggCandidate_mass
+
+        # add deltaR between lead and sublead photon
+        events["deltaR_gg"] = np.sqrt((events.lead_eta - events.sublead_eta) ** 2 + (events.lead_phi - events.sublead_phi) ** 2)
+        # add deltaR between lead and sublead bjet
+
+        eras = np.ones_like(events.pt)
+        #bool_year = (events.year == 2023)
+        #eras+= 1 * bool_year
+
+        events["era"] = eras
+
+        return events
+    
+    def prep_inputs_for_parquets(self):
+
+        fill_nan = self.fill_nan
+        predict_parquet_info = self.predict_parquet_info
+
+        # get the variables required for training
+        # load a txt file
+        # load list of input features
+        input_vars_path = predict_parquet_info["input_vars_path"]
+        with open(input_vars_path, 'r') as f:
+            vars_for_training = json.load(f)
+        # vars_for_log = vars_config["vars_for_log_transform"]
+            
+        vars_to_load = vars_for_training + self.extra_vars
+
+        parquet_path = predict_parquet_info["parquet_path"]
+        events = ak.from_parquet(parquet_path, columns=vars_to_load+["year"])
+        # add more variables
+        events = self.add_var_pred(events)
+
+        comb_inputs = pd.DataFrame(ak.to_list(events))
+        
+        X = comb_inputs[vars_for_training]
+
+        X = X.values
+
+        mask = (X < -998.0)
+        X[mask] = np.nan
+
+        # get mean according to training data set
+        scale_file = predict_parquet_info["scale_file"]
+        with open(scale_file, 'rb') as f:
+            mean_std_dict = pickle.load(f)
+
+        mean = mean_std_dict["mean"]
+        std = mean_std_dict["std_dev"]
+
+        X = self.standardize(X, mean, std)
+        X = np.nan_to_num(X, nan=fill_nan)
+
+        out_path = predict_parquet_info["out_path"]
+        os.makedirs(out_path, exist_ok=True)
+        # save all the numpy arrays
+        print(f"INFO: saving inputs for {parquet_path}")
+        np.save(f"{out_path}/X", X)
 
         return 0
     

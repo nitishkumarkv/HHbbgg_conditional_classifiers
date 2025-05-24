@@ -158,7 +158,7 @@ if __name__ == "__main__":
         print("Using predefined parameters which are saved in the folder")
 
         os.makedirs(f'{input_path}/random_search_1', exist_ok=True)
-        best_params = {"num_layers": 5, "num_nodes": 1024, "act_fn_name": "ELU", "lr": 2.027496582741043e-05, "weight_decay": 5.159904717896079e-05, "dropout_prob": 0.15, "n_trials": 0}
+        best_params = {"num_layers": 5, "num_nodes": 1024, "act_fn_name": "ELU", "lr": 2.027496582741043e-05, "weight_decay": 5.159904717896079e-05, "dropout_prob": 0.25, "n_trials": 0}
         with open(f'{input_path}/random_search_1/best_params.json', 'w') as f:
             json.dump(best_params, f)
 

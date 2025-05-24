@@ -5,12 +5,10 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 import numpy as np
 import matplotlib.pyplot as plt
 import json
-import seaborn as sns
 import tqdm
 import copy
 from sklearn.metrics import confusion_matrix, classification_report, roc_curve, auc
 from sklearn.preprocessing import label_binarize
-import optuna
 import os
 import awkward as ak
 import mplhep as hep

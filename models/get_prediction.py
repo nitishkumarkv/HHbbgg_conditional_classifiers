@@ -81,6 +81,20 @@ def get_prediction_binary(model_dict_path, model_path, X):
 
     return y
 
+def get_prediction_parquet(model_dict_path, model_path, X_path):
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    X = torch.tensor(np.load(X_path), dtype=torch.float32).to(device)
+    print(f"Getting prediction for {X_path}")
+    pred = get_prediction(model_dict_path, model_path, X)
+    print(np.sum(pred, axis=1))
+
+    print(f"Saving prediction for {X_path} \n")
+    output_path = X_path.replace("X.npy", "y.npy")
+    np.save(output_path, pred)
+
+    return pred
+
 if __name__ == "__main__":
 
     import argparse

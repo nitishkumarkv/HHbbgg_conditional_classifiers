@@ -15,57 +15,6 @@ import os
 hep.style.use("CMS")
 
 
-def weigted_corrcoef(x, y, w):
-    return 1 - correlation(x, y, w)
-
-def get_corrcoef(vars, weights):
-    w = weights
-    corrcoeff_matrix = np.zeros([vars.shape[1], vars.shape[1]])
-    print(f"INFO: Calculating correlation coefficients for {vars.shape[1]} variables")
-    for i in range(vars.shape[1]):
-        print(f"INFO: Calculating correlation coefficients for variable {i+1}")
-        for j in range(vars.shape[1]):
-            if i <= j:
-                x = vars[:, i]
-                y = vars[:, j]
-
-                # remove event x and y events with valus == -9
-                mask = (x != -9) & (y != -9)
-                #if sum(~mask) > 0:
-                #    print(i, j, sum(~mask))
-            
-                corrcoeff_matrix[i][j] = weigted_corrcoef(x[mask], y[mask], w[mask])
-                corrcoeff_matrix[j][i] = corrcoeff_matrix[i][j]
-
-    return corrcoeff_matrix
-
-def plot_corrcoef(corrcoeff_matrix, var_names, figname, annotate_greater_than=0.2, annotate_less_than=-0.2):
-
-    print("INFO: Plotting correlation matrix")
-    corrcoeff_matrix = corrcoeff_matrix.astype(float)
-
-    fig, ax = plt.subplots(figsize=(50, 50)) 
-    cax = ax.matshow(corrcoeff_matrix, cmap="coolwarm", vmin=-1, vmax=1)
-    colorbar = fig.colorbar(cax)
-    colorbar.set_label("Correlation Coefficient", fontsize=18)
-    ax.set_xticks(range(len(var_names)))
-    ax.set_yticks(range(len(var_names)))
-    ax.set_xticklabels(var_names, fontsize=15, rotation=90)
-    ax.set_yticklabels(var_names, fontsize=15)
-    ax.xaxis.set_ticks_position('bottom')
-    ax.xaxis.set_label_position('bottom')
-
-    #for (i, j), val in np.ndenumerate(corrcoeff_matrix):
-    #    ax.text(j, i, f"{val:.2f}", ha="center", va="center", color="black", fontsize=12)
-    for (i, j), val in np.ndenumerate(corrcoeff_matrix):
-        if (val > annotate_greater_than) or (val < annotate_less_than):
-            ax.text(j, i, f"{val:.2f}", ha="center", va="center", color="black", fontsize=8)
-
-    plt.savefig(f"{figname}.png", dpi=300, bbox_inches="tight")
-    plt.show()
-
-
-
 # Wrapper class for your model
 class ModelEstimatorWrapper:
     def __init__(self, param_dict_path, model_path):
@@ -75,7 +24,7 @@ class ModelEstimatorWrapper:
     
     def load_model(self, input_size):
         # Load the model parameters
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
         self.device = device
 
         # Load best parameters from JSON file
@@ -150,6 +99,18 @@ def plot_permutation_importance_log_loss(importances, stds, feature_names):
     plt.tight_layout()
     plt.show()
 
+def class_specific_log_loss(y_true, y_pred_proba, sample_weight, class_index):
+    """Compute log loss only for a specific class (as binary classification)."""
+    y_true = np.argmax(y_true, axis=1)  # Convert to class indices
+    y_true_binary = (y_true == class_index).astype(int)
+    y_pred_class = y_pred_proba[:, class_index]
+
+    # Build binary 2D probability array
+    y_pred_binary = np.stack([1 - y_pred_class, y_pred_class], axis=1)
+
+    # 💥 Fix the dtype of y_true_binary to prevent multilabel confusion
+    return -log_loss(y_true_binary.tolist(), y_pred_binary, sample_weight=sample_weight, labels=[0, 1])
+
 
 if __name__ == "__main__":
     import argparse
@@ -158,18 +119,19 @@ if __name__ == "__main__":
     args = parser.parse_args()
     input_path= args.input_path
 
-    # load data
-    print("INFO: Loading inputs")
-    X_train = np.load(f'{input_path}/X_train.npy')
-    y_train = np.load(f'{input_path}/y_train.npy')
-    rel_w_train = np.load(f'{input_path}/rel_w_train.npy')
+    # # load data
+    # print("INFO: Loading inputs")
+    # X_train = np.load(f'{input_path}/X_train.npy')
+    # y_train = np.load(f'{input_path}/y_train.npy')
+    # rel_w_train = np.load(f'{input_path}/rel_w_train.npy')
 
-    class_weights_for_train_no_aboslute = np.load(f'{input_path}/true_class_weights.npy')
+    # class_weights_for_train_no_aboslute = np.load(f'{input_path}/true_class_weights.npy')
 
     X_val = np.load(f'{input_path}/X_val.npy')
     y_val = np.load(f'{input_path}/y_val.npy')
     rel_w_val = np.load(f'{input_path}/rel_w_val.npy')
     class_weights_for_val = np.load(f'{input_path}/class_weights_for_val.npy')
+    print(y_val)
 
     # load list of input features
     with open(f'{input_path}/input_vars.txt', 'r') as f:
@@ -183,7 +145,7 @@ if __name__ == "__main__":
     training_folder = f"{input_path}/after_random_search_best1/"
     param_dict_path = f'{training_folder}/params.json'
     model_path = f'{training_folder}/mlp.pth'
-    path_to_importance_plots = f'{training_folder}/permutation_importance_plots/'
+    path_to_importance_plots = f'{training_folder}/permutation_importances_plots/'
     os.makedirs(path_to_importance_plots, exist_ok=True)
 
     # Instantiate your model wrapper
@@ -242,3 +204,44 @@ if __name__ == "__main__":
     plt.ylabel('Permutation importance')
     plt.tight_layout()
     plt.savefig(f'{path_to_importance_plots}/permutation_importance_log_loss_vertical_cleaned.png', dpi=300)
+
+
+    # for specific classes
+    class_names = ["nonRes class", "ttH class", "other single H class", "ggFHH class", "VBFHH class"]
+    class_labels = [f'{class_names[i]}' for i in range(4)]  # or use your own names
+
+#    for class_idx, class_name in enumerate(class_labels):
+#        print(f"\n>> Computing permutation importance for class {class_name}...")
+#
+#        result_class = permutation_importance(
+#            model_wrapper, X_val, y_val, n_repeats=5,
+#            scoring=lambda estimator, X, y: class_specific_log_loss(
+#                y, estimator.predict_proba(X), class_weights_for_val, class_idx),
+#            random_state=42
+#        )
+#
+#        importances_class = result_class.importances_mean
+#        std_class = result_class.importances_std
+#
+#        df_class = pd.DataFrame({
+#            'Feature': input_vars,
+#            f'{class_name}_importance': importances_class,
+#            f'{class_name}_std': std_class
+#        }).sort_values(by=f'{class_name}_importance', ascending=True)
+#
+#        # Save per-class pickle
+#        df_class.to_pickle(f'{path_to_importance_plots}/permutation_importances_{class_name}.pkl')
+#
+#        # Sort and plot class-specific importance
+#        df_class_sorted = df_class.sort_values(by=f'{class_name}_importance', ascending=False)
+#        x = np.arange(len(df_class_sorted))
+#        plt.figure(figsize=(max(20, len(df_class_sorted) * 0.35), 8))  # Dynamically scale width
+#        plt.bar(x, df_class_sorted[f'{class_name}_importance'], 
+#                yerr=df_class_sorted[f'{class_name}_std'], align='center')
+#
+#        plt.xticks(x, df_class_sorted['Feature'], rotation=45, ha='right', fontsize=10)
+#        plt.ylabel('Permutation importance')
+#        plt.title(f'Permutation importance for {class_name}')
+#        plt.tight_layout()
+#        plt.savefig(f'{path_to_importance_plots}/permutation_importance_{class_name}_vertical_cleaned.png', dpi=300)
+#        plt.clf()
