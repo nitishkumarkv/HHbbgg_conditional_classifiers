@@ -90,7 +90,7 @@ def perform_categorisation(args):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Preform MLP based classification')
+    parser = argparse.ArgumentParser(description='Perform MLP based classification')
     parser.add_argument('--config_path', type=str, help='Path to the configuration files')
     parser.add_argument('--out_path', type=str, help='Path to save the inputs')
     parser.add_argument('--prep_inputs_for_training', action='store_true', help='Prepare inputs for training')

@@ -20,6 +20,7 @@ do_random_search: False
 num_random_search: 1
 weight_scheme: weighted_abs # weighted_only_positive # weighted_CRUW_abs # weighted_CRUW_only_positive
 random_seed: 42
+cuda_device: "0"
 
 samples_info: 
     samples_path: /eos/user/n/nkasarag/HHbbgg/v3_parquet_mjj_noMetCorr # samples path
