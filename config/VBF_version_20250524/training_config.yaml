@@ -22,7 +22,7 @@ weight_scheme: weighted_abs # weighted_only_positive # weighted_CRUW_abs # weigh
 random_seed: 42
 
 samples_info: 
-    samples_path: /eos/user/n/nkasarag/HHbbgg/v3_parquet_mjj_noMetCorr # samples path
+    samples_path: /home/users/xuyan/HH2ggbb/multiclass/v3_parquet_mjj_noMetCorr # samples path
     eras:
     - preEE
     - postEE

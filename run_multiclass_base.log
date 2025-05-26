@@ -1,0 +1,100 @@
+nohup: ignoring input
+INFO: Preparing the inputs for training 
+
+INFO: Preparing the inputs for prediction 
+
+[MEM]  | Current memory usage: 172.83 MB
+INFO: Number of events in GGJets for preEE: 1620070
+INFO: saving inputs for mlp
+[MEM]  | Current memory usage: 28259.99 MB
+INFO: Number of events in DDQCDGJET for preEE: 17517
+INFO: saving inputs for mlp
+[MEM]  | Current memory usage: 24730.39 MB
+INFO: Number of events in TTGG for preEE: 45753
+INFO: saving inputs for mlp
+[MEM]  | Current memory usage: 24974.21 MB
+INFO: Number of events in ttHtoGG_M_125 for preEE: 69233
+INFO: saving inputs for mlp
+[MEM]  | Current memory usage: 21606.67 MB
+INFO: Number of events in BBHto2G_M_125 for preEE: 6257
+INFO: saving inputs for mlp
+[MEM]  | Current memory usage: 21610.30 MB
+INFO: Number of events in GluGluHToGG_M_125 for preEE: 84467
+INFO: saving inputs for mlp
+[MEM]  | Current memory usage: 21722.40 MB
+INFO: Number of events in VBFHToGG_M_125 for preEE: 38418
+INFO: saving inputs for mlp
+[MEM]  | Current memory usage: 21109.89 MB
+INFO: Number of events in VHtoGG_M_125 for preEE: 38561
+INFO: saving inputs for mlp
+[MEM]  | Current memory usage: 21174.43 MB
+INFO: Number of events in GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00 for preEE: 41103
+INFO: saving inputs for mlp
+[MEM]  | Current memory usage: 21231.70 MB
+INFO: Number of events in GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00 for preEE: 34190
+INFO: saving inputs for mlp
+[MEM]  | Current memory usage: 21225.35 MB
+INFO: Number of events in GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00 for preEE: 37949
+INFO: saving inputs for mlp
+[MEM]  | Current memory usage: 21235.93 MB
+INFO: Number of events in GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00 for preEE: 43889
+INFO: saving inputs for mlp
+[MEM]  | Current memory usage: 21268.28 MB
+INFO: Number of events in GGJets for postEE: 2761536
+INFO: saving inputs for mlp
+[MEM]  | Current memory usage: 53647.79 MB
+INFO: Number of events in DDQCDGJET for postEE: 60135
+INFO: saving inputs for mlp
+[MEM]  | Current memory usage: 21079.88 MB
+INFO: Number of events in TTGG for postEE: 155342
+INFO: saving inputs for mlp
+[MEM]  | Current memory usage: 20429.83 MB
+INFO: Number of events in ttHtoGG_M_125 for postEE: 242298
+INFO: saving inputs for mlp
+[MEM]  | Current memory usage: 21172.20 MB
+INFO: Number of events in BBHto2G_M_125 for postEE: 20516
+INFO: saving inputs for mlp
+[MEM]  | Current memory usage: 20314.20 MB
+INFO: Number of events in GluGluHToGG_M_125 for postEE: 277946
+INFO: saving inputs for mlp
+[MEM]  | Current memory usage: 20782.59 MB
+INFO: Number of events in VBFHToGG_M_125 for postEE: 210994
+INFO: saving inputs for mlp
+[MEM]  | Current memory usage: 19788.78 MB
+INFO: Number of events in VHtoGG_M_125 for postEE: 42235
+INFO: saving inputs for mlp
+[MEM]  | Current memory usage: 19774.16 MB
+INFO: Number of events in GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00 for postEE: 136765
+INFO: saving inputs for mlp
+[MEM]  | Current memory usage: 19555.04 MB
+INFO: Number of events in GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00 for postEE: 115474
+INFO: saving inputs for mlp
+[MEM]  | Current memory usage: 19316.57 MB
+INFO: Number of events in GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00 for postEE: 132323
+INFO: saving inputs for mlp
+[MEM]  | Current memory usage: 19141.59 MB
+INFO: Number of events in GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00 for postEE: 149694
+INFO: saving inputs for mlp
+[MEM]  | Current memory usage: 19131.91 MB
+Traceback (most recent call last):
+  File "/home/users/xuyan/HH2ggbb/multiclass/HHbbgg_conditional_classifiers/run_multiclass_strategy.py", line 134, in <module>
+    prepare_inputs(args)
+  File "/home/users/xuyan/HH2ggbb/multiclass/HHbbgg_conditional_classifiers/run_multiclass_strategy.py", line 37, in prepare_inputs
+    prep_inputs.prep_inputs_for_prediction_sim()
+  File "/home/users/xuyan/HH2ggbb/multiclass/HHbbgg_conditional_classifiers/data/prepare_inputs.py", line 630, in prep_inputs_for_prediction_sim
+    events = ak.from_parquet(f"{samples_path}/{parquet_path}")#, columns=vars_to_load)
+  File "/home/users/xuyan/miniconda3/envs/HHbbgg_classifier/lib/python3.10/site-packages/awkward/_dispatch.py", line 41, in dispatch
+    with OperationErrorContext(name, args, kwargs):
+  File "/home/users/xuyan/miniconda3/envs/HHbbgg_classifier/lib/python3.10/site-packages/awkward/_errors.py", line 80, in __exit__
+    raise self.decorate_exception(exception_type, exception_value)
+  File "/home/users/xuyan/miniconda3/envs/HHbbgg_classifier/lib/python3.10/site-packages/awkward/_dispatch.py", line 42, in dispatch
+    gen_or_result = func(*args, **kwargs)
+  File "/home/users/xuyan/miniconda3/envs/HHbbgg_classifier/lib/python3.10/site-packages/awkward/operations/ak_from_parquet.py", line 72, in from_parquet
+    metadata(path, storage_options, row_groups, columns, calculate_uuid=True)
+  File "/home/users/xuyan/miniconda3/envs/HHbbgg_classifier/lib/python3.10/site-packages/awkward/_dispatch.py", line 42, in dispatch
+    gen_or_result = func(*args, **kwargs)
+  File "/home/users/xuyan/miniconda3/envs/HHbbgg_classifier/lib/python3.10/site-packages/awkward/operations/ak_from_parquet.py", line 112, in metadata
+    all_paths, path_for_schema, can_sub = _all_and_metadata_paths(
+  File "/home/users/xuyan/miniconda3/envs/HHbbgg_classifier/lib/python3.10/site-packages/awkward/operations/ak_from_parquet.py", line 392, in _all_and_metadata_paths
+    raise ValueError(f"no *.parquet or *.parq matches for path {path!r}")
+ValueError: no *.parquet or *.parq matches for path '/home/users/xuyan/HH2ggbb/multiclass/v3_parquet_mjj_noMetCorr/Run3_2022postEE/TTG-1Jets_PTG-10to100.parquet'

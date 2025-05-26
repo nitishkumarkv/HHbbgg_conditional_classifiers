@@ -53,7 +53,7 @@ mlp:
     
     # variables added at preparation level which are not available in HiggsDNA output
     - Res_diphoton_PtOverM_ggjj
-    - Res_dijet_PtOverM_ggjj
+    - Res_dijet_PtPNetCorrOverM_ggjj
     # - Res_lead_bjet_pt_over_M_regressed
     # - Res_sublead_bjet_pt_over_M_regressed
     - deltaR_gg
