@@ -93,93 +93,93 @@ class PrepareInputs:
 
         # add jet related mass
             
-        # Build awkward array of jets
-        jets = ak.zip({
-            "pt": ak.concatenate([events[f"jet{i}_pt"][:, None] for i in range(1, 7)], axis=1),
-            "eta": ak.concatenate([events[f"jet{i}_eta"][:, None] for i in range(1, 7)], axis=1),
-            "phi": ak.concatenate([events[f"jet{i}_phi"][:, None] for i in range(1, 7)], axis=1),
-            "mass": ak.concatenate([events[f"jet{i}_mass"][:, None] for i in range(1, 7)], axis=1),
-            "index": ak.concatenate([events[f"jet{i}_index"][:, None] for i in range(1, 7)], axis=1),
-        }, with_name="Momentum4D")
+#        # Build awkward array of jets
+#        jets = ak.zip({
+#            "pt": ak.concatenate([events[f"jet{i}_pt"][:, None] for i in range(1, 7)], axis=1),
+#            "eta": ak.concatenate([events[f"jet{i}_eta"][:, None] for i in range(1, 7)], axis=1),
+#            "phi": ak.concatenate([events[f"jet{i}_phi"][:, None] for i in range(1, 7)], axis=1),
+#            "mass": ak.concatenate([events[f"jet{i}_mass"][:, None] for i in range(1, 7)], axis=1),
+#            "index": ak.concatenate([events[f"jet{i}_index"][:, None] for i in range(1, 7)], axis=1),
+#        }, with_name="Momentum4D")
+#        
+#        # Mask out jets that are b-jets
+#        is_not_bjet = (jets.index != events.Res_lead_bjet_jet_idx[:, None]) & \
+#                      (jets.index != events.Res_sublead_bjet_jet_idx[:, None])
+#        jets_clean = jets[is_not_bjet]
+#
+#        # Select up to 4 jets
+#        selected_jets = jets_clean[:, :4]
+#        
+#        # ΔR to objects
+#        def min_deltaR_to(obj_eta, obj_phi):
+#            min = ak.min(self.deltaR(selected_jets.eta, selected_jets.phi, obj_eta[:, None], obj_phi[:, None], fill_none=False), axis=1)
+#            return ak.fill_none(min, -999.0)
+#
+#        events["min_deltaR_jet_b1"] = min_deltaR_to(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi)
+#        events["min_deltaR_jet_b2"] = min_deltaR_to(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi)
+#        events["min_deltaR_jet_g1"] = min_deltaR_to(events.lead_eta, events.lead_phi)
+#        events["min_deltaR_jet_g2"] = min_deltaR_to(events.sublead_eta, events.sublead_phi)
+#
+#        # deltaR betwreen the jets anf photons, bjets
+#        events["deltaR_g1_j1"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
+#        events["deltaR_g1_j2"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
+#        events["deltaR_g1_j3"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
+#        events["deltaR_g1_j4"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
+#        events["deltaR_g2_j1"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
+#        events["deltaR_g2_j2"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
+#        events["deltaR_g2_j3"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
+#        events["deltaR_g2_j4"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
+#        events["deltaR_b1_j1"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
+#        events["deltaR_b1_j2"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
+#        events["deltaR_b1_j3"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
+#        events["deltaR_b1_j4"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
+#        events["deltaR_b2_j1"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
+#        events["deltaR_b2_j2"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
+#        events["deltaR_b2_j3"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
+#        events["deltaR_b2_j4"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
+#
+#        # add jet pt, eta, phi
+#        events["j1_pt"] = selected_jets.pt[:, 0]
+#        events["j2_pt"] = selected_jets.pt[:, 1]
+#        events["j3_pt"] = selected_jets.pt[:, 2]
+#        events["j4_pt"] = selected_jets.pt[:, 3]
+#        events["j1_eta"] = selected_jets.eta[:, 0]
+#        events["j2_eta"] = selected_jets.eta[:, 1]
+#        events["j3_eta"] = selected_jets.eta[:, 2]
+#        events["j4_eta"] = selected_jets.eta[:, 3]
+#        events["j1_phi"] = selected_jets.phi[:, 0]
+#        events["j2_phi"] = selected_jets.phi[:, 1]
+#        events["j3_phi"] = selected_jets.phi[:, 2]
+#        events["j4_phi"] = selected_jets.phi[:, 3]
         
-        # Mask out jets that are b-jets
-        is_not_bjet = (jets.index != events.Res_lead_bjet_jet_idx[:, None]) & \
-                      (jets.index != events.Res_sublead_bjet_jet_idx[:, None])
-        jets_clean = jets[is_not_bjet]
-
-        # Select up to 4 jets
-        selected_jets = jets_clean[:, :4]
-        
-        # ΔR to objects
-        def min_deltaR_to(obj_eta, obj_phi):
-            min = ak.min(self.deltaR(selected_jets.eta, selected_jets.phi, obj_eta[:, None], obj_phi[:, None], fill_none=False), axis=1)
-            return ak.fill_none(min, -999.0)
-
-        events["min_deltaR_jet_b1"] = min_deltaR_to(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi)
-        events["min_deltaR_jet_b2"] = min_deltaR_to(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi)
-        events["min_deltaR_jet_g1"] = min_deltaR_to(events.lead_eta, events.lead_phi)
-        events["min_deltaR_jet_g2"] = min_deltaR_to(events.sublead_eta, events.sublead_phi)
-
-        # deltaR betwreen the jets anf photons, bjets
-        events["deltaR_g1_j1"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
-        events["deltaR_g1_j2"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
-        events["deltaR_g1_j3"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
-        events["deltaR_g1_j4"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
-        events["deltaR_g2_j1"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
-        events["deltaR_g2_j2"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
-        events["deltaR_g2_j3"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
-        events["deltaR_g2_j4"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
-        events["deltaR_b1_j1"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
-        events["deltaR_b1_j2"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
-        events["deltaR_b1_j3"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
-        events["deltaR_b1_j4"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
-        events["deltaR_b2_j1"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
-        events["deltaR_b2_j2"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
-        events["deltaR_b2_j3"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
-        events["deltaR_b2_j4"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
-
-        # add jet pt, eta, phi
-        events["j1_pt"] = selected_jets.pt[:, 0]
-        events["j2_pt"] = selected_jets.pt[:, 1]
-        events["j3_pt"] = selected_jets.pt[:, 2]
-        events["j4_pt"] = selected_jets.pt[:, 3]
-        events["j1_eta"] = selected_jets.eta[:, 0]
-        events["j2_eta"] = selected_jets.eta[:, 1]
-        events["j3_eta"] = selected_jets.eta[:, 2]
-        events["j4_eta"] = selected_jets.eta[:, 3]
-        events["j1_phi"] = selected_jets.phi[:, 0]
-        events["j2_phi"] = selected_jets.phi[:, 1]
-        events["j3_phi"] = selected_jets.phi[:, 2]
-        events["j4_phi"] = selected_jets.phi[:, 3]
-        
 
 
-        # Build Lorentz vectors from selected_jets
-        jets_vec = selected_jets
-
-        # Pair indices for 4 jets
-        pair_indices = [(0, 1), (0, 2), (0, 3),
-                        (1, 2), (1, 3),
-                        (2, 3)]
-
-        pair_names = ["j1_j2", "j1_j3", "j1_j4", "j2_j3", "j2_j4", "j3_j4"]
-
-        for (i, j), name in zip(pair_indices, pair_names):
-            # Mask if either jet is invalid (pt == -999)
-            valid = (selected_jets.pt[:, i] != -999) & (selected_jets.pt[:, j] != -999)
-
-            # Sum vectors and get invariant mass
-            m_pair = (jets_vec[:, i] + jets_vec[:, j]).mass
-
-            # Set to -999 if invalid
-            events[f"mass_{name}"] = ak.where(valid, m_pair, -999.0)
-
-            # Compute ΔR for the pair using your self.deltaR
-            delta_r = self.deltaR(
-                selected_jets.eta[:, i], selected_jets.phi[:, i],
-                selected_jets.eta[:, j], selected_jets.phi[:, j]
-            )
-            events[f"deltaR_{name}"] = ak.where(valid, delta_r, -999.0)
+#        # Build Lorentz vectors from selected_jets
+#        jets_vec = selected_jets
+#
+#        # Pair indices for 4 jets
+#        pair_indices = [(0, 1), (0, 2), (0, 3),
+#                        (1, 2), (1, 3),
+#                        (2, 3)]
+#
+#        pair_names = ["j1_j2", "j1_j3", "j1_j4", "j2_j3", "j2_j4", "j3_j4"]
+#
+#        for (i, j), name in zip(pair_indices, pair_names):
+#            # Mask if either jet is invalid (pt == -999)
+#            valid = (selected_jets.pt[:, i] != -999) & (selected_jets.pt[:, j] != -999)
+#
+#            # Sum vectors and get invariant mass
+#            m_pair = (jets_vec[:, i] + jets_vec[:, j]).mass
+#
+#            # Set to -999 if invalid
+#            events[f"mass_{name}"] = ak.where(valid, m_pair, -999.0)
+#
+#            # Compute ΔR for the pair using your self.deltaR
+#            delta_r = self.deltaR(
+#                selected_jets.eta[:, i], selected_jets.phi[:, i],
+#                selected_jets.eta[:, j], selected_jets.phi[:, j]
+#            )
+#            events[f"deltaR_{name}"] = ak.where(valid, delta_r, -999.0)
 
         return events
 
@@ -339,9 +339,6 @@ class PrepareInputs:
         lead_mvaID_bool = (events.lead_mvaID > -0.7)
         sublead_mvaID_bool = (events.sublead_mvaID > -0.7)
 
-        #if( samples_type is not None) and "TTG_" in samples_type:
-        #    to_prompt_photon = ((events.lead_genPartFlav==1) & (events.sublead_genPartFlav==1))
-        #else:
         events = events[mass_bool & dijet_mass_bool & lead_mvaID_bool & sublead_mvaID_bool]
 
         return events
@@ -393,8 +390,8 @@ class PrepareInputs:
             data_to_plot_dict = {}
             range_list = []
             for sample in self.sample_to_class.keys():
-                if sample in ["DDQCDGJET", ]:
-                    continue
+                #if sample in ["DDQCDGJET", ]:
+                #    continue
 
                 sample_events = comb_inputs[comb_inputs["sample_type"] == sample]
                 data_to_plot = sample_events[var]
@@ -409,8 +406,8 @@ class PrepareInputs:
                     range_list[1] = max(range_list[1], max(data_to_plot))
 
             for sample in self.sample_to_class.keys():
-                if sample in ["DDQCDGJET", ]:
-                    continue
+                #if sample in ["DDQCDGJET", ]:
+                #    continue
                 data_to_plot = data_to_plot_dict[sample]
                 
                 # use mplhep to plot the histogram
@@ -683,7 +680,7 @@ class PrepareInputs:
 
         for data in datas:
 
-            events = ak.from_parquet(f"{samples_path}/{datas[data]}", columns=vars_to_load)
+            events = ak.from_parquet(f"{samples_path}/{datas[data]}")
 
             sample_to_era = {"2022_EraE": "postEE", 
                                  "2022_EraF": "postEE", 
