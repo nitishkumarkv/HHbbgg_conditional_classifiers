@@ -1721,6 +1721,8 @@ if __name__ == "__main__":
         variables = ["mass", "dijet_mass", "nonRes_dijet_mass", "nonRes_mjj_regressed", "Res_mjj_regressed", "Res_dijet_mass"]
         
         plot_stacked_histogram(sim_folder, data_folder, samples_list, variables, out_path, signal_scale=100)
+
+    collect_event_yields(f"{args.base_path}/{opt_cat_folder_name}", folder_list[:-1])
     
     for folder in folder_list:
         opt_cat_folder_name = f"{optuna_folder}"
@@ -1731,7 +1733,7 @@ if __name__ == "__main__":
         data_folder = f"{args.base_path}/{opt_cat_folder_name}/{folder}"
         out_path = f"{args.base_path}/{opt_cat_folder_name}/{folder}"
         variables = ["mass", "dijet_mass", "nonRes_dijet_mass", "nonRes_mjj_regressed", "Res_mjj_regressed", "Res_dijet_mass"]
-        #convert_to_root(out_path)
+        convert_to_root(out_path)
 
-    collect_event_yields(f"{args.base_path}/{opt_cat_folder_name}", folder_list[:-1])
+    
     #collect_event_yields(f"{args.base_path}/{opt_cat_folder_name}", folder_list[:-1], mass_range=(120, 130))
