@@ -20,12 +20,12 @@ def prepare_inputs(args):
 
     prep_inputs_train = PrepareInputs(input_var_json=input_vars_path,
                                 training_info = training_config,
-                                outpath=out_path, isCRUW = False)
+                                outpath=out_path, isCRUW = True)
     
     # prepare the inputs for training
     if args.prep_inputs_for_training:
         print('INFO: Preparing the inputs for training', '\n')
-        # prep_inputs_train.prep_inputs_for_training()
+        prep_inputs_train.prep_inputs_for_training()
         
     prep_inputs = PrepareInputs(input_var_json=input_vars_path,
                                 training_info = training_config,

@@ -1,0 +1,96 @@
+sample_to_class: # processes and classes
+    GGJets: is_non_resonant_bkg
+    DDQCDGJET: is_non_resonant_bkg
+    TTGG: is_non_resonant_bkg
+    ttHtoGG_M_125: is_ttH_bkg
+    BBHto2G_M_125: is_single_H_bkg
+    GluGluHToGG_M_125: is_single_H_bkg
+    VBFHToGG_M_125: is_single_H_bkg
+    VHtoGG_M_125: is_single_H_bkg
+    GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00: is_GluGluToHH_sig
+
+classes: # all classes
+- is_non_resonant_bkg
+- is_ttH_bkg
+- is_single_H_bkg
+- is_GluGluToHH_sig
+
+# some info for training
+do_random_search: False
+num_random_search: 1
+weight_scheme: weighted_abs # weighted_only_positive # weighted_CRUW_abs # weighted_CRUW_only_positive
+random_seed: 42
+
+samples_info: 
+    samples_path: /home/users/xuyan/HH2ggbb/multiclass/v3_parquet_mjj_noMetCorr # samples path
+    eras:
+    - preEE
+    - postEE
+    - preBPix
+    - postBPix
+    preEE: # give relative path to
+        GGJets: "Run3_2022preEE/GGJets_Rescaled.parquet"
+        DDQCDGJET: "Run3_2022preEE/DDQCDGJET_Rescaled.parquet"
+        TTGG: "Run3_2022preEE/TTGG.parquet"
+        ttHtoGG_M_125: "Run3_2022preEE/ttHtoGG.parquet"
+        BBHto2G_M_125: "Run3_2022preEE/bbHToGG.parquet"
+        GluGluHToGG_M_125: "Run3_2022preEE/GluGluHtoGG.parquet"
+        VBFHToGG_M_125: "Run3_2022preEE/VBFHtoGG.parquet"
+        VHtoGG_M_125: "Run3_2022preEE/VHtoGG.parquet"
+        GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00: "Run3_2022preEE/GluGlutoHHto2B2G_kl-1p00_kt-1p00_c2-0p00.parquet"
+        GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00: "Run3_2022preEE/GluGlutoHHto2B2G_kl-5p00_kt-1p00_c2-0p00.parquet"
+        GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00: "Run3_2022preEE/GluGlutoHHto2B2G_kl-0p00_kt-1p00_c2-0p00.parquet"
+        GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00: "Run3_2022preEE/GluGlutoHHto2B2G_kl-2p45_kt-1p00_c2-0p00.parquet"
+    postEE:
+        GGJets: "Run3_2022postEE/GGJets_Rescaled.parquet"
+        DDQCDGJET: "Run3_2022postEE/DDQCDGJET_Rescaled.parquet"
+        TTGG: "Run3_2022postEE/TTGG.parquet"
+        ttHtoGG_M_125: "Run3_2022postEE/ttHtoGG.parquet"
+        BBHto2G_M_125: "Run3_2022postEE/bbHToGG.parquet"
+        GluGluHToGG_M_125: "Run3_2022postEE/GluGluHtoGG.parquet"
+        VBFHToGG_M_125: "Run3_2022postEE/VBFHtoGG.parquet"
+        VHtoGG_M_125: "Run3_2022postEE/VHtoGG.parquet"
+        GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00: "Run3_2022postEE/GluGlutoHHto2B2G_kl-1p00_kt-1p00_c2-0p00.parquet"
+        GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00: "Run3_2022postEE/GluGlutoHHto2B2G_kl-5p00_kt-1p00_c2-0p00.parquet"
+        GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00: "Run3_2022postEE/GluGlutoHHto2B2G_kl-0p00_kt-1p00_c2-0p00.parquet"
+        GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00: "Run3_2022postEE/GluGlutoHHto2B2G_kl-2p45_kt-1p00_c2-0p00.parquet"
+        TTG_10_100: "Run3_2022postEE/TTG-1Jets_PTG-10to100.parquet"
+        TTG_100_200: "Run3_2022postEE/TTG-1Jets_PTG-100to200.parquet"
+        TTG_200: "Run3_2022postEE/TTG-1Jets_PTG-200.parquet"
+        TT: "Run3_2022preEE/TT.parquet"
+    preBPix:
+        GGJets: "Run3_2023preBPix/GGJets_Rescaled.parquet"
+        DDQCDGJET: "Run3_2023preBPix/DDQCDGJET_Rescaled.parquet"
+        TTGG: "Run3_2023preBPix/TTGG.parquet"
+        ttHtoGG_M_125: "Run3_2023preBPix/ttHtoGG.parquet"
+        BBHto2G_M_125: "Run3_2023preBPix/bbHToGG.parquet"
+        GluGluHToGG_M_125: "Run3_2023preBPix/GluGluHtoGG.parquet"
+        VBFHToGG_M_125: "Run3_2023preBPix/VBFHtoGG.parquet"
+        VHtoGG_M_125: "Run3_2023preBPix/VHtoGG.parquet"
+        GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00: "Run3_2023preBPix/GluGlutoHHto2B2G_kl-1p00_kt-1p00_c2-0p00.parquet"
+        GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00: "Run3_2023preBPix/GluGlutoHHto2B2G_kl-5p00_kt-1p00_c2-0p00.parquet"
+        GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00: "Run3_2023preBPix/GluGlutoHHto2B2G_kl-0p00_kt-1p00_c2-0p00.parquet"
+        GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00: "Run3_2023preBPix/GluGlutoHHto2B2G_kl-2p45_kt-1p00_c2-0p00.parquet"
+    postBPix:
+        GGJets: "Run3_2023postBPix/GGJets_Rescaled.parquet"
+        DDQCDGJET: "Run3_2023postBPix/DDQCDGJET_Rescaled.parquet"
+        TTGG: "Run3_2023postBPix/TTGG.parquet"
+        ttHtoGG_M_125: "Run3_2023postBPix/ttHtoGG.parquet"
+        BBHto2G_M_125: "Run3_2023postBPix/bbHToGG.parquet"
+        GluGluHToGG_M_125: "Run3_2023postBPix/GluGluHtoGG.parquet"
+        VBFHToGG_M_125: "Run3_2023postBPix/VBFHtoGG.parquet"
+        VHtoGG_M_125: "Run3_2023postBPix/VHtoGG.parquet"
+        GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00: "Run3_2023postBPix/GluGlutoHHto2B2G_kl-1p00_kt-1p00_c2-0p00.parquet"
+        GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00: "Run3_2023postBPix/GluGlutoHHto2B2G_kl-5p00_kt-1p00_c2-0p00.parquet"
+        GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00: "Run3_2023postBPix/GluGlutoHHto2B2G_kl-0p00_kt-1p00_c2-0p00.parquet"
+        GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00: "Run3_2023postBPix/GluGlutoHHto2B2G_kl-2p45_kt-1p00_c2-0p00.parquet"
+    data:
+        2022_EraE: "Run3_2022postEE/Data_2022EraE.parquet"
+        2022_EraF: "Run3_2022postEE/Data_2022EraF.parquet"
+        2022_EraG: "Run3_2022postEE/Data_2022EraG.parquet"
+        2022_EraC: "Run3_2022preEE/Data_2022EraC.parquet"
+        2022_EraD: "Run3_2022preEE/Data_2022EraD.parquet"
+        2023_EraCv1to3: "Run3_2023preBPix/Data_2023EraCv1to3.parquet"
+        2023_EraCv4: "Run3_2023preBPix/Data_2023EraCv4.parquet"
+        2023_EraD: "Run3_2023postBPix/Data_2023EraD.parquet"
+

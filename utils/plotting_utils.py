@@ -481,30 +481,15 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
 
     def add_var(events):
         
-        events["nonRes_lead_bjet_pt_over_M_regressed"] = events.nonRes_lead_bjet_pt / events.nonRes_mjj_regressed
-        events["nonRes_sublead_bjet_ptover_M_regressed"] = events.nonRes_sublead_bjet_pt / events.nonRes_mjj_regressed
-
-        #events["nonRes_lead_bjet_ptPNetCorr_over_M_regressed"] = events.nonRes_lead_bjet_ptPNetCorr / events.nonRes_mjj_regressed
-        #events["nonRes_sublead_bjet_ptPNetCorr_over_M_regressed"] = events.nonRes_sublead_bjet_ptPNetCorr / events.nonRes_mjj_regressed
-
-        events["nonRes_diphoton_PtOverM_ggjj"] = events.pt / events.nonRes_HHbbggCandidate_mass
-        events["nonRes_dijet_PtOverM_ggjj"] = events.nonRes_dijet_pt / events.nonRes_HHbbggCandidate_mass
-        #events["nonRes_dijet_PtPNetCorrOverM_ggjj"] = events.nonRes_dijet_ptPNetCorr / events.nonRes_HHbbggCandidate_mass
-        
-
-        events["Res_lead_bjet_pt_over_M_regressed"] = events.Res_lead_bjet_pt / events.Res_mjj_regressed
-        events["Res_sublead_bjet_pt_over_M_regressed"] = events.Res_sublead_bjet_pt / events.Res_mjj_regressed
-
-        #events["Res_lead_bjet_ptPNetCorr_over_M_regressed"] = events.Res_lead_bjet_ptPNetCorr / events.Res_mjj_regressed
-        #events["Res_sublead_bjet_ptPNetCorr_over_M_regressed"] = events.Res_sublead_bjet_ptPNetCorr / events.Res_mjj_regressed
-
+        events["Res_dijet_PtPNetCorrOverM_ggjj"] = events.Res_dijet_ptPNetCorr / events.Res_HHbbggCandidate_mass
+        events["Res_lead_bjet_ptPNetCorr_over_M_regressed"] = events.Res_lead_bjet_ptPNetCorr / events.Res_mjj_regressed
+        events["Res_sublead_bjet_ptPNetCorr_over_M_regressed"] = events.Res_sublead_bjet_ptPNetCorr / events.Res_mjj_regressed
         events["Res_diphoton_PtOverM_ggjj"] = events.pt / events.Res_HHbbggCandidate_mass
-        events["Res_dijet_PtOverM_ggjj"] = events.Res_dijet_pt / events.Res_HHbbggCandidate_mass
 
         # add deltaR between lead and sublead photon
         #events["deltaR_gg"] = np.sqrt((events.lead_eta - events.sublead_eta) ** 2 + (events.lead_phi - events.sublead_phi) ** 2)
         events["deltaR_gg"] = deltaR(events.lead_eta, events.lead_phi, events.sublead_eta, events.sublead_phi)
-        # add deltaR between lead and sublead bje
+        # add deltaR between lead and sublead bjet
 
         return events
 
@@ -567,6 +552,8 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
     for sample in sim_samples:
         sample_combined = []
         for era in eras:
+            if ((("TTG_" in sample) or (sample == "TT")) and era != "postEE"):
+                continue
             if os.path.exists(f"{sim_folder}/{era}/{sample}/events.parquet"):
                 events_ = ak.from_parquet(f"{sim_folder}/{era}/{sample}/events.parquet", columns=variables+["lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_genPartFlav", "sublead_genPartFlav"])
             else:
@@ -673,6 +660,8 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
 
         for i, (sample, data) in enumerate(stack_mc_dict.items()):
             hist, _ = np.histogram(ak.to_numpy((data[variable])), bins=bin_edges, weights=ak.to_numpy((data["weight_tot"])))
+            if (("TTG_" in sample) or sample=="TT"):
+                hist = hist * (7.98 + 26.67 + 17.794 + 9.451) / 26.67
             print(variable, "sample: ", sample, "hist sum : ", sum(hist))
             mc_hist.append(hist)
             mc_labels.append(sample)
@@ -851,11 +840,11 @@ if __name__ == "__main__":
 
     # sim_samples = ["GGJets", "DDQCDGJET", "TTGG", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "VBFHToGG_M_125", "VHtoGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "VBFHHto2B2G_CV_1_C2V_1_C3_1"]
     # sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "VBFHHto2B2G_CV_1_C2V_1_C3_1", "TTGG", "GGJets", "DDQCDGJET"]
-    sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET"]
-    #sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET", "TTG_10_100", "TTG_100_200", "TTG_200", "TT"]
+    #sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET"]
+    sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET", "TTG_10_100", "TTG_100_200", "TTG_200", "TT"]
     variables_ = ["Res_mjj_regressed", "Res_dijet_mass", "nonRes_mjj_regressed", "mass", "nonRes_dijet_mass", "minMVAID", "maxMVAID", "n_jets", "sublead_eta", "lead_eta", "sublead_pt", "lead_pt", "pt", "eta", "lead_mvaID", "sublead_mvaID"]
     extra_vars = ["mass", "nonRes_dijet_mass", "Res_dijet_mass", "weight", "pt", "nonRes_dijet_pt", "Res_dijet_pt", "Res_lead_bjet_pt", "Res_sublead_bjet_pt", "Res_lead_bjet_ptPNetCorr", "Res_sublead_bjet_ptPNetCorr", "nonRes_HHbbggCandidate_mass", "Res_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "Res_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "jet1_mass", "jet2_mass", "jet3_mass", "jet4_mass", "jet5_mass", "jet6_mass", "Res_lead_bjet_jet_idx", "Res_sublead_bjet_jet_idx", "jet1_index", "jet2_index", "jet3_index", "jet4_index", "jet5_index", "jet6_index",
-                           "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet1_eta", "jet2_eta", "jet3_eta", "jet4_eta", "jet5_eta", "jet6_eta", "jet1_phi", "jet2_phi", "jet3_phi", "jet4_phi", "jet5_phi", "jet6_phi"]
+                           "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet1_eta", "jet2_eta", "jet3_eta", "jet4_eta", "jet5_eta", "jet6_eta", "jet1_phi", "jet2_phi", "jet3_phi", "jet4_phi", "jet5_phi", "jet6_phi","Res_dijet_ptPNetCorr","lead_phi","sublead_phi"]
     
 
     input_vars_path = args.training_config_path.replace("training_config.yaml", "input_variables.yaml")
