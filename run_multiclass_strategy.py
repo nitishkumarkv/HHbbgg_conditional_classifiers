@@ -18,14 +18,18 @@ def prepare_inputs(args):
     with open(f"{config_path}/training_config.yaml", 'r') as f:
         training_config = yaml.safe_load(f)
 
-    prep_inputs = PrepareInputs(input_var_json=input_vars_path,
+    prep_inputs_train = PrepareInputs(input_var_json=input_vars_path,
                                 training_info = training_config,
-                                outpath=out_path,)
+                                outpath=out_path, isCRUW = True)
     
     # prepare the inputs for training
     if args.prep_inputs_for_training:
         print('INFO: Preparing the inputs for training', '\n')
-        prep_inputs.prep_inputs_for_training()
+        prep_inputs_train.prep_inputs_for_training()
+        
+    prep_inputs = PrepareInputs(input_var_json=input_vars_path,
+                                training_info = training_config,
+                                outpath=out_path, isCRUW = False)
 
     # prepare the inputs for prediction
     if args.prepare_inputs_pred_sim:
@@ -109,7 +113,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.do_all:
-        args.prepare_inputs = True
+        args.prepare_inputs = False
         args.perform_training = True
         args.perform_categorisation = True
 
@@ -119,9 +123,9 @@ if __name__ == "__main__":
         args.prepare_inputs_pred_data = True
 
     if args.perform_training:
-        args.train_best_model = True
+        args.train_best_model = False
         args.plot_training_results = True
-        args.get_permutation_importance = True
+        args.get_permutation_importance = False
         args.get_predictions = True
         args.test_mass_sculpting = True
         args.get_data_mc_plots = True

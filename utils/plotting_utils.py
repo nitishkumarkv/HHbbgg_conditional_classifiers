@@ -196,13 +196,13 @@ hep.style.use("CMS")
         "VBFToHH_sig_score": {"label": "VBFToHH_sig_score", "bins": 30, "range": (0, 1), "log": True},
         "minMVAID": {"label": "minMVAID", "bins": 30, "range": (-0.7, 1), "log": True},
         "maxMVAID": {"label": "maxMVAID", "bins": 30, "range": (-0.7, 1), "log": True},
-        "n_jets": {"label": "n_jets", "bins": 10, "range": (0, 10), "log": False},
-        "sublead_eta": {"label": "sublead_eta", "bins": 30, "range": (-3.2, 3.2), "log": False},
-        "lead_eta": {"label": "lead_eta", "bins": 30, "range": (-3.2, 3.2), "log": False},
+        "n_jets": {"label": "n_jets", "bins": 10, "range": (0, 10), "log": True},
+        "sublead_eta": {"label": "sublead_eta", "bins": 30, "range": (-3.2, 3.2), "log": True},
+        "lead_eta": {"label": "lead_eta", "bins": 30, "range": (-3.2, 3.2), "log": True},
         "sublead_pt": {"label": "sublead_pt [GeV]", "bins": 30, "range": (0, 200), "log": True},
         "lead_pt": {"label": "lead_pt [GeV]", "bins": 30, "range": (0, 200), "log": True},
         "pt": {"label": "Diphoton pt [GeV]", "bins": 30, "range": (0, 400), "log": True},
-        "eta": {"label": "Diphoton eta", "bins": 30, "range": (-3.2, 3.2), "log": False},
+        "eta": {"label": "Diphoton eta", "bins": 30, "range": (-3.2, 3.2), "log": True},
         "lead_mvaID": {"label": "lead_mvaID", "bins": 30, "range": (-0.7, 1), "log": True},
         "sublead_mvaID": {"label": "sublead_mvaID", "bins": 30, "range": (-0.7, 1), "log": True},
     }
@@ -509,7 +509,7 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
         return events
 
     def add_preselection(events):
-        mass_bool = ((events.mass > 100) & (events.mass < 180))
+        mass_bool = ((events.mass > 115) & (events.mass < 135))
         #dijet_mass_bool = ((events.Res_mjj_regressed > 80) & (events.Res_mjj_regressed < 180))
         dijet_mass_bool = ((events.Res_mjj_regressed > 70) & (events.Res_mjj_regressed < 190))
         
@@ -617,6 +617,7 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
         "nonRes_mjj_regressed": {"label": r"$m_{jj}^{reg}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
         "Res_mjj_regressed": {"label": r"Resonant $m_{jj}^{reg}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
         "Res_dijet_mass": {"label": r" Resonant $m_{jj}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
+        "Res_pholead_PtOverM": {"label": r" Res_pholead_PtOverM", "bins": 50, "range": (0, 5), "log": True},
         "non_resonant_bkg_score": {"label": "non_resonant_bkg_score", "bins": 30, "range": (0, 1), "log": True},
         "ttH_score": {"label": "ttH_score", "bins": 30, "range": (0, 1), "log": True},
         "other_single_H_score": {"label": "other_single_H_score", "bins": 30, "range": (0, 1), "log": True},
@@ -624,13 +625,13 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
         "VBFToHH_sig_score": {"label": "VBFToHH_sig_score", "bins": 30, "range": (0, 1), "log": True},
         "minMVAID": {"label": "minMVAID", "bins": 30, "range": (-0.7, 1), "log": True},
         "maxMVAID": {"label": "maxMVAID", "bins": 30, "range": (-0.7, 1), "log": True},
-        "n_jets": {"label": "n_jets", "bins": 10, "range": (0, 10), "log": False},
-        "sublead_eta": {"label": "sublead_eta", "bins": 30, "range": (-3.2, 3.2), "log": False},
-        "lead_eta": {"label": "lead_eta", "bins": 30, "range": (-3.2, 3.2), "log": False},
+        "n_jets": {"label": "n_jets", "bins": 10, "range": (0, 10), "log": True},
+        "sublead_eta": {"label": "sublead_eta", "bins": 30, "range": (-3.2, 3.2), "log": True},
+        "lead_eta": {"label": "lead_eta", "bins": 30, "range": (-3.2, 3.2), "log": True},
         "sublead_pt": {"label": "sublead_pt [GeV]", "bins": 30, "range": (0, 200), "log": True},
         "lead_pt": {"label": "lead_pt [GeV]", "bins": 30, "range": (0, 200), "log": True},
         "pt": {"label": "Diphoton pt [GeV]", "bins": 30, "range": (0, 400), "log": True},
-        "eta": {"label": "Diphoton eta", "bins": 30, "range": (-3.2, 3.2), "log": False},
+        "eta": {"label": "Diphoton eta", "bins": 30, "range": (-3.2, 3.2), "log": True},
         "lead_mvaID": {"label": "lead_mvaID", "bins": 30, "range": (-0.7, 1), "log": True},
         "sublead_mvaID": {"label": "sublead_mvaID", "bins": 30, "range": (-0.7, 1), "log": True},
     }
@@ -658,7 +659,7 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
             #if "pt" in variable:
                 var_config[variable] = {"label": variable, "bins": 30, "range": (min_, max_), "log": True}
             else:
-                var_config[variable] = {"label": variable, "bins": 30, "range": (min_, max_), "log": False}
+                var_config[variable] = {"label": variable, "bins": 30, "range": (min_, max_), "log": True}
 
         # Histogram binning
         bin_edges = np.linspace(*var_config[variable]["range"], var_config[variable]["bins"] + 1)
@@ -851,8 +852,8 @@ if __name__ == "__main__":
 
     # sim_samples = ["GGJets", "DDQCDGJET", "TTGG", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "VBFHToGG_M_125", "VHtoGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "VBFHHto2B2G_CV_1_C2V_1_C3_1"]
     # sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "VBFHHto2B2G_CV_1_C2V_1_C3_1", "TTGG", "GGJets", "DDQCDGJET"]
-    sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET"]
-    #sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET", "TTG_10_100", "TTG_100_200", "TTG_200", "TT"]
+    # sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET"]
+    sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET", "TTG_10_100", "TTG_100_200", "TTG_200", "TT"]
     variables_ = ["Res_mjj_regressed", "Res_dijet_mass", "nonRes_mjj_regressed", "mass", "nonRes_dijet_mass", "minMVAID", "maxMVAID", "n_jets", "sublead_eta", "lead_eta", "sublead_pt", "lead_pt", "pt", "eta", "lead_mvaID", "sublead_mvaID"]
     extra_vars = ["mass", "nonRes_dijet_mass", "Res_dijet_mass", "weight", "pt", "nonRes_dijet_pt", "Res_dijet_pt", "Res_lead_bjet_pt", "Res_sublead_bjet_pt", "Res_lead_bjet_ptPNetCorr", "Res_sublead_bjet_ptPNetCorr", "nonRes_HHbbggCandidate_mass", "Res_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "Res_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "jet1_mass", "jet2_mass", "jet3_mass", "jet4_mass", "jet5_mass", "jet6_mass", "Res_lead_bjet_jet_idx", "Res_sublead_bjet_jet_idx", "jet1_index", "jet2_index", "jet3_index", "jet4_index", "jet5_index", "jet6_index",
                            "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet1_eta", "jet2_eta", "jet3_eta", "jet4_eta", "jet5_eta", "jet6_eta", "jet1_phi", "jet2_phi", "jet3_phi", "jet4_phi", "jet5_phi", "jet6_phi"]
@@ -868,5 +869,6 @@ if __name__ == "__main__":
 
 
     out_path = f"{base_path}/"
+    print(variables)
     plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, signal_scale=1000)
     plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, signal_scale=1000, only_MC=True)

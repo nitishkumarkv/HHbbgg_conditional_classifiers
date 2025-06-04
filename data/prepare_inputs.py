@@ -21,12 +21,14 @@ class PrepareInputs:
         training_info: Optional[Dict[str, Any]] = None,
         outpath: Optional[Dict[str, Any]] = None,
         predict_parquet_info: Optional[Dict[str, Any]] = None,
+        isCRUW: bool = False                    
         ) -> None:
         self.model_type = "mlp"
         self.input_var_json = input_var_json
         self.training_info = training_info
         self.outpath = outpath
         self.predict_parquet_info = predict_parquet_info
+        self.isCRUW = isCRUW                    
         
         if self.training_info is not None:
             self.sample_to_class = self.training_info["sample_to_class"]
@@ -283,7 +285,7 @@ class PrepareInputs:
 
     def corr_with_mgg_mjj(self, events, vars_for_training, out_path):
 
-        corr_matrix = np.zeros([len(vars_for_training), 5])
+        corr_matrix = np.zeros([len(vars_for_training), 2])
         for i in range(len(vars_for_training)):
             var = vars_for_training[i]
             # calculate correlation with mgg and mjj, do not include -999 values
@@ -292,36 +294,21 @@ class PrepareInputs:
             var_values = events[var][mask]
             corr_matrix[i, 0] = np.corrcoef(mass, var_values)[0, 1]
 
-            mask = ((events[var] > -998.0) & (events.nonRes_dijet_mass > -998.0))
-            nonRes_dijet_mass = events.nonRes_dijet_mass[mask]
-            var_values = events[var][mask]
-            corr_matrix[i, 1] = np.corrcoef(nonRes_dijet_mass, var_values)[0, 1]
-
-            mask = ((events[var] > -998.0) & (events.nonRes_mjj_regressed > -998.0))
-            nonRes_mjj_regressed = events.nonRes_mjj_regressed[mask]
-            var_values = events[var][mask]
-            corr_matrix[i, 2] = np.corrcoef(nonRes_mjj_regressed, var_values)[0, 1]
-
-            mask = ((events[var] > -998.0) & (events.Res_dijet_mass > -998.0))
-            Res_dijet_mass = events.Res_dijet_mass[mask]
-            var_values = events[var][mask]
-            corr_matrix[i, 3] = np.corrcoef(Res_dijet_mass, var_values)[0, 1]
-
             mask = ((events[var] > -998.0) & (events.Res_mjj_regressed > -998.0))
             Res_mjj_regressed = events.Res_mjj_regressed[mask]
             var_values = events[var][mask]
-            corr_matrix[i, 4] = np.corrcoef(Res_mjj_regressed, var_values)[0, 1]
+            corr_matrix[i, 1] = np.corrcoef(Res_mjj_regressed, var_values)[0, 1]
 
         # plot the correlation matrix
         plt.figure(figsize=(18, len(vars_for_training)))
         plt.imshow(corr_matrix, vmin=-1, vmax=1, cmap='coolwarm')
         # annotate the values
         for i in range(len(vars_for_training)):
-            for j in range(5):
+            for j in range(2):
                 # format the value to 2 decimal places
                 plt.text(j, i, f"{corr_matrix[i, j]:.2f}", ha='center', va='center', color='b')
 
-        plt.xticks([0, 1, 2, 3, 4], ['mass', 'nonRes_dijet_mass', 'nonRes_mjj_regressed', 'Res_dijet_mass', 'Res_mjj_regressed'], rotation=90)
+        plt.xticks([0, 1], ['diphoton_mass', 'Res_mjj_regressed'], rotation=90)
         plt.yticks(range(len(vars_for_training)), vars_for_training)
         plt.colorbar()
         plt.savefig(f'{out_path}', dpi=300, )
@@ -478,7 +465,7 @@ class PrepareInputs:
 
                 # plot_correlation_matrix
                 os.makedirs(f"{out_path}/correlation_matrix/", exist_ok=True)
-                corr_out_path = f"{out_path}/correlation_matrix/{samples}_{era}.pdf"
+                corr_out_path = f"{out_path}/correlation_matrix/{samples}_{era}.png"
                 self.corr_with_mgg_mjj(events, vars_for_training, corr_out_path)
 
         print("INFO: Combining all the samples")
@@ -496,10 +483,34 @@ class PrepareInputs:
         X = comb_inputs[vars_for_training]
         Y = comb_inputs[[cls for cls in self.classes]]
         relative_weights = comb_inputs["rel_xsec_weight"]
+        print(comb_inputs["rel_xsec_weight"].sum())
+        
+        if self.isCRUW:
+            lead_bjet_condition = comb_inputs["Res_lead_bjet_btagPNetB"] > 0.26
+            sublead_bjet_condition = comb_inputs["Res_sublead_bjet_btagPNetB"] > 0.26
+            print("CoreRegion: Use photon MVAID WP 90")
+            lead_mvaID_condition = ((comb_inputs["lead_isScEtaEB"] == True) & (comb_inputs['lead_mvaID'] > 0.0439603)) | ((comb_inputs["lead_isScEtaEE"] == True) & (comb_inputs['lead_mvaID'] > -0.249526))
+            sublead_mvaID_condition = ((comb_inputs["sublead_isScEtaEB"] == True) & (comb_inputs['sublead_mvaID'] > 0.0439603)) | ((comb_inputs["sublead_isScEtaEE"] == True) & (comb_inputs['sublead_mvaID'] > -0.249526))
+            # Combine all conditions into the final mask
+            core_region_mask = (
+                lead_bjet_condition &
+                sublead_bjet_condition &
+                lead_mvaID_condition &
+                sublead_mvaID_condition
+            )
+            scale_core_region = (
+                comb_inputs[~core_region_mask]["rel_xsec_weight"].sum()
+                / comb_inputs[core_region_mask]["rel_xsec_weight"].sum()
+            )
+            #Upweight sample_weight only for core region events
+            comb_inputs.loc[core_region_mask, "rel_xsec_weight"] *= scale_core_region
+            print(">>  Core Region upweighting, used scale = %.2f" % scale_core_region)
 
         # perform log transformation for variables if needed
         # for var in vars_for_log:
         #     X[var] = np.log(X[var])
+        relative_weights = comb_inputs["rel_xsec_weight"]
+        print(comb_inputs["rel_xsec_weight"].sum())
 
         X = X.values
         Y = Y.values

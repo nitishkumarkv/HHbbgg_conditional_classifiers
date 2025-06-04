@@ -26,7 +26,7 @@ def get_prediction(model_dict_path, model_path, X):
 
     model = MLP(input_size, best_num_layers, best_num_nodes, output_size, best_act_fn, best_dropout_prob).to(device)
     model.to(device)
-    model_state = torch.load(model_path)
+    model_state = torch.load(model_path, map_location=torch.device(device), weights_only=False)
     model.load_state_dict(model_state['model_state_dict'])
 
     model.eval()
@@ -63,7 +63,7 @@ def get_prediction_binary(model_dict_path, model_path, X):
 
     model = MLP(input_size, best_num_layers, best_num_nodes, output_size, best_act_fn, best_dropout_prob).to(device)
     model.to(device)
-    model_state = torch.load(model_path)
+    model_state = torch.load(model_path, map_location=torch.device(device), weights_only=False)
     model.load_state_dict(model_state['model_state_dict'])
 
     model.eval()

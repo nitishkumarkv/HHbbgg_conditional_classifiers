@@ -27,7 +27,6 @@ if __name__ == "__main__":
 
     non_resonant_samples = ["TTGG", "GGJets"]
     sample = [s for s in samples_in_config if s in non_resonant_samples]
-    #sample = ["GGJets"]
     path = args.input_path
     out_path = args.input_path + "/cor_plots/"
     os.makedirs(out_path, exist_ok=True)
@@ -52,6 +51,27 @@ if __name__ == "__main__":
                 events.append(ak.from_parquet(f"{events_path}/{training_config['samples_info'][era][s]}", columns=["mass", "Res_mjj_regressed"]))
     events = ak.concatenate(events)
 
+    # Define SR cuts from the table
+    sr_cuts = {
+        "SR1": {
+            "GluGluToHH_score": 0.9598,
+            "non_resonant_bkg_score": 0.009,
+            "ttH_score": 0.4669,
+            "other_single_H_score": 0.6068
+        },
+        "SR2": {
+            "GluGluToHH_score": 0.4168,
+            "non_resonant_bkg_score": 0.0017,
+            "ttH_score": 0.5362,
+            "other_single_H_score": 0.7904
+        },
+        "SR3": {
+            "GluGluToHH_score": 0.2217,
+            "non_resonant_bkg_score": 0.0089,
+            "ttH_score": 0.8204,
+            "other_single_H_score": 0.8888
+        }
+    }
 
     def plot_with_errorbars(data, weights, bins, range_, label, ax):
         hist, bin_edges = np.histogram(data, bins=bins, range=range_, weights=weights)
@@ -77,44 +97,53 @@ if __name__ == "__main__":
             linewidth=2
         )
 
-    # Di-photon mass plot
-    fig, ax = plt.subplots()
-    for cut in [0, 0.6, 0.9, 0.95]:
-        mask = y[:, 3] > cut
+    # Di-photon mass plot for SRs
+    fig, ax = plt.subplots(figsize=(10, 8))
+    for sr_name, cuts in sr_cuts.items():
+        print(sr_name)
+        mask = (
+            (y[:, 3] > cuts["GluGluToHH_score"]) &  # GluGluToHH_score is the 4th column (index 3)
+            (y[:, 0] < cuts["non_resonant_bkg_score"]) &  # non_resonant_bkg_score is the 1st column (index 0)
+            (y[:, 1] < cuts["ttH_score"]) &  # ttH_score is the 2nd column (index 1)
+            (y[:, 2] < cuts["other_single_H_score"])  # other_single_H_score is the 3rd column (index 2)
+        )
         plot_with_errorbars(
             data=np.array(events.mass)[mask],
             weights=rel_w[mask],
             bins=30,
             range_=(100, 180),
-            label=f"ggFHH score > {cut}",
+            label=sr_name,
             ax=ax
         )
     ax.set_xlabel("di-photon mass [GeV]")
     ax.set_ylabel("Normalized events")
     ax.legend()
-    #hep.cms.text("Private Work", ax=ax)
-    plt.title("GGJets+TTGG")
+    plt.title("Sculpting check (GGJets+TTGG)")
     plt.tight_layout()
-    fig.savefig(f"{out_path}/nonResSamples_diphoton_mass_ggFHH_score_cuts.png")
+    fig.savefig(f"{out_path}/nonResSamples_diphoton_mass_SR_comparison.png")
     plt.clf()
 
-    # Dijet mass plot
-    fig, ax = plt.subplots()
-    for cut in [0, 0.6, 0.9, 0.95]:
-        mask = y[:, 3] > cut
+    # Dijet mass plot for SRs
+    fig, ax = plt.subplots(figsize=(10, 8))
+    for sr_name, cuts in sr_cuts.items():
+        mask = (
+            (y[:, 3] > cuts["GluGluToHH_score"]) &
+            (y[:, 0] < cuts["non_resonant_bkg_score"]) &
+            (y[:, 1] < cuts["ttH_score"]) &
+            (y[:, 2] < cuts["other_single_H_score"])
+        )
         plot_with_errorbars(
             data=np.array(events.Res_mjj_regressed)[mask],
             weights=rel_w[mask],
             bins=30,
             range_=(70, 190),
-            label=f"ggFHH score > {cut}",
+            label=sr_name,
             ax=ax
         )
     ax.set_xlabel("Res_mjj_regressed [GeV]")
     ax.set_ylabel("Normalized events")
     ax.legend()
-    #hep.cms.text("Private Work", ax=ax)
-    plt.title("GGJets+TTGG")
+    plt.title("Sculpting check (GGJets+TTGG)")
     plt.tight_layout()
-    fig.savefig(f"{out_path}/nonResSamples_Res_mjj_regressed_score_cuts.png")
+    fig.savefig(f"{out_path}/nonResSamples_Res_mjj_regressed_SR_comparison.png")
     plt.clf()

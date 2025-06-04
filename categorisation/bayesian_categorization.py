@@ -782,7 +782,7 @@ def get_best_cut_params_for_cr(
     folder_name,
     cr_classes=[1, 2],
     cr_class_names=[["ttHtoGG_M_125"], ["BBHto2G_M_125", "GluGluHToGG_M_125"]],
-    cr_name = ['ttH', "ggH_bbH"],
+    cr_name = ['ttH'],
     n_trials=150,
     sideband_threshold=10.0,
 ):
@@ -1396,7 +1396,7 @@ def collect_event_yields(base_dir, category_list):
         "cat2": "SR2",
         "cat3": "SR3",
         "ttH": "CR_ttH",
-        "bbH": "CR_bbH",
+        # "bbH": "CR_bbH",
     }
     
     yield_dict = {}
@@ -1507,7 +1507,8 @@ def collect_event_yields(base_dir, category_list, mass_range=None):
     ]
     folder_to_region = {
         "cat1":"SR1","cat2":"SR2","cat3":"SR3",
-        "ttH":"CR_ttH","bbH":"CR_bbH",
+        "ttH":"CR_ttH",
+        # "bbH":"CR_bbH",
     }
     yield_dict = {}
 
@@ -1706,7 +1707,7 @@ if __name__ == "__main__":
     cr_name=cr_name
     )
 
-    folder_list = ["cat1", "cat2", "cat3", "ttH", "bbH"]#, "ggH", "bbH"]
+    folder_list = ["cat1", "cat2", "cat3", "ttH"]#, "ggH", "bbH"]
     #folder_list = ["cat1", "cat2", "ttH", "bbH"]
     #folder_list = ["ttH", "ggH_bbH"]
 

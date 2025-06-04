@@ -1,0 +1,41 @@
+mlp:
+    vars:
+    - eta
+    - lead_eta
+    - lead_phi
+    - Res_pholead_PtOverM
+    - sublead_eta
+    - sublead_phi
+    - Res_phosublead_PtOverM
+    - Res_lead_bjet_eta
+    - Res_lead_bjet_phi
+    - Res_lead_bjet_btagPNetB
+    - Res_sublead_bjet_eta
+    - Res_sublead_bjet_phi
+    - Res_sublead_bjet_btagPNetB
+    - Res_DeltaR_j1g1
+    - Res_DeltaR_j2g1
+    - Res_DeltaR_j1g2
+    - Res_DeltaR_j2g2
+    - Res_DeltaR_jg_min
+    - Res_CosThetaStar_CS
+    - Res_CosThetaStar_gg
+    - Res_CosThetaStar_jj
+    - puppiMET_phi
+    - puppiMET_pt
+    - n_leptons
+    - n_jets
+    - Res_chi_t0
+    - Res_chi_t1
+    - Res_DeltaPhi_j1MET
+    - Res_DeltaPhi_j2MET
+    - Res_HHbbggCandidate_eta
+    
+    # variables added at preparation level which are not available in HiggsDNA output
+    - Res_diphoton_PtOverM_ggjj
+    - Res_dijet_PtOverM_ggjj
+    # - Res_lead_bjet_pt_over_M_regressed
+    # - Res_sublead_bjet_pt_over_M_regressed
+    - deltaR_gg
+    - Res_lead_bjet_ptPNetCorr_over_M_regressed
+    - Res_sublead_bjet_ptPNetCorr_over_M_regressed

@@ -16,7 +16,8 @@ from mlp import MLP
 import pickle
 
 def load_checkpoint(file_path):
-    checkpoint = torch.load(file_path)
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    checkpoint = torch.load(file_path, map_location=torch.device(device), weights_only=False)
     #model.load_state_dict(checkpoint['model_state_dict'])
     #optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     #scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
@@ -130,7 +131,8 @@ if __name__ == "__main__":
         one_vs_all_auc_dict[f"{class_name}_tpr"] = tpr
 
     plt.plot([0, 1], [0, 1], 'k--')
-    plt.xlim([0.0, 1.0])
+    plt.xscale('log')
+    plt.xlim([0.0001, 0.2])
     plt.ylim([0.0, 1.05])
     plt.xlabel('FPR', fontsize=12)
     plt.ylabel('TPR', fontsize=12)
@@ -180,7 +182,8 @@ if __name__ == "__main__":
     # Plot the diagonal line representing random guessing
     plt.plot([0, 1], [0, 1], 'k--')
 
-    plt.xlim([0.0, 1.0])
+    plt.xscale('log')
+    plt.xlim([0.0001, 0.2])
     plt.ylim([0.0, 1.05])
     plt.xlabel('FPR', fontsize=12)
     plt.ylabel('TPR', fontsize=12)
@@ -233,7 +236,8 @@ if __name__ == "__main__":
         # Plot the diagonal line representing random guessing
         plt.plot([0, 1], [0, 1], 'k--')
 
-        plt.xlim([0.0, 1.0])
+        plt.xscale('log')
+        plt.xlim([0.0001, 0.2])
         plt.ylim([0.0, 1.05])
         plt.xlabel('FPR', fontsize=12)
         plt.ylabel('TPR', fontsize=12)
@@ -266,7 +270,8 @@ if __name__ == "__main__":
         plt.plot(fpr, tpr, label=f'{class_name} (AUC = {roc_auc:0.4f})')
 
     plt.plot([0, 1], [0, 1], 'k--')
-    plt.xlim([0.0, 1.0])
+    plt.xscale('log')
+    plt.xlim([0.0001, 0.2])
     plt.ylim([0.0, 1.05])
     plt.xlabel('FPR', fontsize=12)
     plt.ylabel('TPR', fontsize=12)
@@ -309,7 +314,8 @@ if __name__ == "__main__":
         # Plot the diagonal line representing random guessing
         plt.plot([0, 1], [0, 1], 'k--')
     
-        plt.xlim([0.0, 1.0])
+        plt.xscale('log')
+        plt.xlim([0.0001, 0.2])
         plt.ylim([0.0, 1.05])
         plt.xlabel('FPR', fontsize=12)
         plt.ylabel('TPR', fontsize=12)
@@ -352,7 +358,8 @@ if __name__ == "__main__":
     # Plot the diagonal line representing random guessing
     plt.plot([0, 1], [0, 1], 'k--')
 
-    plt.xlim([0.0, 1.0])
+    plt.xscale('log')
+    plt.xlim([0.0001, 0.2])
     plt.ylim([0.0, 1.05])
     plt.xlabel('FPR', fontsize=12)
     plt.ylabel('TPR', fontsize=12)
