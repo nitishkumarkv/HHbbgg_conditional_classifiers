@@ -32,9 +32,28 @@ class PrepareInputs:
             self.sample_to_class = self.training_info["sample_to_class"]
             self.classes = self.training_info["classes"]
             self.random_seed = self.training_info["random_seed"]
+            self.weight_scheme_process = self.training_info["weight_scheme_process"]
         self.fill_nan = -9
         self.extra_vars = ["mass", "nonRes_dijet_mass", "Res_dijet_mass", "nonRes_has_two_btagged_jets", "weight", "pt", "nonRes_dijet_pt", "Res_dijet_pt", "Res_lead_bjet_pt", "Res_sublead_bjet_pt", "Res_lead_bjet_ptPNetCorr", "Res_sublead_bjet_ptPNetCorr", "nonRes_HHbbggCandidate_mass", "Res_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "Res_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "jet1_mass", "jet2_mass", "jet3_mass", "jet4_mass", "jet5_mass", "jet6_mass", "Res_lead_bjet_jet_idx", "Res_sublead_bjet_jet_idx", "jet1_index", "jet2_index", "jet3_index", "jet4_index", "jet5_index", "jet6_index",
-                           "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet1_eta", "jet2_eta", "jet3_eta", "jet4_eta", "jet5_eta", "jet6_eta", "jet1_phi", "jet2_phi", "jet3_phi", "jet4_phi", "jet5_phi", "jet6_phi"]
+                           "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet1_eta", "jet2_eta", "jet3_eta", "jet4_eta", "jet5_eta", "jet6_eta", "jet1_phi", "jet2_phi", "jet3_phi", "jet4_phi", "jet5_phi", "jet6_phi", "lead_phi", "sublead_phi"]
+        
+        # prepare process numbers for proccesses in each class
+        num_process_each_class = {
+            class_: 0 for class_ in self.classes
+        }
+
+        process_numbers = {}
+
+        for sample in self.sample_to_class.keys():
+            class_ = self.sample_to_class[sample]
+            process_numbers[sample] = num_process_each_class[class_]
+            num_process_each_class[class_] += 1
+
+        self.num_process_each_class = num_process_each_class
+        self.process_numbers = process_numbers
+
+        self.class_idx_to_name = {i: class_ for i, class_ in enumerate(self.classes)}
+        
 
     def load_vars(self, path):
         with open(path, 'r') as f:
@@ -93,93 +112,93 @@ class PrepareInputs:
 
         # add jet related mass
             
-#        # Build awkward array of jets
-#        jets = ak.zip({
-#            "pt": ak.concatenate([events[f"jet{i}_pt"][:, None] for i in range(1, 7)], axis=1),
-#            "eta": ak.concatenate([events[f"jet{i}_eta"][:, None] for i in range(1, 7)], axis=1),
-#            "phi": ak.concatenate([events[f"jet{i}_phi"][:, None] for i in range(1, 7)], axis=1),
-#            "mass": ak.concatenate([events[f"jet{i}_mass"][:, None] for i in range(1, 7)], axis=1),
-#            "index": ak.concatenate([events[f"jet{i}_index"][:, None] for i in range(1, 7)], axis=1),
-#        }, with_name="Momentum4D")
-#        
-#        # Mask out jets that are b-jets
-#        is_not_bjet = (jets.index != events.Res_lead_bjet_jet_idx[:, None]) & \
-#                      (jets.index != events.Res_sublead_bjet_jet_idx[:, None])
-#        jets_clean = jets[is_not_bjet]
-#
-#        # Select up to 4 jets
-#        selected_jets = jets_clean[:, :4]
-#        
-#        # ΔR to objects
-#        def min_deltaR_to(obj_eta, obj_phi):
-#            min = ak.min(self.deltaR(selected_jets.eta, selected_jets.phi, obj_eta[:, None], obj_phi[:, None], fill_none=False), axis=1)
-#            return ak.fill_none(min, -999.0)
-#
-#        events["min_deltaR_jet_b1"] = min_deltaR_to(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi)
-#        events["min_deltaR_jet_b2"] = min_deltaR_to(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi)
-#        events["min_deltaR_jet_g1"] = min_deltaR_to(events.lead_eta, events.lead_phi)
-#        events["min_deltaR_jet_g2"] = min_deltaR_to(events.sublead_eta, events.sublead_phi)
-#
-#        # deltaR betwreen the jets anf photons, bjets
-#        events["deltaR_g1_j1"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
-#        events["deltaR_g1_j2"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
-#        events["deltaR_g1_j3"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
-#        events["deltaR_g1_j4"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
-#        events["deltaR_g2_j1"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
-#        events["deltaR_g2_j2"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
-#        events["deltaR_g2_j3"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
-#        events["deltaR_g2_j4"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
-#        events["deltaR_b1_j1"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
-#        events["deltaR_b1_j2"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
-#        events["deltaR_b1_j3"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
-#        events["deltaR_b1_j4"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
-#        events["deltaR_b2_j1"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
-#        events["deltaR_b2_j2"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
-#        events["deltaR_b2_j3"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
-#        events["deltaR_b2_j4"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
-#
-#        # add jet pt, eta, phi
-#        events["j1_pt"] = selected_jets.pt[:, 0]
-#        events["j2_pt"] = selected_jets.pt[:, 1]
-#        events["j3_pt"] = selected_jets.pt[:, 2]
-#        events["j4_pt"] = selected_jets.pt[:, 3]
-#        events["j1_eta"] = selected_jets.eta[:, 0]
-#        events["j2_eta"] = selected_jets.eta[:, 1]
-#        events["j3_eta"] = selected_jets.eta[:, 2]
-#        events["j4_eta"] = selected_jets.eta[:, 3]
-#        events["j1_phi"] = selected_jets.phi[:, 0]
-#        events["j2_phi"] = selected_jets.phi[:, 1]
-#        events["j3_phi"] = selected_jets.phi[:, 2]
-#        events["j4_phi"] = selected_jets.phi[:, 3]
+        # # Build awkward array of jets
+        # jets = ak.zip({
+        #     "pt": ak.concatenate([events[f"jet{i}_pt"][:, None] for i in range(1, 7)], axis=1),
+        #     "eta": ak.concatenate([events[f"jet{i}_eta"][:, None] for i in range(1, 7)], axis=1),
+        #     "phi": ak.concatenate([events[f"jet{i}_phi"][:, None] for i in range(1, 7)], axis=1),
+        #     "mass": ak.concatenate([events[f"jet{i}_mass"][:, None] for i in range(1, 7)], axis=1),
+        #     "index": ak.concatenate([events[f"jet{i}_index"][:, None] for i in range(1, 7)], axis=1),
+        # }, with_name="Momentum4D")
         
+        # # Mask out jets that are b-jets
+        # is_not_bjet = (jets.index != events.Res_lead_bjet_jet_idx[:, None]) & \
+        #               (jets.index != events.Res_sublead_bjet_jet_idx[:, None])
+        # jets_clean = jets[is_not_bjet]
+
+        # # Select up to 4 jets
+        # selected_jets = jets_clean[:, :4]
+        
+        # # ΔR to objects
+        # def min_deltaR_to(obj_eta, obj_phi):
+        #     min = ak.min(self.deltaR(selected_jets.eta, selected_jets.phi, obj_eta[:, None], obj_phi[:, None], fill_none=False), axis=1)
+        #     return ak.fill_none(min, -999.0)
+
+        # events["min_deltaR_jet_b1"] = min_deltaR_to(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi)
+        # events["min_deltaR_jet_b2"] = min_deltaR_to(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi)
+        # events["min_deltaR_jet_g1"] = min_deltaR_to(events.lead_eta, events.lead_phi)
+        # events["min_deltaR_jet_g2"] = min_deltaR_to(events.sublead_eta, events.sublead_phi)
+
+        # # deltaR betwreen the jets anf photons, bjets
+        # events["deltaR_g1_j1"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
+        # events["deltaR_g1_j2"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
+        # events["deltaR_g1_j3"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
+        # events["deltaR_g1_j4"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
+        # events["deltaR_g2_j1"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
+        # events["deltaR_g2_j2"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
+        # events["deltaR_g2_j3"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
+        # events["deltaR_g2_j4"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
+        # events["deltaR_b1_j1"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
+        # events["deltaR_b1_j2"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
+        # events["deltaR_b1_j3"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
+        # events["deltaR_b1_j4"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
+        # events["deltaR_b2_j1"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
+        # events["deltaR_b2_j2"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
+        # events["deltaR_b2_j3"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
+        # events["deltaR_b2_j4"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
+
+        # # add jet pt, eta, phi
+        # events["j1_pt"] = selected_jets.pt[:, 0]
+        # events["j2_pt"] = selected_jets.pt[:, 1]
+        # events["j3_pt"] = selected_jets.pt[:, 2]
+        # events["j4_pt"] = selected_jets.pt[:, 3]
+        # events["j1_eta"] = selected_jets.eta[:, 0]
+        # events["j2_eta"] = selected_jets.eta[:, 1]
+        # events["j3_eta"] = selected_jets.eta[:, 2]
+        # events["j4_eta"] = selected_jets.eta[:, 3]
+        # events["j1_phi"] = selected_jets.phi[:, 0]
+        # events["j2_phi"] = selected_jets.phi[:, 1]
+        # events["j3_phi"] = selected_jets.phi[:, 2]
+        # events["j4_phi"] = selected_jets.phi[:, 3]
+       
 
 
-#        # Build Lorentz vectors from selected_jets
-#        jets_vec = selected_jets
-#
-#        # Pair indices for 4 jets
-#        pair_indices = [(0, 1), (0, 2), (0, 3),
-#                        (1, 2), (1, 3),
-#                        (2, 3)]
-#
-#        pair_names = ["j1_j2", "j1_j3", "j1_j4", "j2_j3", "j2_j4", "j3_j4"]
-#
-#        for (i, j), name in zip(pair_indices, pair_names):
-#            # Mask if either jet is invalid (pt == -999)
-#            valid = (selected_jets.pt[:, i] != -999) & (selected_jets.pt[:, j] != -999)
-#
-#            # Sum vectors and get invariant mass
-#            m_pair = (jets_vec[:, i] + jets_vec[:, j]).mass
-#
-#            # Set to -999 if invalid
-#            events[f"mass_{name}"] = ak.where(valid, m_pair, -999.0)
-#
-#            # Compute ΔR for the pair using your self.deltaR
-#            delta_r = self.deltaR(
-#                selected_jets.eta[:, i], selected_jets.phi[:, i],
-#                selected_jets.eta[:, j], selected_jets.phi[:, j]
-#            )
-#            events[f"deltaR_{name}"] = ak.where(valid, delta_r, -999.0)
+        # # Build Lorentz vectors from selected_jets
+        # jets_vec = selected_jets
+
+        # # Pair indices for 4 jets
+        # pair_indices = [(0, 1), (0, 2), (0, 3),
+        #                 (1, 2), (1, 3),
+        #                 (2, 3)]
+
+        # pair_names = ["j1_j2", "j1_j3", "j1_j4", "j2_j3", "j2_j4", "j3_j4"]
+
+        #for (i, j), name in zip(pair_indices, pair_names):
+        #    # Mask if either jet is invalid (pt == -999)
+        #    valid = (selected_jets.pt[:, i] != -999) & (selected_jets.pt[:, j] != -999)
+
+        #    # Sum vectors and get invariant mass
+        #    m_pair = (jets_vec[:, i] + jets_vec[:, j]).mass
+
+        #    # Set to -999 if invalid
+        #    events[f"mass_{name}"] = ak.where(valid, m_pair, -999.0)
+
+        #    # Compute ΔR for the pair using your self.deltaR
+        #    delta_r = self.deltaR(
+        #        selected_jets.eta[:, i], selected_jets.phi[:, i],
+        #        selected_jets.eta[:, j], selected_jets.phi[:, j]
+        #    )
+        #    events[f"deltaR_{name}"] = ak.where(valid, delta_r, -999.0)
 
         return events
 
@@ -223,7 +242,7 @@ class PrepareInputs:
 
         return events
 
-    def get_weights_for_training(self, y_train, rel_w_train):
+    def get_weights_for_training(self, y_train, rel_w_train, proc_num_train):
 
         true_class_weights = ak.zeros_like(rel_w_train)
         class_weights_for_training_abs = ak.zeros_like(rel_w_train)
@@ -231,49 +250,101 @@ class PrepareInputs:
 
         for i in range(y_train.shape[1]):
 
-            cls_bool = (y_train[:, i] == 1)
+            if self.weight_scheme_process[self.class_idx_to_name[i]] == "equal_weight":
+                cls_bool = (y_train[:, i] == 1)
 
-            rel_xsec_weight_for_class = rel_w_train * cls_bool
-            true_class_weights = true_class_weights + (rel_xsec_weight_for_class / np.sum(rel_xsec_weight_for_class))
+                true_class_weights_ = ak.zeros_like(rel_w_train)
+                class_weights_for_training_abs_ = ak.zeros_like(rel_w_train)
+                class_weights_only_positive_ = ak.zeros_like(rel_w_train)
 
-            abs_rel_xsec_weight_for_class = abs(rel_w_train) * cls_bool
-            class_weights_for_training_abs = class_weights_for_training_abs + (abs_rel_xsec_weight_for_class / np.sum(abs_rel_xsec_weight_for_class))
+                for proc in range(self.num_process_each_class[self.class_idx_to_name[i]]):
+                    rel_xsec_weight_for_class = rel_w_train * cls_bool * (proc_num_train == proc)
+                    true_class_weights_ = true_class_weights_ + (rel_xsec_weight_for_class / np.sum(rel_xsec_weight_for_class))
 
-            only_positive_rel_xsec_weight_for_class = rel_w_train * cls_bool * (rel_w_train > 0)
-            class_weights_only_positive = class_weights_only_positive + (only_positive_rel_xsec_weight_for_class / np.sum(only_positive_rel_xsec_weight_for_class))
+                    abs_rel_xsec_weight_for_class = abs(rel_w_train) * cls_bool * (proc_num_train == proc)
+                    class_weights_for_training_abs_ = class_weights_for_training_abs_ + (abs_rel_xsec_weight_for_class / np.sum(abs_rel_xsec_weight_for_class))
+
+                    only_positive_rel_xsec_weight_for_class = rel_w_train * cls_bool * (rel_w_train > 0) * (proc_num_train == proc)
+                    class_weights_only_positive_ = class_weights_only_positive_ + (only_positive_rel_xsec_weight_for_class / np.sum(only_positive_rel_xsec_weight_for_class))
+
+                # normalize the weights for this class to be one
+                true_class_weights = true_class_weights + (true_class_weights_ / np.sum(true_class_weights_))
+                class_weights_for_training_abs = class_weights_for_training_abs + (class_weights_for_training_abs_ / np.sum(class_weights_for_training_abs_))
+                class_weights_only_positive = class_weights_only_positive + (class_weights_only_positive_ / np.sum(class_weights_only_positive_))
+                
+            else:
+                cls_bool = (y_train[:, i] == 1)
+
+                rel_xsec_weight_for_class = rel_w_train * cls_bool
+                true_class_weights = true_class_weights + (rel_xsec_weight_for_class / np.sum(rel_xsec_weight_for_class))
+
+                abs_rel_xsec_weight_for_class = abs(rel_w_train) * cls_bool
+                class_weights_for_training_abs = class_weights_for_training_abs + (abs_rel_xsec_weight_for_class / np.sum(abs_rel_xsec_weight_for_class))
+
+                only_positive_rel_xsec_weight_for_class = rel_w_train * cls_bool * (rel_w_train > 0)
+                class_weights_only_positive = class_weights_only_positive + (only_positive_rel_xsec_weight_for_class / np.sum(only_positive_rel_xsec_weight_for_class))
 
         for i in range(y_train.shape[1]):
             print(f"(number of events: sum of class_weights_for_training_abs) for class number {i+1} = ({sum(y_train[:, i])}: {sum(class_weights_for_training_abs[y_train[:, i] == 1])})")
             print(f"(number of events: sum of class_weights_only_positive) for class number {i+1} = ({sum(y_train[:, i])}: {sum(class_weights_only_positive[y_train[:, i] == 1])})")
             print(f"(number of events: sum of true_class_weights) for class number {i+1} = ({sum(y_train[:, i])}: {sum(true_class_weights[y_train[:, i] == 1])})")
+
+            if self.weight_scheme_process[self.class_idx_to_name[i]] == "equal_weight":
+                print("\n")
+                for proc in range(self.num_process_each_class[self.class_idx_to_name[i]]):
+                    print(f"(number of events: sum of class_weights_for_training_abs) for class number {i+1} and process number {proc} = ({sum(y_train[:, i] * (proc_num_train == proc))}: {sum(class_weights_for_training_abs * (y_train[:, i] == 1) * (proc_num_train == proc))})")
+                    print(f"(number of events: sum of class_weights_only_positive) for class number {i+1} and process number {proc} = ({sum(y_train[:, i] * (proc_num_train == proc))}: {sum(class_weights_only_positive * (y_train[:, i] == 1) * (proc_num_train == proc))})")
+                    print(f"(number of events: sum of true_class_weights) for class number {i+1} and process number {proc} = ({sum(y_train[:, i] * (proc_num_train == proc))}: {sum(true_class_weights * (y_train[:, i] == 1) * (proc_num_train == proc))})")
+                print("\n")
+
         return true_class_weights, class_weights_for_training_abs, class_weights_only_positive
 
-    def get_weights_for_val_test(self, y_val, rel_w_val):
+    def get_weights_for_val_test(self, y_val, rel_w_val, proc_num_val):
 
         class_weights_for_val = ak.zeros_like(rel_w_val)
 
         for i in range(y_val.shape[1]):
-            cls_bool = (y_val[:, i] == 1)
-            rel_xsec_weight_for_class = rel_w_val * cls_bool
-            class_weights_for_val = class_weights_for_val + (rel_xsec_weight_for_class / np.sum(rel_xsec_weight_for_class))
+            
+            if self.weight_scheme_process[self.class_idx_to_name[i]] == "equal_weight":
+                cls_bool = (y_val[:, i] == 1)
+                class_weights_for_val_ = ak.zeros_like(rel_w_val)
+
+                for proc in range(self.num_process_each_class[self.class_idx_to_name[i]]):
+                    rel_xsec_weight_for_class = rel_w_val * cls_bool * (proc_num_val == proc)
+                    class_weights_for_val_ = class_weights_for_val_ + (rel_xsec_weight_for_class / np.sum(rel_xsec_weight_for_class))
+
+                # normalize the weights for this class to be one
+                class_weights_for_val = class_weights_for_val + (class_weights_for_val_ / np.sum(class_weights_for_val_))
+
+            else:
+                cls_bool = (y_val[:, i] == 1)
+                rel_xsec_weight_for_class = rel_w_val * cls_bool
+                class_weights_for_val = class_weights_for_val + (rel_xsec_weight_for_class / np.sum(rel_xsec_weight_for_class))
 
         for i in range(y_val.shape[1]):
             print(f"(number of events: sum of class_weights_for_val) for class number {i+1} = ({sum(y_val[:, i])}: {sum(class_weights_for_val[y_val[:, i] == 1])})")
 
+            if self.weight_scheme_process[self.class_idx_to_name[i]] == "equal_weight":
+                print("\n")
+                for proc in range(self.num_process_each_class[self.class_idx_to_name[i]]):
+                    print(f"(number of events: sum of class_weights_for_val) for class number {i+1} and process number {proc} = ({sum(y_val[:, i] * (proc_num_val == proc))}: {sum(class_weights_for_val * (y_val[:, i] == 1) * (proc_num_val == proc))})")
+                print("\n")
+
         return class_weights_for_val
 
-    def train_test_split(self, X, Y, relative_weights, train_ratio=0.7, val_ratio=0.3):
+    def train_test_split(self, X, Y, relative_weights, proc_num, train_ratio=0.7, val_ratio=0.3):
 
         from sklearn.model_selection import train_test_split
 
-        X_train, X_test_val, y_train, y_test_val, rel_w_train, rel_w_test_val = train_test_split(X, Y, relative_weights, train_size=train_ratio, shuffle=True, random_state=self.random_seed)
+        X_train, X_test_val, y_train, y_test_val, rel_w_train, rel_w_test_val, proc_num_train, proc_num_val = train_test_split(X, Y, relative_weights, proc_num, train_size=train_ratio, shuffle=True, random_state=self.random_seed)
         if (train_ratio + val_ratio) == 1.0:
             X_val, y_val, rel_w_val = X_test_val, y_test_val, rel_w_test_val
-            X_test, y_test, rel_w_test = None, None, None
+            X_test, y_test, rel_w_test, proc_num_test = None, None, None, None
         else:
-            X_val, X_test, y_val, y_test, rel_w_val, rel_w_test = train_test_split(X_test_val, y_test_val, rel_w_test_val, train_size=0.5, shuffle=True, random_state=self.random_seed)
+            X_val, X_test, y_val, y_test, rel_w_val, rel_w_test, proc_num_val, proc_num_test = train_test_split(X_test_val, y_test_val, rel_w_test_val, proc_num_val, train_size=0.5, shuffle=True, random_state=self.random_seed)
 
-        return X_train, X_val, X_test, y_train, y_val, y_test, rel_w_train, rel_w_val, rel_w_test
+        return X_train, X_val, X_test, y_train, y_val, y_test, rel_w_train, rel_w_val, rel_w_test, proc_num_train, proc_num_val, proc_num_test
+
 
     def standardize(self, X, mean, std):
         return (X - mean) / std
@@ -476,6 +547,9 @@ class PrepareInputs:
                 comb_inputs.append(events)
                 events["sample_type"] = samples
 
+                # add process number which is specific for each class
+                events["process_number"] = self.process_numbers[samples]
+
                 # plot_correlation_matrix
                 os.makedirs(f"{out_path}/correlation_matrix/", exist_ok=True)
                 corr_out_path = f"{out_path}/correlation_matrix/{samples}_{era}.pdf"
@@ -504,12 +578,13 @@ class PrepareInputs:
         X = X.values
         Y = Y.values
         relative_weights = relative_weights.values
+        process_number = comb_inputs["process_number"].values
         
         # mask -999.0 to nan
         mask = (X < -998.0)
         X[mask] = np.nan
 
-        X_train, X_val, X_test, y_train, y_val, y_test, rel_w_train, rel_w_val, rel_w_test = self.train_test_split(X, Y, relative_weights)
+        X_train, X_val, X_test, y_train, y_val, y_test, rel_w_train, rel_w_val, rel_w_test, proc_num_train, proc_num_val, proc_num_test = self.train_test_split(X, Y, relative_weights, process_number)
 
         # get mean according to training data set
         mean = np.nanmean(X_train, axis=0)
@@ -523,13 +598,13 @@ class PrepareInputs:
         X_train = np.nan_to_num(X_train, nan=fill_nan)
         X_val = np.nan_to_num(X_val, nan=fill_nan)
 
-        true_class_weights, class_weights_for_training_abs, class_weights_only_positive = self.get_weights_for_training(y_train, rel_w_train)
-        class_weights_for_val = self.get_weights_for_val_test(y_val, rel_w_val)
+        true_class_weights, class_weights_for_training_abs, class_weights_only_positive = self.get_weights_for_training(y_train, rel_w_train, proc_num_train)
+        class_weights_for_val = self.get_weights_for_val_test(y_val, rel_w_val, proc_num_val)
 
         if X_test is not None:
             X_test = self.standardize(X_test, mean, std)
             X_test = np.nan_to_num(X_test, nan=fill_nan)
-            class_weights_for_test = self.get_weights_for_val_test(y_test, rel_w_test)
+            class_weights_for_test = self.get_weights_for_val_test(y_test, rel_w_test, proc_num_test)
         
         # save all the numpy arrays
         print("\n INFO: saving inputs for mlp")

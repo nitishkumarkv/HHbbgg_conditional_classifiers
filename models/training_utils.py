@@ -149,7 +149,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.benchmark = False
 
     # Set device
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:'+training_config["cuda_device"] if torch.cuda.is_available() else 'cpu')
     print('\n', 'INFO: Used device is', device, '\n')
 
     input_path = args.input_path
@@ -235,7 +235,7 @@ if __name__ == "__main__":
 
     # Create data loaders
     g = torch.Generator().manual_seed(seed)
-    batch_size = 1024
+    batch_size = 1024 #16384 # 8192 # 32768 # 1024 #16384
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, generator=g)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
@@ -249,7 +249,7 @@ if __name__ == "__main__":
     n_epochs = 500
     best_loss = np.inf
     best_weights = None
-    patience = 75
+    patience = 25
     counter = 0
 
     train_loss_hist = []

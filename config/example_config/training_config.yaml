@@ -15,11 +15,20 @@ classes: # all classes
 - is_single_H_bkg
 - is_GluGluToHH_sig
 
+weight_scheme_process: # how to weight each processes within a class
+    # xsec : weight them according to the cross-section of each process
+    # equal_weight: weight each process eqally, if there are two processes, you first weight the sum of each processes to be equal and then weight the whole class to be 1
+    is_non_resonant_bkg: xsec 
+    is_ttH_bkg: xsec
+    is_single_H_bkg: xsec
+    is_GluGluToHH_sig: xsec 
+
 # some info for training
 do_random_search: False
 num_random_search: 1
 weight_scheme: weighted_abs # weighted_only_positive # weighted_CRUW_abs # weighted_CRUW_only_positive
 random_seed: 42
+cuda_device: "0"
 
 samples_info: 
     samples_path: /eos/user/n/nkasarag/HHbbgg/v3_parquet_mjj_noMetCorr # samples path

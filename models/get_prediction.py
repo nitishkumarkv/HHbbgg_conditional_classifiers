@@ -26,7 +26,7 @@ def get_prediction(model_dict_path, model_path, X):
 
     model = MLP(input_size, best_num_layers, best_num_nodes, output_size, best_act_fn, best_dropout_prob).to(device)
     model.to(device)
-    model_state = torch.load(model_path)
+    model_state = torch.load(model_path, weights_only=False)
     model.load_state_dict(model_state['model_state_dict'])
 
     model.eval()
@@ -121,7 +121,7 @@ if __name__ == "__main__":
             for sample in samples:
                 inputs_path = f"{samples_path}/individual_samples/{era}/{sample}"
 
-                device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
+                device = torch.device('cuda:'+training_config["cuda_device"] if torch.cuda.is_available() else 'cpu')
                 #device = 'cpu'
                 print("Device: ", device)
                 X = torch.tensor(np.load(f'{inputs_path}/X.npy'), dtype=torch.float32).to(device)
@@ -137,7 +137,7 @@ if __name__ == "__main__":
     data_samples = training_config["samples_info"]["data"].keys()
     for data_sample in data_samples:
         inputs_path = f"{samples_path}/individual_samples_data/{data_sample}"
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        device = torch.device('cuda:'+training_config["cuda_device"] if torch.cuda.is_available() else 'cpu')
         X = torch.tensor(np.load(f'{inputs_path}/X.npy'), dtype=torch.float32).to(device)
 
         print(f"Getting prediction for {data_sample}")

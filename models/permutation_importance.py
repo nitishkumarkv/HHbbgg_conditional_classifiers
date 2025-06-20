@@ -24,7 +24,7 @@ class ModelEstimatorWrapper:
     
     def load_model(self, input_size):
         # Load the model parameters
-        device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.device = device
 
         # Load best parameters from JSON file
@@ -49,7 +49,7 @@ class ModelEstimatorWrapper:
         ).to(device)
 
         # Load the model state
-        model_state = torch.load(self.model_path, map_location=device)
+        model_state = torch.load(self.model_path, map_location=device, weights_only=False)
         self.model.load_state_dict(model_state['model_state_dict'])
         self.model.eval()
     
