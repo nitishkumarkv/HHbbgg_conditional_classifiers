@@ -3,9 +3,11 @@ mlp:
     - eta
     - lead_eta
     - lead_phi
+    - lead_mvaID
     - Res_pholead_PtOverM
     - sublead_eta
     - sublead_phi
+    - sublead_mvaID
     - Res_phosublead_PtOverM
     - Res_lead_bjet_eta
     - Res_lead_bjet_phi
