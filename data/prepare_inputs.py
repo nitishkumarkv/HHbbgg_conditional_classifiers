@@ -34,8 +34,11 @@ class PrepareInputs:
             self.random_seed = self.training_info["random_seed"]
             self.weight_scheme_process = self.training_info["weight_scheme_process"]
         self.fill_nan = -9
-        self.extra_vars = ["mass", "nonRes_dijet_mass", "Res_dijet_mass", "nonRes_has_two_btagged_jets", "weight", "pt", "nonRes_dijet_pt", "Res_dijet_pt", "Res_lead_bjet_pt", "Res_sublead_bjet_pt", "Res_lead_bjet_ptPNetCorr", "Res_sublead_bjet_ptPNetCorr", "nonRes_HHbbggCandidate_mass", "Res_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "Res_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "jet1_mass", "jet2_mass", "jet3_mass", "jet4_mass", "jet5_mass", "jet6_mass", "Res_lead_bjet_jet_idx", "Res_sublead_bjet_jet_idx", "jet1_index", "jet2_index", "jet3_index", "jet4_index", "jet5_index", "jet6_index",
-                           "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet1_eta", "jet2_eta", "jet3_eta", "jet4_eta", "jet5_eta", "jet6_eta", "jet1_phi", "jet2_phi", "jet3_phi", "jet4_phi", "jet5_phi", "jet6_phi", "lead_phi", "sublead_phi"]
+
+        #self.extra_vars = ["mass", "nonRes_dijet_mass", "Res_dijet_mass", "nonRes_has_two_btagged_jets", "weight", "pt", "nonRes_dijet_pt", "Res_dijet_pt", "Res_lead_bjet_pt", "Res_sublead_bjet_pt", "Res_lead_bjet_ptPNetCorr", "Res_sublead_bjet_ptPNetCorr", "nonRes_HHbbggCandidate_mass", "Res_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "Res_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "jet1_mass", "jet2_mass", "jet3_mass", "jet4_mass", "jet5_mass", "jet6_mass", "Res_lead_bjet_jet_idx", "Res_sublead_bjet_jet_idx", "jet1_index", "jet2_index", "jet3_index", "jet4_index", "jet5_index", "jet6_index",
+        #                   "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet1_eta", "jet2_eta", "jet3_eta", "jet4_eta", "jet5_eta", "jet6_eta", "jet1_phi", "jet2_phi", "jet3_phi", "jet4_phi", "jet5_phi", "jet6_phi", "lead_phi", "sublead_phi"]
+
+        self.extra_vars = ["mass", "nonRes_dijet_mass", "nonResReg_dijet_mass", "nonResReg_dijet_mass_DNNreg", "nonResReg_DNNpair_dijet_mass", "nonResReg_DNNpair_dijet_mass_DNNreg", "weight", "pt", "nonRes_dijet_pt", "nonRes_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "lead_eta", "lead_phi", "sublead_eta", "sublead_phi"]
         
         # prepare process numbers for proccesses in each class
         num_process_each_class = {
@@ -76,39 +79,24 @@ class PrepareInputs:
             return delta_r
 
     def add_var(self, events, era):
-        
-        events["nonRes_lead_bjet_pt_over_M_regressed"] = events.nonRes_lead_bjet_pt / events.nonRes_mjj_regressed
-        events["nonRes_sublead_bjet_ptover_M_regressed"] = events.nonRes_sublead_bjet_pt / events.nonRes_mjj_regressed
 
-        #events["nonRes_lead_bjet_ptPNetCorr_over_M_regressed"] = events.nonRes_lead_bjet_ptPNetCorr / events.nonRes_mjj_regressed
-        #events["nonRes_sublead_bjet_ptPNetCorr_over_M_regressed"] = events.nonRes_sublead_bjet_ptPNetCorr / events.nonRes_mjj_regressed
+        events["diphoton_PtOverM_ggjj"] = events.pt / events.nonResReg_HHbbggCandidate_mass
+        events["nonResReg_dijet_PtOverM_ggjj"] = events.nonResReg_dijet_pt / events.nonResReg_HHbbggCandidate_mas        
 
-        events["nonRes_diphoton_PtOverM_ggjj"] = events.pt / events.nonRes_HHbbggCandidate_mass
-        events["nonRes_dijet_PtOverM_ggjj"] = events.nonRes_dijet_pt / events.nonRes_HHbbggCandidate_mass
-        #events["nonRes_dijet_PtPNetCorrOverM_ggjj"] = events.nonRes_dijet_ptPNetCorr / events.nonRes_HHbbggCandidate_mass
-        
-
-        events["Res_lead_bjet_pt_over_M_regressed"] = events.Res_lead_bjet_pt / events.Res_mjj_regressed
-        events["Res_sublead_bjet_pt_over_M_regressed"] = events.Res_sublead_bjet_pt / events.Res_mjj_regressed
-
-        events["Res_lead_bjet_ptPNetCorr_over_M_regressed"] = events.Res_lead_bjet_ptPNetCorr / events.Res_mjj_regressed
-        events["Res_sublead_bjet_ptPNetCorr_over_M_regressed"] = events.Res_sublead_bjet_ptPNetCorr / events.Res_mjj_regressed
-
-        events["Res_diphoton_PtOverM_ggjj"] = events.pt / events.Res_HHbbggCandidate_mass
-        events["Res_dijet_PtOverM_ggjj"] = events.Res_dijet_pt / events.Res_HHbbggCandidate_mass
+        events["nonResReg_lead_bjet_over_M_regressed"] = events.nonResReg_lead_bjet_pt / events.nonResReg_dijet_mass_DNNreg
+        events["nonResReg_sublead_bjet_over_M_regressed"] = events.nonResReg_sublead_bjet_pt / events.nonResReg_dijet_mass_DNNreg
 
         # add deltaR between lead and sublead photon
-        #events["deltaR_gg"] = np.sqrt((events.lead_eta - events.sublead_eta) ** 2 + (events.lead_phi - events.sublead_phi) ** 2)
         events["deltaR_gg"] = self.deltaR(events.lead_eta, events.lead_phi, events.sublead_eta, events.sublead_phi)
-        # add deltaR between lead and sublead bjet
-        if era == "preEE":
-            events["era"] = 0
-        elif era == "postEE":
-            events["era"] = 1
-        elif era == "preBPix":
-            events["era"] = 2
-        elif era == "postBPix":
-            events["era"] = 3
+
+        # if era == "preEE":
+        #     events["era"] = 0
+        # elif era == "postEE":
+        #     events["era"] = 1
+        # elif era == "preBPix":
+        #     events["era"] = 2
+        # elif era == "postBPix":
+        #     events["era"] = 3
 
         # add jet related mass
             
@@ -354,7 +342,9 @@ class PrepareInputs:
 
     def corr_with_mgg_mjj(self, events, vars_for_training, out_path):
 
-        corr_matrix = np.zeros([len(vars_for_training), 5])
+        "nonResReg_dijet_mass", "nonResReg_dijet_mass_DNNreg"
+
+        corr_matrix = np.zeros([len(vars_for_training), 4])
         for i in range(len(vars_for_training)):
             var = vars_for_training[i]
             # calculate correlation with mgg and mjj, do not include -999 values
@@ -369,30 +359,25 @@ class PrepareInputs:
             corr_matrix[i, 1] = np.corrcoef(nonRes_dijet_mass, var_values)[0, 1]
 
             mask = ((events[var] > -998.0) & (events.nonRes_mjj_regressed > -998.0))
-            nonRes_mjj_regressed = events.nonRes_mjj_regressed[mask]
+            nonResReg_dijet_mass = events.nonResReg_dijet_mass[mask]
             var_values = events[var][mask]
-            corr_matrix[i, 2] = np.corrcoef(nonRes_mjj_regressed, var_values)[0, 1]
+            corr_matrix[i, 2] = np.corrcoef(nonResReg_dijet_mass, var_values)[0, 1]
 
             mask = ((events[var] > -998.0) & (events.Res_dijet_mass > -998.0))
-            Res_dijet_mass = events.Res_dijet_mass[mask]
+            nonResReg_dijet_mass_DNNreg = events.nonResReg_dijet_mass_DNNreg[mask]
             var_values = events[var][mask]
-            corr_matrix[i, 3] = np.corrcoef(Res_dijet_mass, var_values)[0, 1]
-
-            mask = ((events[var] > -998.0) & (events.Res_mjj_regressed > -998.0))
-            Res_mjj_regressed = events.Res_mjj_regressed[mask]
-            var_values = events[var][mask]
-            corr_matrix[i, 4] = np.corrcoef(Res_mjj_regressed, var_values)[0, 1]
+            corr_matrix[i, 3] = np.corrcoef(nonResReg_dijet_mass_DNNreg, var_values)[0, 1]
 
         # plot the correlation matrix
         plt.figure(figsize=(18, len(vars_for_training)))
         plt.imshow(corr_matrix, vmin=-1, vmax=1, cmap='coolwarm')
         # annotate the values
         for i in range(len(vars_for_training)):
-            for j in range(5):
+            for j in range(4):
                 # format the value to 2 decimal places
                 plt.text(j, i, f"{corr_matrix[i, j]:.2f}", ha='center', va='center', color='b')
 
-        plt.xticks([0, 1, 2, 3, 4], ['mass', 'nonRes_dijet_mass', 'nonRes_mjj_regressed', 'Res_dijet_mass', 'Res_mjj_regressed'], rotation=90)
+        plt.xticks([0, 1, 2, 3], ['mass', 'nonRes_dijet_mass', 'nonResReg_dijet_mass', 'nonResReg_dijet_mass_DNNreg'], rotation=90)
         plt.yticks(range(len(vars_for_training)), vars_for_training)
         plt.colorbar()
         plt.savefig(f'{out_path}', dpi=300, )
@@ -402,7 +387,7 @@ class PrepareInputs:
     def preselection(self, events):
         
         mass_bool = ((events.mass > 100) & (events.mass < 180))
-        dijet_mass_bool = ((events.Res_mjj_regressed > 70) & (events.Res_mjj_regressed < 190))
+        dijet_mass_bool = ((events.nonResReg_dijet_mass_DNNreg > 70) & (events.nonResReg_dijet_mass_DNNreg < 190))
         
         #lead_mvaID_bool = ((events.lead_mvaID > 0.0439603) & (events.lead_isScEtaEB == True)) | ((events.lead_mvaID > -0.249526) & (events.lead_isScEtaEE == True))
         #sublead_mvaID_bool = ((events.sublead_mvaID > 0.0439603) & (events.sublead_isScEtaEB == True)) | ((events.sublead_mvaID > -0.249526) & (events.sublead_isScEtaEE == True))
@@ -822,34 +807,6 @@ class PrepareInputs:
             ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
 
         return 0
-    
-    def add_var_pred(self, events):
-
-        collection = "res"
-        # add variables
-        if collection == "nonres":
-            events["dijet_mass"] = events.nonRes_mjj_regressed
-        else:
-            events["dijet_mass"] = events.Res_mjj_regressed
-        
-        events["Res_lead_bjet_pt_over_M_regressed"] = events.Res_lead_bjet_pt / events.dijet_mass
-        events["Res_sublead_bjet_pt_over_M_regressed"] = events.Res_sublead_bjet_pt / events.dijet_mass
-        events["Res_diphoton_PtOverM_ggjj"] = events.pt / events.Res_HHbbggCandidate_mass
-        events["Res_dijet_PtOverM_ggjj"] = events.Res_dijet_pt / events.Res_HHbbggCandidate_mass
-        events["diphoton_PtOverM_ggjj"] = events.pt / events.Res_HHbbggCandidate_mass
-        events["dijet_PtOverM_ggjj"] = events.Res_dijet_pt / events.Res_HHbbggCandidate_mass
-
-        # add deltaR between lead and sublead photon
-        events["deltaR_gg"] = np.sqrt((events.lead_eta - events.sublead_eta) ** 2 + (events.lead_phi - events.sublead_phi) ** 2)
-        # add deltaR between lead and sublead bjet
-
-        eras = np.ones_like(events.pt)
-        #bool_year = (events.year == 2023)
-        #eras+= 1 * bool_year
-
-        events["era"] = eras
-
-        return events
     
     def prep_inputs_for_parquets(self):
 

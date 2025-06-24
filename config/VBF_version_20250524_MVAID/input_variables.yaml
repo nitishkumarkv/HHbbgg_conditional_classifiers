@@ -4,33 +4,33 @@ mlp:
     - lead_eta
     - lead_phi
     - lead_mvaID
-    - Res_pholead_PtOverM
+    - nonResReg_pholead_PtOverM
     - sublead_eta
     - sublead_phi
     - sublead_mvaID
-    - Res_phosublead_PtOverM
-    - Res_lead_bjet_eta
-    - Res_lead_bjet_phi
-    - Res_lead_bjet_btagPNetB
-    - Res_sublead_bjet_eta
-    - Res_sublead_bjet_phi
-    - Res_sublead_bjet_btagPNetB
-    - Res_DeltaR_j1g1
-    - Res_DeltaR_j2g1
-    - Res_DeltaR_j1g2
-    - Res_DeltaR_j2g2
-    - Res_DeltaR_jg_min
-    - Res_CosThetaStar_CS
-    - Res_CosThetaStar_gg
-    - Res_CosThetaStar_jj
+    - nonResReg_phosublead_PtOverM
+    - nonResReg_lead_bjet_eta
+    - nonResReg_lead_bjet_phi
+    - nonResReg_lead_bjet_btagPNetB
+    - nonResReg_sublead_bjet_eta
+    - nonResReg_sublead_bjet_phi
+    - nonResReg_sublead_bjet_btagPNetB
+    - nonResReg_DeltaR_j1g1
+    - nonResReg_DeltaR_j2g1
+    - nonResReg_DeltaR_j1g2
+    - nonResReg_DeltaR_j2g2
+    - nonResReg_DeltaR_jg_min
+    - nonResReg_CosThetaStar_CS
+    - nonResReg_CosThetaStar_gg
+    - nonResReg_CosThetaStar_jj
     - puppiMET_phi
     - puppiMET_pt
     - n_leptons
     - n_jets
-    - Res_chi_t0
-    - Res_chi_t1
-    - Res_DeltaPhi_j1MET
-    - Res_DeltaPhi_j2MET
+    - nonResReg_chi_t0
+    - nonResReg_chi_t1
+    - nonResReg_DeltaPhi_j1MET
+    - nonResReg_DeltaPhi_j2MET
     - VBF_first_jet_eta
     - VBF_first_jet_phi
     - VBF_second_jet_eta
@@ -51,13 +51,11 @@ mlp:
     - VBF_DeltaR_jb_min
     - VBF_DeltaR_jg_min
     - VBF_dijet_mass
-    - Res_HHbbggCandidate_eta
+    - nonResReg_HHbbggCandidate_eta
     
     # variables added at preparation level which are not available in HiggsDNA output
-    - Res_diphoton_PtOverM_ggjj
-    - Res_dijet_PtOverM_ggjj
-    # - Res_lead_bjet_pt_over_M_regressed
-    # - Res_sublead_bjet_pt_over_M_regressed
+    - diphoton_PtOverM_ggjj
+    - nonResReg_dijet_PtOverM_ggjj
     - deltaR_gg
-    - Res_lead_bjet_ptPNetCorr_over_M_regressed
-    - Res_sublead_bjet_ptPNetCorr_over_M_regressed
+    - nonResReg_lead_bjet_over_M_regressed
+    - nonResReg_sublead_bjet_over_M_regressed

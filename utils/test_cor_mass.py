@@ -47,9 +47,9 @@ if __name__ == "__main__":
     for era in eras:
         for s in sample:
             if os.path.exists(f"{path}/individual_samples/{era}/{s}/events.parquet"):
-                events.append(ak.from_parquet(f"{path}/individual_samples/{era}/{s}/events.parquet", columns=["mass", "Res_mjj_regressed"]))
+                events.append(ak.from_parquet(f"{path}/individual_samples/{era}/{s}/events.parquet", columns=["mass", "nonResReg_dijet_mass_DNNreg"]))
             else:
-                events.append(ak.from_parquet(f"{events_path}/{training_config['samples_info'][era][s]}", columns=["mass", "Res_mjj_regressed"]))
+                events.append(ak.from_parquet(f"{events_path}/{training_config['samples_info'][era][s]}", columns=["mass", "nonResReg_dijet_mass_DNNreg"]))
     events = ak.concatenate(events)
 
 
@@ -103,18 +103,18 @@ if __name__ == "__main__":
     for cut in [0, 0.6, 0.9, 0.95]:
         mask = y[:, 3] > cut
         plot_with_errorbars(
-            data=np.array(events.Res_mjj_regressed)[mask],
+            data=np.array(events.nonResReg_dijet_mass_DNNreg)[mask],
             weights=rel_w[mask],
             bins=30,
             range_=(70, 190),
             label=f"ggFHH score > {cut}",
             ax=ax
         )
-    ax.set_xlabel("Res_mjj_regressed [GeV]")
+    ax.set_xlabel("nonResReg_dijet_mass_DNNreg [GeV]")
     ax.set_ylabel("Normalized events")
     ax.legend()
     #hep.cms.text("Private Work", ax=ax)
     plt.title("GGJets+TTGG")
     plt.tight_layout()
-    fig.savefig(f"{out_path}/nonResSamples_Res_mjj_regressed_score_cuts.png")
+    fig.savefig(f"{out_path}/nonResSamples_nonResReg_dijet_mass_DNNreg_score_cuts.png")
     plt.clf()
