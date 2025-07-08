@@ -261,7 +261,7 @@ def get_best_cut_params_using_optuna(n_categories, samples_input, out_dir, signa
       - Signal: (0, previous_best_signal_threshold)
       - Background (for each class): (previous_best_bg_threshold, 1)
     Additionally, the background in the sidebands (mass <120 or >130) must sum to at least 10.
-    Selected events (based on a significance metric in the diphoton mass window 120–130 GeV)
+    Selected events (based on a significance metric in the diphoton mass window 120-130 GeV)
     are removed from the DataFrame before optimizing the next category.
     For each category, the code stores:
       - The significance (Z)
