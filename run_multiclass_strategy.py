@@ -37,6 +37,10 @@ def prepare_inputs(args):
         print('INFO: Preparing the inputs for prediction data', '\n')
         prep_inputs.prep_inputs_for_prediction_data()
 
+    # prepare the inputs for systematics
+    if args.prepare_inputs_pred_sys:
+        print('INFO: Preparing the inputs for prediction systematics', '\n')
+        prep_inputs.prep_inputs_for_prediction_sim_sys()
 
 def perform_training(args):
 
@@ -72,8 +76,13 @@ def perform_training(args):
     
     # get the predictions
     if args.get_predictions:
-        print('INFO: Getting the predictions')
-        subprocess.run(f"python3 models/get_prediction.py --model_folder {out_path}/after_random_search_best1/ --samples_path {out_path} --config_path {config_path}", shell=True)
+        print('INFO: Getting the predictions nominal')
+        subprocess.run(f"python3 models/get_prediction.py --model_folder {out_path}/after_random_search_best1/ --samples_path {out_path} --config_path {config_path} --get_pred_nominal", shell=True)
+
+    # get the predictions for systematics
+    if args.get_predictions_sys:
+        print('INFO: Getting the predictions systematics')
+        subprocess.run(f"python3 models/get_prediction.py --model_folder {out_path}/after_random_search_best1/ --samples_path {out_path} --config_path {config_path} --get_pred_sys", shell=True)
 
     # get non resonant mass for different ggFHH score cuts
     if args.test_mass_sculpting:
@@ -96,10 +105,12 @@ if __name__ == "__main__":
     parser.add_argument('--prep_inputs_for_training', action='store_true', help='Prepare inputs for training')
     parser.add_argument('--prepare_inputs_pred_sim', action='store_true', help='Prepare inputs for prediction')
     parser.add_argument('--prepare_inputs_pred_data', action='store_true', help='Prepare inputs for prediction data')
+    parser.add_argument('--prepare_inputs_pred_sys', action='store_true', help='Prepare inputs for prediction systematics')
     parser.add_argument('--train_best_model', action='store_true', help='Train the best model')
     parser.add_argument('--plot_training_results', action='store_true', help='Plot training results')
     parser.add_argument('--get_permutation_importance', action='store_true', help='Get permutation importance')
-    parser.add_argument('--get_predictions', action='store_true', help='Get feature importance')
+    parser.add_argument('--get_predictions', action='store_true', help='Get predictions for nominal MC and data')
+    parser.add_argument('--get_predictions_sys', action='store_true', help='Get predictions for systematics')
     parser.add_argument('--test_mass_sculpting', action='store_true', help='Test mass sculpting')
     parser.add_argument('--perform_training', action='store_true', help='Perform training')
     parser.add_argument('--get_data_mc_plots', action='store_true', help='Get data-MC plots')
@@ -117,6 +128,7 @@ if __name__ == "__main__":
         args.prep_inputs_for_training = True
         args.prepare_inputs_pred_sim = True
         args.prepare_inputs_pred_data = True
+        args.prepare_inputs_pred_sys = True
 
     if args.perform_training:
         args.train_best_model = True

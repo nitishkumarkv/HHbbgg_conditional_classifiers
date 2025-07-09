@@ -247,9 +247,10 @@ if __name__ == "__main__":
 
     # Training loop parameters
     n_epochs = 500
+    print(f"INFO: Training for {n_epochs} epochs", '\n')
     best_loss = np.inf
     best_weights = None
-    patience = 25
+    patience = 50
     counter = 0
 
     train_loss_hist = []
@@ -303,16 +304,38 @@ if __name__ == "__main__":
 
     # Save predictions (optional)
     best_model.eval()
-    with torch.no_grad():
-        y_pred_train = best_model(X_train.to(device))
-        y_pred_val = best_model(X_val.to(device))
+    batch_size = 1024
+    y_pred_train_probs = []
+    for i in range(0, len(X_train), batch_size):
+        X_batch = X_train[i:i + batch_size].to(device)
+        with torch.no_grad():
+            y_batch = best_model(X_batch)
+            y_batch = F.softmax(y_batch, dim=1)
+            y_pred_train_probs.append(y_batch.cpu().numpy())
+    y_pred_train_probs = np.concatenate(y_pred_train_probs, axis=0)
 
-    y_pred_train_probs = F.softmax(y_pred_train, dim=1)
-    y_pred_train_np = y_pred_train_probs.cpu().detach().numpy()
+    y_pred_val_probs = []
+    for i in range(0, len(X_val), batch_size):
+        X_batch = X_val[i:i + batch_size].to(device)
+        with torch.no_grad():
+            y_batch = best_model(X_batch)
+            y_batch = F.softmax(y_batch, dim=1)
+            y_pred_val_probs.append(y_batch.cpu().numpy())
+    y_pred_val_probs = np.concatenate(y_pred_val_probs, axis=0)
+
+    # best_model.eval()
+    # with torch.no_grad():
+    #     y_pred_train = best_model(X_train.to(device))
+    #     y_pred_val = best_model(X_val.to(device))
+
+    # y_pred_train_probs = F.softmax(y_pred_train, dim=1)
+    #y_pred_train_np = y_pred_train_probs.cpu().detach().numpy()
+    y_pred_train_np = y_pred_train_probs
     y_train_np = y_train.cpu().numpy()
 
-    y_pred_val_probs = F.softmax(y_pred_val, dim=1)
-    y_pred_val_np = y_pred_val_probs.cpu().detach().numpy()
+    # y_pred_val_probs = F.softmax(y_pred_val, dim=1)
+    #y_pred_val_np = y_pred_val_probs.cpu().detach().numpy()
+    y_pred_val_np = y_pred_val_probs
     y_val_np = y_val.cpu().numpy()
 
     # Save predictions

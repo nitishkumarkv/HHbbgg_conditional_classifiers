@@ -110,7 +110,7 @@ if __name__ == "__main__":
             label=f"ggFHH score > {cut}",
             ax=ax
         )
-    ax.set_xlabel("nonResReg_dijet_mass_DNNreg [GeV]")
+    ax.set_xlabel("di-jet mass DNNreg [GeV]")
     ax.set_ylabel("Normalized events")
     ax.legend()
     #hep.cms.text("Private Work", ax=ax)

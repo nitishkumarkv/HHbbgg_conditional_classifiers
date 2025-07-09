@@ -138,6 +138,10 @@ if __name__ == "__main__":
     plt.grid(True)
     plt.tight_layout()
     plt.savefig(f'{path_for_plots}/roc_curve_one_vs_all.png')
+
+    plt.xlim([0.0001, 1.0])
+    plt.xscale('log')
+    plt.savefig(f'{path_for_plots}/roc_curve_one_vs_all_logx.png')
     plt.clf()
 
     # save auc scores
@@ -191,6 +195,10 @@ if __name__ == "__main__":
 
     # Save the combined plot
     plt.savefig(f'{path_for_plots}/roc_curve_{class_name_i}_vs_all_individual.png')
+
+    plt.xlim([0.0001, 1.0])
+    plt.xscale('log')
+    plt.savefig(f'{path_for_plots}/roc_curve_{class_name_i}_vs_all_individual_logx.png')
     plt.clf()
 
     #save the auc scores
@@ -244,6 +252,11 @@ if __name__ == "__main__":
 
         # Save the combined plot
         plt.savefig(f'{path_for_plots}/roc_curve_{class_name_i}_vs_all_individual.png')
+
+        plt.xlim([0.0001, 1.0])
+        plt.xscale('log')
+        plt.savefig(f'{path_for_plots}/roc_curve_{class_name_i}_vs_all_individual_logx.png')
+
         plt.clf()
 
         # save AUC scores
@@ -275,6 +288,9 @@ if __name__ == "__main__":
     plt.grid(True)
     plt.tight_layout()
     plt.savefig(f'{path_for_plots}/train_roc_curve_one_vs_all.png')
+    plt.xlim([0.0001, 1.0])
+    plt.xscale('log')
+    plt.savefig(f'{path_for_plots}/train_roc_curve_one_vs_all_logx.png')
     plt.clf()
 
     if n_classes>4:

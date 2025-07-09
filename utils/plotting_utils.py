@@ -56,7 +56,10 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
         "GluGluHToGG_M_125": "ggH",
         "VBFHToGG_M_125": "VBFH",
         "VHtoGG_M_125": "VH",
-        "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": "ggHH",
+        "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": "ggHH SM",
+        "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": "ggHH kl=5.00",
+        "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": "ggHH kl=0.00",
+        "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": "ggHH kl=2.45",
         "VBFHHto2B2G_CV_1_C2V_1_C3_1": "VBFHH",
         "DDQCDGJET": "DDQCDGJets",
         "TTG_10_100": "TTG_10_100",
@@ -83,35 +86,20 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
             return ak.fill_none(delta_r, -999.0)
         else:
             return delta_r
-
+        
     def add_var(events):
-        
-        events["nonRes_lead_bjet_pt_over_M_regressed"] = events.nonRes_lead_bjet_pt / events.nonRes_mjj_regressed
-        events["nonRes_sublead_bjet_ptover_M_regressed"] = events.nonRes_sublead_bjet_pt / events.nonRes_mjj_regressed
 
-        #events["nonRes_lead_bjet_ptPNetCorr_over_M_regressed"] = events.nonRes_lead_bjet_ptPNetCorr / events.nonRes_mjj_regressed
-        #events["nonRes_sublead_bjet_ptPNetCorr_over_M_regressed"] = events.nonRes_sublead_bjet_ptPNetCorr / events.nonRes_mjj_regressed
+        events["diphoton_PtOverM_ggjj"] = events.pt / events.nonResReg_HHbbggCandidate_mass
+        events["nonResReg_dijet_PtOverM_ggjj"] = events.nonResReg_dijet_pt / events.nonResReg_HHbbggCandidate_mass
 
-        events["nonRes_diphoton_PtOverM_ggjj"] = events.pt / events.nonRes_HHbbggCandidate_mass
-        events["nonRes_dijet_PtOverM_ggjj"] = events.nonRes_dijet_pt / events.nonRes_HHbbggCandidate_mass
-        #events["nonRes_dijet_PtPNetCorrOverM_ggjj"] = events.nonRes_dijet_ptPNetCorr / events.nonRes_HHbbggCandidate_mass
-        
-
-        events["Res_lead_bjet_pt_over_M_regressed"] = events.Res_lead_bjet_pt / events.Res_mjj_regressed
-        events["Res_sublead_bjet_pt_over_M_regressed"] = events.Res_sublead_bjet_pt / events.Res_mjj_regressed
-
-        #events["Res_lead_bjet_ptPNetCorr_over_M_regressed"] = events.Res_lead_bjet_ptPNetCorr / events.Res_mjj_regressed
-        #events["Res_sublead_bjet_ptPNetCorr_over_M_regressed"] = events.Res_sublead_bjet_ptPNetCorr / events.Res_mjj_regressed
-
-        events["Res_diphoton_PtOverM_ggjj"] = events.pt / events.Res_HHbbggCandidate_mass
-        events["Res_dijet_PtOverM_ggjj"] = events.Res_dijet_pt / events.Res_HHbbggCandidate_mass
+        events["nonResReg_lead_bjet_over_M_regressed"] = events.nonResReg_lead_bjet_pt / events.nonResReg_dijet_mass_DNNreg
+        events["nonResReg_sublead_bjet_over_M_regressed"] = events.nonResReg_sublead_bjet_pt / events.nonResReg_dijet_mass_DNNreg
 
         # add deltaR between lead and sublead photon
-        #events["deltaR_gg"] = np.sqrt((events.lead_eta - events.sublead_eta) ** 2 + (events.lead_phi - events.sublead_phi) ** 2)
         events["deltaR_gg"] = deltaR(events.lead_eta, events.lead_phi, events.sublead_eta, events.sublead_phi)
-        # add deltaR between lead and sublead bje
 
         return events
+
 
     def add_preselection(events):
         mass_bool = ((events.mass > 100) & (events.mass < 180))
@@ -181,14 +169,14 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
             scores_ = np.load(f"{sim_folder}/{era}/{sample}/y.npy")
             rel_w_ = np.load(f"{sim_folder}/{era}/{sample}/rel_w.npy")
             # select prompt photons for TTG and TT samples
-            if (("TTG_" in sample) or (sample == "TT")):
-                print("selecting prompt photons for TTG and TT samples")
-                prompt_photon_bool = ((events_.lead_genPartFlav == 1) | (events_.sublead_genPartFlav == 1))
-                events_ = events_[prompt_photon_bool]
-                rel_w_ = rel_w_[prompt_photon_bool]
-                scores_ = scores_[prompt_photon_bool]
+            #if (("TTG_" in sample) or (sample == "TT")):
+            #    print("selecting prompt photons for TTG and TT samples")
+            #    prompt_photon_bool = ((events_.lead_genPartFlav == 1) | (events_.sublead_genPartFlav == 1))
+            #    events_ = events_[prompt_photon_bool]
+            #    rel_w_ = rel_w_[prompt_photon_bool]
+            #    scores_ = scores_[prompt_photon_bool]
 
-            events_["weight_tot"] = rel_w_
+            #events_["weight_tot"] = rel_w_
             for i, class_name in enumerate(class_names):
                 if i < scores_.shape[1]:
                     num_classes = scores_.shape[1]
@@ -207,7 +195,7 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
 
 
         # Separate signal from background
-        if sample in ["GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "VBFHHto2B2G_CV_1_C2V_1_C3_1"]:
+        if sample in ["GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "VBFHHto2B2G_CV_1_C2V_1_C3_1", "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00"]:
             signal_mc_dict[label_dict[sample]] = sample_combined
         else:
             stack_mc_dict[label_dict[sample]] = sample_combined
@@ -299,6 +287,7 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
         data_hist, _ = np.histogram(ak.to_numpy((data_combined[variable])), bins=bin_edges)
         data_err = np.sqrt(data_hist)  # Poisson errors
 
+        signal_color_list = ["red", "green", "blue", "purple"]
         # Compute signal histograms with weights
         signal_histograms = {}
         for signal, data in signal_mc_dict.items():
@@ -367,16 +356,20 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
             )
 
         # Plot signal as step histogram
+        color_idx = 0
         for signal, hist in signal_histograms.items():
+
             if "ggHH" in signal:
                 ax.step(
                     (bin_edges[:-1] + bin_edges[1:]) / 2,
                     hist,
                     where="mid",
                     linestyle="dashed",
-                    color="red",
+                    color=signal_color_list[color_idx],
                     label=f"{signal} x {signal_scale}"
                 )
+                color_idx += 1
+            
             else:
                 signal_scale_ = signal_scale*10
                 ax.step(
@@ -388,7 +381,7 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
                     label=f"{signal} x {signal_scale_}"
                 )
 
-        ax.legend(fontsize=16, ncol=2)
+        ax.legend(fontsize=14, ncol=2)
 
         # Labels
         ax.set_ylabel("Events")
@@ -396,7 +389,7 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
 
         if var_config[variable]["log"]:
             ax.set_yscale("log")
-            ax.set_ylim(0.1, 400 * np.max(data_hist))
+            ax.set_ylim(0.1, 600 * np.max(data_hist))
         else:
             ax.set_ylim(0, 1.7 * np.max(data_hist))
         # Ratio plot (Data / MC)
@@ -460,15 +453,19 @@ if __name__ == "__main__":
 
     # sim_samples = ["GGJets", "DDQCDGJET", "TTGG", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "VBFHToGG_M_125", "VHtoGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "VBFHHto2B2G_CV_1_C2V_1_C3_1"]
     # sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "VBFHHto2B2G_CV_1_C2V_1_C3_1", "TTGG", "GGJets", "DDQCDGJET"]
-    sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET"]
+    #sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET"]
     #sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET", "TTG_10_100", "TTG_100_200", "TTG_200", "TT"]
-    # variables_ = ["Res_mjj_regressed", "Res_dijet_mass", "nonRes_mjj_regressed", "mass", "nonRes_dijet_mass", "minMVAID", "maxMVAID", "n_jets", "sublead_eta", "lead_eta", "sublead_pt", "lead_pt", "pt", "eta", "lead_mvaID", "sublead_mvaID"]
-    # extra_vars = ["mass", "nonRes_dijet_mass", "Res_dijet_mass", "weight", "pt", "nonRes_dijet_pt", "Res_dijet_pt", "Res_lead_bjet_pt", "Res_sublead_bjet_pt", "Res_lead_bjet_ptPNetCorr", "Res_sublead_bjet_ptPNetCorr", "nonRes_HHbbggCandidate_mass", "Res_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "Res_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "jet1_mass", "jet2_mass", "jet3_mass", "jet4_mass", "jet5_mass", "jet6_mass", "Res_lead_bjet_jet_idx", "Res_sublead_bjet_jet_idx", "jet1_index", "jet2_index", "jet3_index", "jet4_index", "jet5_index", "jet6_index",
-    #                        "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet1_eta", "jet2_eta", "jet3_eta", "jet4_eta", "jet5_eta", "jet6_eta", "jet1_phi", "jet2_phi", "jet3_phi", "jet4_phi", "jet5_phi", "jet6_phi"]
+    sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET", "TTG_100_200", "TTG_200"]
+    #sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET", "TTG_100_200", "TTG_200"]
+    variables_ = ["Res_mjj_regressed", "Res_dijet_mass", "nonRes_mjj_regressed", "mass", "nonRes_dijet_mass", "minMVAID", "maxMVAID", "n_jets", "sublead_eta", "lead_eta", "sublead_pt", "lead_pt", "pt", "eta", "lead_mvaID", "sublead_mvaID", "nonResReg_dijet_mass_DNNreg", "nonResReg_HHbbggCandidate_mass", "nonResReg_dijet_pt", "nonResReg_lead_bjet_eta", "nonResReg_sublead_bjet_eta", "nonResReg_lead_bjet_pt", "nonResReg_sublead_bjet_pt"]
+    extra_vars = ["mass", "nonRes_dijet_mass", "Res_dijet_mass", "weight", "pt", "nonRes_dijet_pt", "Res_dijet_pt", "Res_lead_bjet_pt", "Res_sublead_bjet_pt", "Res_lead_bjet_ptPNetCorr", "Res_sublead_bjet_ptPNetCorr", "nonRes_HHbbggCandidate_mass", "Res_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "Res_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "jet1_mass", "jet2_mass", "jet3_mass", "jet4_mass", "jet5_mass", "jet6_mass", "Res_lead_bjet_jet_idx", "Res_sublead_bjet_jet_idx", "jet1_index", "jet2_index", "jet3_index", "jet4_index", "jet5_index", "jet6_index",
+                            "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet1_eta", "jet2_eta", "jet3_eta", "jet4_eta", "jet5_eta", "jet6_eta", "jet1_phi", "jet2_phi", "jet3_phi", "jet4_phi", "jet5_phi", "jet6_phi"]
 
-    variables_ = ["mass", "nonRes_dijet_mass", "nonResReg_dijet_mass", "nonResReg_dijet_mass_DNNreg", "nonResReg_DNNpair_dijet_mass", "nonResReg_DNNpair_dijet_mass_DNNreg", "pt", "nonRes_dijet_pt", "nonRes_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "lead_eta", "lead_phi", "sublead_eta", "sublead_phi"]
-    extra_vars = []
-    
+    # variables_ = ["mass", "nonRes_dijet_mass", "nonResReg_dijet_mass", "nonResReg_dijet_mass_DNNreg", "nonResReg_DNNpair_dijet_mass", "nonResReg_DNNpair_dijet_mass_DNNreg", "pt", "nonRes_dijet_pt", "nonRes_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "lead_eta", "lead_phi", "sublead_eta", "sublead_phi"]
+
+    for BSM_sample in ["GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00"]:
+        if BSM_sample in training_config["sample_to_class"].keys():
+            sim_samples.append(BSM_sample)    
 
     input_vars_path = args.training_config_path.replace("training_config.yaml", "input_variables.yaml")
     with open(input_vars_path, "r") as f:

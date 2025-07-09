@@ -8,6 +8,9 @@ sample_to_class: # processes and classes
     VBFHToGG_M_125: is_single_H_bkg
     VHtoGG_M_125: is_single_H_bkg
     GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00: is_GluGluToHH_sig
+    GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00: is_GluGluToHH_sig
+    GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00: is_GluGluToHH_sig
+    GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00: is_GluGluToHH_sig
 
 classes: # all classes
 - is_non_resonant_bkg
@@ -21,7 +24,7 @@ weight_scheme_process: # how to weight each processes within a class
     is_non_resonant_bkg: xsec 
     is_ttH_bkg: xsec
     is_single_H_bkg: xsec
-    is_GluGluToHH_sig: xsec 
+    is_GluGluToHH_sig: equal_weight
 
 # some info for training
 do_random_search: False
@@ -134,3 +137,4 @@ systematics:
 save_all_columns_sim_nominal : True
 save_all_columns_data_nominal : True
 save_all_columns_sim_systematics : False
+

@@ -38,7 +38,7 @@ class PrepareInputs:
         #self.extra_vars = ["mass", "nonRes_dijet_mass", "Res_dijet_mass", "nonRes_has_two_btagged_jets", "weight", "pt", "nonRes_dijet_pt", "Res_dijet_pt", "Res_lead_bjet_pt", "Res_sublead_bjet_pt", "Res_lead_bjet_ptPNetCorr", "Res_sublead_bjet_ptPNetCorr", "nonRes_HHbbggCandidate_mass", "Res_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "Res_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "jet1_mass", "jet2_mass", "jet3_mass", "jet4_mass", "jet5_mass", "jet6_mass", "Res_lead_bjet_jet_idx", "Res_sublead_bjet_jet_idx", "jet1_index", "jet2_index", "jet3_index", "jet4_index", "jet5_index", "jet6_index",
         #                   "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet1_eta", "jet2_eta", "jet3_eta", "jet4_eta", "jet5_eta", "jet6_eta", "jet1_phi", "jet2_phi", "jet3_phi", "jet4_phi", "jet5_phi", "jet6_phi", "lead_phi", "sublead_phi"]
 
-        self.extra_vars = ["mass", "nonRes_dijet_mass", "nonResReg_dijet_mass", "nonResReg_dijet_mass_DNNreg", "nonResReg_DNNpair_dijet_mass", "nonResReg_DNNpair_dijet_mass_DNNreg", "weight", "pt", "nonRes_dijet_pt", "nonRes_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "lead_eta", "lead_phi", "sublead_eta", "sublead_phi"]
+        self.extra_vars = ["mass", "nonRes_dijet_mass", "nonResReg_dijet_mass", "nonResReg_dijet_mass_DNNreg", "nonResReg_HHbbggCandidate_mass", "nonResReg_dijet_pt", "nonResReg_lead_bjet_pt", "nonResReg_sublead_bjet_pt", "nonResReg_lead_bjet_eta", "nonResReg_DNNpair_dijet_mass", "nonResReg_DNNpair_dijet_mass_DNNreg", "weight", "pt", "nonRes_dijet_pt", "nonRes_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "lead_eta", "lead_phi", "sublead_eta", "sublead_phi"]
         
         # prepare process numbers for proccesses in each class
         num_process_each_class = {
@@ -56,6 +56,11 @@ class PrepareInputs:
         self.process_numbers = process_numbers
 
         self.class_idx_to_name = {i: class_ for i, class_ in enumerate(self.classes)}
+
+        # info to save in parquet
+        self.save_all_columns_sim_nominal = training_info["save_all_columns_sim_nominal"]
+        self.save_all_columns_data_nominal = training_info["save_all_columns_data_nominal"]
+        self.save_all_columns_sim_systematics = training_info["save_all_columns_sim_systematics"]
         
 
     def load_vars(self, path):
@@ -81,7 +86,7 @@ class PrepareInputs:
     def add_var(self, events, era):
 
         events["diphoton_PtOverM_ggjj"] = events.pt / events.nonResReg_HHbbggCandidate_mass
-        events["nonResReg_dijet_PtOverM_ggjj"] = events.nonResReg_dijet_pt / events.nonResReg_HHbbggCandidate_mas        
+        events["nonResReg_dijet_PtOverM_ggjj"] = events.nonResReg_dijet_pt / events.nonResReg_HHbbggCandidate_mass
 
         events["nonResReg_lead_bjet_over_M_regressed"] = events.nonResReg_lead_bjet_pt / events.nonResReg_dijet_mass_DNNreg
         events["nonResReg_sublead_bjet_over_M_regressed"] = events.nonResReg_sublead_bjet_pt / events.nonResReg_dijet_mass_DNNreg
@@ -358,12 +363,12 @@ class PrepareInputs:
             var_values = events[var][mask]
             corr_matrix[i, 1] = np.corrcoef(nonRes_dijet_mass, var_values)[0, 1]
 
-            mask = ((events[var] > -998.0) & (events.nonRes_mjj_regressed > -998.0))
+            mask = ((events[var] > -998.0) & (events.nonResReg_dijet_mass > -998.0))
             nonResReg_dijet_mass = events.nonResReg_dijet_mass[mask]
             var_values = events[var][mask]
             corr_matrix[i, 2] = np.corrcoef(nonResReg_dijet_mass, var_values)[0, 1]
 
-            mask = ((events[var] > -998.0) & (events.Res_dijet_mass > -998.0))
+            mask = ((events[var] > -998.0) & (events.nonResReg_dijet_mass_DNNreg > -998.0))
             nonResReg_dijet_mass_DNNreg = events.nonResReg_dijet_mass_DNNreg[mask]
             var_values = events[var][mask]
             corr_matrix[i, 3] = np.corrcoef(nonResReg_dijet_mass_DNNreg, var_values)[0, 1]
@@ -388,14 +393,22 @@ class PrepareInputs:
         
         mass_bool = ((events.mass > 100) & (events.mass < 180))
         dijet_mass_bool = ((events.nonResReg_dijet_mass_DNNreg > 70) & (events.nonResReg_dijet_mass_DNNreg < 190))
-        
-        #lead_mvaID_bool = ((events.lead_mvaID > 0.0439603) & (events.lead_isScEtaEB == True)) | ((events.lead_mvaID > -0.249526) & (events.lead_isScEtaEE == True))
-        #sublead_mvaID_bool = ((events.sublead_mvaID > 0.0439603) & (events.sublead_isScEtaEB == True)) | ((events.sublead_mvaID > -0.249526) & (events.sublead_isScEtaEE == True))
 
         lead_mvaID_bool = (events.lead_mvaID > -0.7)
         sublead_mvaID_bool = (events.sublead_mvaID > -0.7)
 
         events = events[mass_bool & dijet_mass_bool & lead_mvaID_bool & sublead_mvaID_bool]
+
+        return events
+    
+    def preselection_for_pred(self, events):
+        
+        mass_bool = ((events.mass > 100) & (events.mass < 180))
+
+        lead_mvaID_bool = (events.lead_mvaID > -0.7)
+        sublead_mvaID_bool = (events.sublead_mvaID > -0.7)
+
+        events = events[mass_bool & lead_mvaID_bool & sublead_mvaID_bool]
 
         return events
     
@@ -651,12 +664,15 @@ class PrepareInputs:
             for samples in training_info["samples_info"][era].keys():
                 
                 parquet_path = training_info["samples_info"][era][samples]
-                events = ak.from_parquet(f"{samples_path}/{parquet_path}")#, columns=vars_to_load)
-                
+                if self.save_all_columns_sim_nominal:
+                    events = ak.from_parquet(f"{samples_path}/{parquet_path}")
+                else:
+                    events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
+
                 print(f"INFO: Number of events in {samples} for {era}: {len(events)}")
 
                 # add preselection
-                events = self.preselection(events)
+                events = self.preselection_for_pred(events)
 
                 # add more variables
                 events = self.add_var(events, era)
@@ -716,6 +732,106 @@ class PrepareInputs:
                     pickle.dump(mean_std_dict, f)
 
         return 0
+
+    def prep_inputs_for_prediction_sim_sys(self):
+
+        fill_nan = self.fill_nan
+        training_info = self.training_info
+        inputs_path = self.outpath
+        out_path = f"{inputs_path}/individual_samples/"
+        os.makedirs(out_path, exist_ok=True)
+        # get the variables required for training
+        vars_config = self.load_vars(self.input_var_json)[self.model_type]
+
+        with open(f"{inputs_path}/input_vars.txt", 'r') as f:
+            vars = json.load(f)
+        vars_for_training = vars
+
+        # vars_for_log = vars_config["vars_for_log_transform"]
+
+        vars_to_load = vars_for_training + self.extra_vars
+
+        samples_path = training_info["samples_info"]["samples_path"]
+
+        for era in training_info["samples_info"]["eras"]:
+            for samples in training_info["samples_info"][era].keys():
+                for sys in training_info["systematics"]:
+
+                    if samples in ["GGJets", "DDQCDGJET", "TTG_10_100", "TTG_100_200", "TTG_200", "TT", "TTGG"]:
+                        continue
+                
+                    parquet_path = (training_info["samples_info"][era][samples]).replace("nominal", sys)
+                    if not os.path.exists(f"{samples_path}/{parquet_path}"):
+                        print(f"WARNING: {samples} for {era} for {sys} does not exist. Skipping.: {samples_path}/{parquet_path}")
+                        continue
+                    if self.save_all_columns_sim_systematics:
+                        events = ak.from_parquet(f"{samples_path}/{parquet_path}")
+                    else:
+                        events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
+
+                    print(f"INFO: Number of events in {samples} for {era} for {sys}: {len(events)}")
+
+                    # add preselection
+                    events = self.preselection_for_pred(events)
+
+                    # add more variables
+                    events = self.add_var(events, era)
+
+                    # get relative weights according to cross section of the process
+                    events = self.get_relative_xsec_weight(events, samples, era)
+
+                    comb_inputs = pd.DataFrame(ak.to_list(events))
+
+                    X = comb_inputs[vars_for_training]
+                    #Y = comb_inputs[[cls for cls in self.classes]]
+                    relative_weights = comb_inputs["rel_xsec_weight"]
+
+                    # perform log transformation for variables if needed
+                    # for var in vars_for_log:
+                    #     X[var] = np.log(X[var])
+
+                    X = X.values
+                    #Y = Y.values
+                    relative_weights = relative_weights.values
+
+                    # mask -999.0 to nan
+                    mask = (X < -998.0)
+                    X[mask] = np.nan
+
+                    # get mean according to training data set
+                    scale_file = f"{inputs_path}/mean_std_dict.pkl"
+                    with open(scale_file, 'rb') as f:
+                        mean_std_dict = pickle.load(f)
+
+                    mean = mean_std_dict["mean"]
+                    std = mean_std_dict["std_dev"]
+
+                    # transform all data set
+                    X = self.standardize(X, mean, std)
+
+                    # replace NaN with fill_nan value
+                    X = np.nan_to_num(X, nan=fill_nan)
+
+                    # save all the numpy arrays
+                    #print("INFO: saving inputs for mlp")
+                    full_path_to_save = f"{out_path}/{era}/{samples}/{sys}/"
+                    os.makedirs(full_path_to_save, exist_ok=True)
+
+                    np.save(f"{full_path_to_save}/X", X)
+                    np.save(f"{full_path_to_save}/rel_w", relative_weights)
+
+                    # also save the event
+                    ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
+
+                    # save the training mean ans std_dev. This will be used for standardizing data
+                    mean_std_dict = {
+                        "mean": mean,
+                        "std_dev": std
+                    }
+                    with open(f"{out_path}/mean_std_dict.pkl", 'wb') as f:
+                        pickle.dump(mean_std_dict, f)
+
+        return 0
     
     def prep_inputs_for_prediction_data(self):
 
@@ -739,8 +855,10 @@ class PrepareInputs:
         datas = training_info["samples_info"]["data"]
 
         for data in datas:
-
-            events = ak.from_parquet(f"{samples_path}/{datas[data]}")
+            if self.save_all_columns_data:
+                events = ak.from_parquet(f"{samples_path}/{datas[data]}")
+            else:
+                events = ak.from_parquet(f"{samples_path}/{datas[data]}", columns=vars_to_load)
 
             sample_to_era = {"2022_EraE": "postEE", 
                                  "2022_EraF": "postEE", 
@@ -748,11 +866,12 @@ class PrepareInputs:
                                  "2022_EraC": "preEE", 
                                  "2022_EraD": "preEE",
                                  "2023_EraCv1to3": "preBPix", 
-                                 "2023_EraCv4": "preBPix", 
+                                 "2023_EraCv4": "preBPix",
+                                 "2023_EraC": "preBPix",
                                  "2023_EraD": "postBPix"}
 
             # add preselection
-            events = self.preselection(events)
+            events = self.preselection_for_pred(events)
 
             # add more variables
             events = self.add_var(events, sample_to_era[data])
@@ -765,10 +884,7 @@ class PrepareInputs:
             # for var in vars_for_log:
             #     X[var] = np.log(X[var])
 
-
             X = X.values
-
-
 
             # mask -999.0 to nan
             mask = (X < -998.0)
@@ -806,55 +922,7 @@ class PrepareInputs:
 
             ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
 
-        return 0
-    
-    def prep_inputs_for_parquets(self):
-
-        fill_nan = self.fill_nan
-        predict_parquet_info = self.predict_parquet_info
-
-        # get the variables required for training
-        # load a txt file
-        # load list of input features
-        input_vars_path = predict_parquet_info["input_vars_path"]
-        with open(input_vars_path, 'r') as f:
-            vars_for_training = json.load(f)
-        # vars_for_log = vars_config["vars_for_log_transform"]
-            
-        vars_to_load = vars_for_training + self.extra_vars
-
-        parquet_path = predict_parquet_info["parquet_path"]
-        events = ak.from_parquet(parquet_path, columns=vars_to_load+["year"])
-        # add more variables
-        events = self.add_var_pred(events)
-
-        comb_inputs = pd.DataFrame(ak.to_list(events))
-        
-        X = comb_inputs[vars_for_training]
-
-        X = X.values
-
-        mask = (X < -998.0)
-        X[mask] = np.nan
-
-        # get mean according to training data set
-        scale_file = predict_parquet_info["scale_file"]
-        with open(scale_file, 'rb') as f:
-            mean_std_dict = pickle.load(f)
-
-        mean = mean_std_dict["mean"]
-        std = mean_std_dict["std_dev"]
-
-        X = self.standardize(X, mean, std)
-        X = np.nan_to_num(X, nan=fill_nan)
-
-        out_path = predict_parquet_info["out_path"]
-        os.makedirs(out_path, exist_ok=True)
-        # save all the numpy arrays
-        print(f"INFO: saving inputs for {parquet_path}")
-        np.save(f"{out_path}/X", X)
-
-        return 0
+        return
     
 
     
