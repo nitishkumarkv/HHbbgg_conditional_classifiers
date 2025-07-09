@@ -1425,7 +1425,7 @@ class OptunaCategorizer:
         # load the samples
         samples_input = self.load_samples()
 
-        """if self.SR_strategy == "sequential":
+        if self.SR_strategy == "sequential":
             best_params, best_sig_values = self.optmize_SR_sequential(samples_input)
 
         # load the best cut values
@@ -1436,7 +1436,7 @@ class OptunaCategorizer:
             self.base_path,
             best_cut_values,
             folder_name=self.cat_folder,
-            )"""
+            )
         
         folder_list = [f"cat{i}" for i in range(1, 4)]
 
