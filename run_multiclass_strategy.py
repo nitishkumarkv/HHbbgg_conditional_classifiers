@@ -94,6 +94,11 @@ def perform_training(args):
         print('INFO: Getting data-MC plots')
         subprocess.run(f"python3 utils/plotting_utils.py --base-path {out_path} --training_config_path {training_config_path}", shell=True)
 
+    # get score shapes for different kl samples
+    if args.get_score_shape_diff_kl:
+        print('INFO: Getting score shape differences')
+        subprocess.run(f"python3 utils/score_shape_diff_kl.py --folder {out_path}/individual_samples/", shell=True)
+
 def perform_categorisation(args):
     pass
 
@@ -116,6 +121,7 @@ if __name__ == "__main__":
     parser.add_argument('--get_data_mc_plots', action='store_true', help='Get data-MC plots')
     parser.add_argument('--perform_categorisation', action='store_true', help='Perform categorisation')
     parser.add_argument('--prepare_inputs', action='store_true', help='Prepare all inputs')
+    parser.add_argument('--get_score_shape_diff_kl', action='store_true', help='Get score shape differences using kl samples')
     parser.add_argument('--do_all', action='store_true', help='Perform all steps')
     args = parser.parse_args()
 
@@ -135,8 +141,10 @@ if __name__ == "__main__":
         args.plot_training_results = True
         args.get_permutation_importance = True
         args.get_predictions = True
+        args.get_predictions_sys = True
         args.test_mass_sculpting = True
         args.get_data_mc_plots = True
+        args.get_score_shape_diff_kl = True
 
     # prepare inputs
     prepare_inputs(args)

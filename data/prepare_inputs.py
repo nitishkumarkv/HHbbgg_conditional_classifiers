@@ -59,7 +59,7 @@ class PrepareInputs:
 
         # info to save in parquet
         self.save_all_columns_sim_nominal = training_info["save_all_columns_sim_nominal"]
-        self.save_all_columns_data_nominal = training_info["save_all_columns_data_nominal"]
+        self.save_all_columns_data = training_info["save_all_columns_data"]
         self.save_all_columns_sim_systematics = training_info["save_all_columns_sim_systematics"]
         
 

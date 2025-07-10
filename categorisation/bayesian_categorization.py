@@ -99,7 +99,7 @@ class OptunaCategorizer:
         fig.savefig(os.path.join(out_dir, f"parallel_coordinates_cat_{category}.png"))
         plt.clf()
 
-    def preselection(self, events, scores=None):
+    def preselection(self, events, scores):
         
         mass_bool = ((events.mass > 100) & (events.mass < 180))
         dijet_mass_bool = ((events.nonResReg_dijet_mass_DNNreg > 70) & (events.nonResReg_dijet_mass_DNNreg < 190))
@@ -108,8 +108,8 @@ class OptunaCategorizer:
         sublead_mvaID_bool = (events.sublead_mvaID > -0.7)
 
         events = events[(mass_bool & dijet_mass_bool & lead_mvaID_bool & sublead_mvaID_bool)]
-        if scores is not None:
-            scores[(mass_bool & dijet_mass_bool & lead_mvaID_bool & sublead_mvaID_bool)]
+        scores = scores[(mass_bool & dijet_mass_bool & lead_mvaID_bool & sublead_mvaID_bool)]
+
         return events, scores
     
     def load_samples(self):
@@ -647,7 +647,7 @@ class OptunaCategorizer:
     #############################################
     # Sequential categorization using Optuna
     #############################################
-
+    
     def optmize_SR_sequential(self, samples_input):
         """
         For each category, use Optuna to find the best multidimensional cuts:
@@ -668,24 +668,28 @@ class OptunaCategorizer:
         print(f"Creating output directory: {cat_path}")
         os.makedirs(cat_path, exist_ok=True)
 
-        # Begin with all events.
-        samples_remaining = samples_input.copy()
-
         # Determine background classes using the first event.
         first_scores = np.stack(samples_input["score"].values)
         n_classes = first_scores.shape[1]
         bg_classes = [j for j in range(n_classes) if j != self.signal_class]
-
-        # Initialize dynamic search ranges.
-        prev_signal_cut = 1.0  # For signal score: initial range is (0, 1).
-        # For each background class, since we want to cut "less than" a threshold, we update the lower bound.
-        prev_bg_cut = {b: 0.0 for b in bg_classes}
 
         run_significance_list = []  # Store significance for each run.
         run_best_params_list = []  # Store best parameters for each run.
         run_sig_peak_list = []  # Store signal in peak for each run.
         run_bkg_side_list = []  # Store background in sidebands for each run.
         for run in range(self.n_runs):
+
+            # Begin with all events.
+            samples_remaining = samples_input.copy()
+
+            # Initialize dynamic search ranges.
+            prev_signal_cut = 1.0  # For signal score: initial range is (0, 1).
+            # For each background class, since we want to cut "less than" a threshold, we update the lower bound.
+            prev_bg_cut = {b: 0.0 for b in bg_classes}
+
+            # print numner of signal events
+            n_signal_events = samples_remaining[samples_remaining["labels"] == 1].weights.sum()
+            print(f"Run {run}: Number of signal events: {n_signal_events}")
 
             print(f"--- Run {run} ---")
 
@@ -708,11 +712,11 @@ class OptunaCategorizer:
 
                 def objective(trial):
                     # Signal threshold search restricted to (0, prev_signal_cut)
-                    th_signal = trial.suggest_float("th_signal", 0, prev_signal_cut)
+                    th_signal = trial.suggest_float("th_signal", 0, 1)
                     mask = scores[:, self.signal_class] > th_signal
                     # Background thresholds for each background class, search in (prev_bg_cut[b], 1)
                     for b in bg_classes:
-                        th_bg = trial.suggest_float(f"th_bg_{b}", prev_bg_cut[b], 1)
+                        th_bg = trial.suggest_float(f"th_bg_{b}", 0, 1)
                         mask = mask & (scores[:, b] < th_bg)
 
                     if np.sum(mask) == 0:
@@ -1461,13 +1465,6 @@ class OptunaCategorizer:
         )
 
 
-    
-        
-
-
-
-
-
 
 #############################################
 # Main execution
@@ -1480,7 +1477,7 @@ if __name__ == "__main__":
     parser.add_argument("--optuna_folder", type=str, default="optuna_categorization", help="Folder name for Optuna results")
     parser.add_argument("--n_trials", type=int, default=150, help="Number of trials for Optuna optimization")
     parser.add_argument("--SR_strategy", type=str, choices=["sequential", "simultaneous"], default="sequential", help="Strategy for SR categorization")
-    parser.add_argument("--n_runs", type=int, default=10, help="Number of complete runs for the categorization")
+    parser.add_argument("--n_runs", type=int, default=15, help="Number of complete runs for the categorization")
     parser.add_argument("--gamma_strategy", type=str, choices=["sqrt", "linear"], default="linear", help="Gamma strategy for TPE sampler")
     parser.add_argument("--side_band_threshold", type=int, default=10, help="Threshold for sideband requirements")
 

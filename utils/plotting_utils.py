@@ -105,11 +105,7 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
         mass_bool = ((events.mass > 100) & (events.mass < 180))
         #dijet_mass_bool = ((events.Res_mjj_regressed > 80) & (events.Res_mjj_regressed < 180))
         dijet_mass_bool = ((events.nonResReg_dijet_mass_DNNreg > 70) & (events.nonResReg_dijet_mass_DNNreg < 190))
-        
-        #lead_mvaID_bool = ((events.lead_mvaID > 0.0439603) & (events.lead_isScEtaEB == True)) | ((events.lead_mvaID > -0.249526) & (events.lead_isScEtaEE == True))
-        #sublead_mvaID_bool = ((events.sublead_mvaID > 0.0439603) & (events.sublead_isScEtaEB == True)) | ((events.sublead_mvaID > -0.249526) & (events.sublead_isScEtaEE == True))
 
-        # add lead and sublead mvaID cut at -0.7
         lead_mvaID_bool = (events.lead_mvaID > -0.7)
         sublead_mvaID_bool = (events.sublead_mvaID > -0.7)
 
@@ -161,13 +157,12 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
         sample_combined = []
         for era in eras:
             if os.path.exists(f"{sim_folder}/{era}/{sample}/events.parquet"):
-                events_ = ak.from_parquet(f"{sim_folder}/{era}/{sample}/events.parquet", columns=variables+["lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_genPartFlav", "sublead_genPartFlav"])
+                events_ = ak.from_parquet(f"{sim_folder}/{era}/{sample}/events.parquet", columns=variables+["lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_genPartFlav", "sublead_genPartFlav", "weight_tot"])
             else:
-                events_ = ak.from_parquet(f"{events_path}/{samples_info[era][sample]}", columns=variables+["lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_genPartFlav", "sublead_genPartFlav"])
+                events_ = ak.from_parquet(f"{events_path}/{samples_info[era][sample]}", columns=variables+["lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_genPartFlav", "sublead_genPartFlav", "weight_tot"])
 
         
             scores_ = np.load(f"{sim_folder}/{era}/{sample}/y.npy")
-            rel_w_ = np.load(f"{sim_folder}/{era}/{sample}/rel_w.npy")
             # select prompt photons for TTG and TT samples
             #if (("TTG_" in sample) or (sample == "TT")):
             #    print("selecting prompt photons for TTG and TT samples")

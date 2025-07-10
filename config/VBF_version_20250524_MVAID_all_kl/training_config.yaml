@@ -135,6 +135,6 @@ systematics:
 
 # info to save in the parquets
 save_all_columns_sim_nominal : True
-save_all_columns_data_nominal : True
+save_all_columns_data : True
 save_all_columns_sim_systematics : False
 
