@@ -1431,6 +1431,8 @@ class OptunaCategorizer:
 
         if self.SR_strategy == "sequential":
             best_params, best_sig_values = self.optmize_SR_sequential(samples_input)
+        elif self.SR_strategy == "simultaneous":
+            raise NotImplementedError("Simultaneous SR strategy is not implemented yet.")
 
         # load the best cut values
         with open(f"{self.base_path}/{self.cat_folder}/best_cut_params.json", "r") as f:
