@@ -9,7 +9,8 @@ import yaml
 # Apply CMS style
 hep.style.use("CMS")
 
-def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, bins=40, mass_window=(120, 130), signal_scale=100, only_MC=False):
+
+def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, bins=40, mass_window=(120, 130), mjj_mass_window=(110, 140), signal_scale=100, only_MC=False):
     """
     Load data first, then loop over variables to plot stacked histograms with MC and Data, including ratio plots.
 
@@ -24,9 +25,9 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
     """
     # create output directory if it does not exist
     if only_MC:
-        out_path = os.path.join(out_path, "MC_Plots")
+        out_path = os.path.join(out_path, "MC_Plots_70_190")
     else:
-        out_path = os.path.join(out_path, "Data_MC_Plots")
+        out_path = os.path.join(out_path, "Data_MC_Plots_70_190")
     os.makedirs(out_path, exist_ok=True)
     mc_colors = ["red", "blue", "green", "purple", "orange", "cyan", "magenta", "gold", "brown", "pink", "lime"]
     mc_colors = [
@@ -38,11 +39,12 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
     "#EC407A",  # Deeper Pink
     "#C0CA33",  # Darker Lime
     "#26A69A",  # Deep Teal
-    "#FB8C00",  # Vibrant Orange
+    "blue",  # Deep Brown
+    "red",  # Vibrant Orange
     "#795548",  # Deep Brown
     "#757575",  # Medium Gray
-    "#8E24AA",  # Medium-Dark Purple
-]
+    "#66BB6A",  # Light Green
+    ]
 
     label_dict = {
         "GGJets": "GGJets",
@@ -54,32 +56,122 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
         "GluGluHToGG_M_125": "ggH",
         "VBFHToGG_M_125": "VBFH",
         "VHtoGG_M_125": "VH",
-        "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": "ggHH",
+        "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": "ggHH SM",
+        "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": "ggHH kl=5.00",
+        "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": "ggHH kl=0.00",
+        "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": "ggHH kl=2.45",
         "VBFHHto2B2G_CV_1_C2V_1_C3_1": "VBFHH",
-        "DDQCDGJET": "DDQCDGJets"
+        "DDQCDGJET": "DDQCDGJets",
+        "TTG_10_100": "TTG_10_100",
+        "TTG_100_200": "TTG_100_200",
+        "TTG_200": "TTG_200",
+        "TT": "TT",
     }
 
     # Load MC and Signal Data First
     stack_mc_dict = {}
     signal_mc_dict = {}
 
-    def add_preselection(events):
-        # Apply preselection criteria
-        dijet_bool = (events["nonRes_mjj_regressed"] > 70) & (events["nonRes_mjj_regressed"] < 190)
+    def deltaR(eta1, phi1, eta2, phi2, fill_none=True):
+        eta1 = ak.mask(eta1, (eta1 != -999) & (phi1 != -999) & (eta2 != -999) & (phi2 != -999))
+        phi1 = ak.mask(phi1, (eta1 != -999) & (phi1 != -999) & (eta2 != -999) & (phi2 != -999))
+        eta2 = ak.mask(eta2, (eta1 != -999) & (phi1 != -999) & (eta2 != -999) & (phi2 != -999))
+        phi2 = ak.mask(phi2, (eta1 != -999) & (phi1 != -999) & (eta2 != -999) & (phi2 != -999))
+
+        dphi = (phi1 - phi2 + np.pi) % (2 * np.pi) - np.pi
+        deta = eta1 - eta2
+        delta_r = np.sqrt(deta**2 + dphi**2)
+
+        if fill_none:
+            return ak.fill_none(delta_r, -999.0)
+        else:
+            return delta_r
         
-        #events = events[dijet_bool]
+    def add_var(events):
+
+        events["diphoton_PtOverM_ggjj"] = events.pt / events.nonResReg_HHbbggCandidate_mass
+        events["nonResReg_dijet_PtOverM_ggjj"] = events.nonResReg_dijet_pt / events.nonResReg_HHbbggCandidate_mass
+
+        events["nonResReg_lead_bjet_over_M_regressed"] = events.nonResReg_lead_bjet_pt / events.nonResReg_dijet_mass_DNNreg
+        events["nonResReg_sublead_bjet_over_M_regressed"] = events.nonResReg_sublead_bjet_pt / events.nonResReg_dijet_mass_DNNreg
+
+        # add deltaR between lead and sublead photon
+        events["deltaR_gg"] = deltaR(events.lead_eta, events.lead_phi, events.sublead_eta, events.sublead_phi)
+
+        return events
+
+
+    def add_preselection(events):
+        mass_bool = ((events.mass > 100) & (events.mass < 180))
+        #dijet_mass_bool = ((events.Res_mjj_regressed > 80) & (events.Res_mjj_regressed < 180))
+        dijet_mass_bool = ((events.nonResReg_dijet_mass_DNNreg > 70) & (events.nonResReg_dijet_mass_DNNreg < 190))
+
+        lead_mvaID_bool = (events.lead_mvaID > -0.7)
+        sublead_mvaID_bool = (events.sublead_mvaID > -0.7)
+
+        events = events[mass_bool & dijet_mass_bool & lead_mvaID_bool & sublead_mvaID_bool]
+        #events = events[mass_bool & dijet_mass_bool]
+
+        events = add_var(events)
+
         return events
 
     class_names = ["non_resonant_bkg_score", "ttH_score", "other_single_H_score", "GluGluToHH_score", "VBFToHH_sig_score"]
     events_path = samples_info["samples_path"]
+
+    # Load Data First
+    data_combined = None
+
+    data_samples = training_config["samples_info"]["data"]
+
+    for data_sample, path in data_samples.items():
+        if os.path.exists(f"{data_folder}/{data_sample}/events.parquet"):
+            print(f"Loading data from {data_folder}/{data_sample}/events.parquet")
+            data_part = ak.from_parquet(f"{data_folder}/{data_sample}/events.parquet", columns=variables+["lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE"])
+        else:
+            data_part = ak.from_parquet(f"{events_path}/{path}", columns=variables+["lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE"])
+        if os.path.exists(f"{data_folder}/{data_sample}/y.npy"):
+            data_score = np.load(f"{data_folder}/{data_sample}/y.npy")
+            num_classes = data_score.shape[1]
+            for i, class_name in enumerate(class_names):
+                if i < num_classes:
+                    data_part[class_name] = data_score[:, i]
+
+        if data_combined is None:
+            data_combined = data_part
+        else:
+            data_combined = ak.concatenate([data_combined, data_part], axis=0)
+    if "minMVAID" in variables:
+        data_combined["minMVAID"] = np.min([data_combined.lead_mvaID, data_combined.sublead_mvaID], axis = 0)
+        data_combined["maxMVAID"] = np.max([data_combined.lead_mvaID, data_combined.sublead_mvaID], axis = 0)
+
+    # Apply preselection
+    data_combined = add_preselection(data_combined)
+    print("before: ", len(data_combined))
+    
+    # get number of data events in sideband
+    int_data_sideband = len(data_combined)
+
     eras = samples_info["eras"]
     for sample in sim_samples:
         sample_combined = []
         for era in eras:
-            events_ = ak.from_parquet(f"{events_path}/{samples_info[era][sample]}", columns=variables)
+            if os.path.exists(f"{sim_folder}/{era}/{sample}/events.parquet"):
+                events_ = ak.from_parquet(f"{sim_folder}/{era}/{sample}/events.parquet", columns=variables+["lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_genPartFlav", "sublead_genPartFlav", "weight_tot"])
+            else:
+                events_ = ak.from_parquet(f"{events_path}/{samples_info[era][sample]}", columns=variables+["lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_genPartFlav", "sublead_genPartFlav", "weight_tot"])
+
+        
             scores_ = np.load(f"{sim_folder}/{era}/{sample}/y.npy")
-            rel_w_ = np.load(f"{sim_folder}/{era}/{sample}/rel_w.npy")
-            events_["weight_tot"] = rel_w_
+            # select prompt photons for TTG and TT samples
+            #if (("TTG_" in sample) or (sample == "TT")):
+            #    print("selecting prompt photons for TTG and TT samples")
+            #    prompt_photon_bool = ((events_.lead_genPartFlav == 1) | (events_.sublead_genPartFlav == 1))
+            #    events_ = events_[prompt_photon_bool]
+            #    rel_w_ = rel_w_[prompt_photon_bool]
+            #    scores_ = scores_[prompt_photon_bool]
+
+            #events_["weight_tot"] = rel_w_
             for i, class_name in enumerate(class_names):
                 if i < scores_.shape[1]:
                     num_classes = scores_.shape[1]
@@ -97,51 +189,24 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
             print("number of events in GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", sum(sample_combined["weight_tot"]))
 
 
-        # Blind mass region
-        #if "mass" in sample_combined.fields:
-        #    sample_combined = sample_combined[(sample_combined["mass"] < mass_window[0]) | (sample_combined["mass"] > mass_window[1])]
-
         # Separate signal from background
-        if sample in ["GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "VBFHHto2B2G_CV_1_C2V_1_C3_1"]:
+        if sample in ["GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "VBFHHto2B2G_CV_1_C2V_1_C3_1", "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00"]:
             signal_mc_dict[label_dict[sample]] = sample_combined
         else:
             stack_mc_dict[label_dict[sample]] = sample_combined
 
-    # Load Data First
-    data_combined = None
 
-    data_samples = training_config["samples_info"]["data"]
-
-    for data_sample, path in data_samples.items():
-        data_part = ak.from_parquet(f"{events_path}/{path}", columns=variables)
-        if os.path.exists(f"{data_folder}/{data_sample}/y.npy"):
-            data_score = np.load(f"{data_folder}/{data_sample}/y.npy")
-            for i, class_name in enumerate(class_names):
-                if i < num_classes:
-                    data_part[class_name] = data_score[:, i]
-
-        if data_combined is None:
-            data_combined = data_part
-        else:
-            data_combined = ak.concatenate([data_combined, data_part], axis=0)
-    if "minMVAID" in variables:
-        data_combined["minMVAID"] = np.min([data_combined.lead_mvaID, data_combined.sublead_mvaID], axis = 0)
-        data_combined["maxMVAID"] = np.max([data_combined.lead_mvaID, data_combined.sublead_mvaID], axis = 0)
-
-    # Apply preselection
-    data_combined = add_preselection(data_combined)
-
-    # Blind data in mass window
-    #if "mass" in data_combined.fields:
-    #    data_combined = data_combined[(data_combined["mass"] < mass_window[0]) | (data_combined["mass"] > mass_window[1])]
-
-    variables = variables + class_names
+    variables = class_names + variables
 
     var_config = {
         "mass": {"label": r"$m_{\gamma\gamma}$ [GeV]", "bins": 40, "range": (100, 180), "log": True},
         "nonRes_dijet_mass": {"label": r"$m_{jj}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
         "dijet_mass": {"label": r"$m_{jj}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
         "nonRes_mjj_regressed": {"label": r"$m_{jj}^{reg}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
+        "nonResReg_dijet_mass": {"label": r"$m_{jj}^{reg}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
+        "nonResReg_dijet_mass_DNNreg": {"label": r"$m_{jj}^{reg}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
+        "nonResReg_DNNpair_dijet_mass": {"label": r"$m_{jj}^{reg}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
+        "nonResReg_DNNpair_dijet_mass_DNNreg": {"label": r"$m_{jj}^{reg}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
         "Res_mjj_regressed": {"label": r"Resonant $m_{jj}^{reg}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
         "Res_dijet_mass": {"label": r" Resonant $m_{jj}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
         "non_resonant_bkg_score": {"label": "non_resonant_bkg_score", "bins": 30, "range": (0, 1), "log": True},
@@ -167,7 +232,25 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
         if variable not in data_combined.fields:
             print(f"Variable {variable} not found in data fields. Skipping...")
             continue
-        print(f"Processing variable: {variable}")
+        #print(f"Processing variable: {variable}")
+
+        if variable not in var_config.keys():
+            #get the min and max of the variable
+            min_ = 0
+            max_ = 0
+            for i, (sample, data) in enumerate(stack_mc_dict.items()):
+                ak_min = ak.min(data[variable])
+                if ak_min != -999:
+                    min_ = min(min_, ak.min(data[variable]))
+                max_ = max(max_, ak.max(data[variable]))
+            
+            # check if a list of values is in the variable
+            keywords = ["pt", "mass", "btag"]
+            if any(key in variable for key in keywords):
+            #if "pt" in variable:
+                var_config[variable] = {"label": variable, "bins": 30, "range": (min_, max_), "log": True}
+            else:
+                var_config[variable] = {"label": variable, "bins": 30, "range": (min_, max_), "log": False}
 
         # Histogram binning
         bin_edges = np.linspace(*var_config[variable]["range"], var_config[variable]["bins"] + 1)
@@ -182,6 +265,7 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
 
         for i, (sample, data) in enumerate(stack_mc_dict.items()):
             hist, _ = np.histogram(ak.to_numpy((data[variable])), bins=bin_edges, weights=ak.to_numpy((data["weight_tot"])))
+            print(variable, "sample: ", sample, "hist sum : ", sum(hist))
             mc_hist.append(hist)
             mc_labels.append(sample)
             mc_colors_used.append(mc_colors[i % len(mc_colors)])
@@ -190,32 +274,15 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
             hist_err, _ = np.histogram(ak.to_numpy((data[variable])), bins=bin_edges, weights=ak.to_numpy((data["weight_tot"]))**2)
             mc_err += hist_err
 
+        # compute counts for
+
         mc_total = np.sum(mc_hist, axis=0)
         mc_err = np.sqrt(mc_err)  # Statistical uncertainty
 
-        # Compute data histogram
-        if variable == "mass":
-            to_plot = data_combined[(data_combined["mass"] < mass_window[0]) | (data_combined["mass"] > mass_window[1])]
-            data_hist, _ = np.histogram(ak.to_numpy((to_plot[variable])), bins=bin_edges)
-        elif variable == "nonRes_dijet_mass":
-            to_plot = data_combined[(data_combined["nonRes_dijet_mass"] < 110) | (data_combined["nonRes_dijet_mass"] > 140)]
-            data_hist, _ = np.histogram(ak.to_numpy((to_plot[variable])), bins=bin_edges)
-        elif variable == "dijet_mass":
-            to_plot = data_combined[(data_combined["dijet_mass"] < 110) | (data_combined["dijet_mass"] > 140)]
-            data_hist, _ = np.histogram(ak.to_numpy((to_plot[variable])), bins=bin_edges)
-        elif variable == "nonRes_mjj_regressed":
-            to_plot = data_combined[(data_combined["nonRes_mjj_regressed"] < 110) | (data_combined["nonRes_mjj_regressed"] > 140)]
-            data_hist, _ = np.histogram(ak.to_numpy((to_plot[variable])), bins=bin_edges)
-        elif variable == "Res_mjj_regressed":
-            to_plot = data_combined[(data_combined["Res_mjj_regressed"] < 110) | (data_combined["Res_mjj_regressed"] > 140)]
-            data_hist, _ = np.histogram(ak.to_numpy((to_plot[variable])), bins=bin_edges)
-        elif variable == "Res_dijet_mass":
-            to_plot = data_combined[(data_combined["Res_dijet_mass"] < 110) | (data_combined["Res_dijet_mass"] > 140)]
-            data_hist, _ = np.histogram(ak.to_numpy((to_plot[variable])), bins=bin_edges)
-        else: 
-            data_hist, _ = np.histogram(ak.to_numpy((data_combined[variable])), bins=bin_edges)
+        data_hist, _ = np.histogram(ak.to_numpy((data_combined[variable])), bins=bin_edges)
         data_err = np.sqrt(data_hist)  # Poisson errors
 
+        signal_color_list = ["red", "green", "blue", "purple"]
         # Compute signal histograms with weights
         signal_histograms = {}
         for signal, data in signal_mc_dict.items():
@@ -284,16 +351,20 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
             )
 
         # Plot signal as step histogram
+        color_idx = 0
         for signal, hist in signal_histograms.items():
+
             if "ggHH" in signal:
                 ax.step(
                     (bin_edges[:-1] + bin_edges[1:]) / 2,
                     hist,
                     where="mid",
                     linestyle="dashed",
-                    color="red",
+                    color=signal_color_list[color_idx],
                     label=f"{signal} x {signal_scale}"
                 )
+                color_idx += 1
+            
             else:
                 signal_scale_ = signal_scale*10
                 ax.step(
@@ -305,7 +376,7 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
                     label=f"{signal} x {signal_scale_}"
                 )
 
-        ax.legend(fontsize=16, ncol=2)
+        ax.legend(fontsize=14, ncol=2)
 
         # Labels
         ax.set_ylabel("Events")
@@ -313,15 +384,15 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
 
         if var_config[variable]["log"]:
             ax.set_yscale("log")
-            ax.set_ylim(0.1, 200 * np.max(data_hist))
+            ax.set_ylim(0.1, 600 * np.max(data_hist))
         else:
-            ax.set_ylim(0, 1.5 * np.max(data_hist))
+            ax.set_ylim(0, 1.7 * np.max(data_hist))
         # Ratio plot (Data / MC)
         if not only_MC:
 
-            ratio = data_hist / mc_total
-            data_ratio_err = data_err / mc_total
-            mc_ratio_err = mc_err / mc_total
+            ratio = abs(data_hist / mc_total)
+            data_ratio_err = abs(data_err / mc_total)
+            mc_ratio_err =abs( mc_err / mc_total)
 
             ax_ratio.errorbar(
                 (bin_edges[:-1] + bin_edges[1:]) / 2,
@@ -377,9 +448,29 @@ if __name__ == "__main__":
 
     # sim_samples = ["GGJets", "DDQCDGJET", "TTGG", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "VBFHToGG_M_125", "VHtoGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "VBFHHto2B2G_CV_1_C2V_1_C3_1"]
     # sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "VBFHHto2B2G_CV_1_C2V_1_C3_1", "TTGG", "GGJets", "DDQCDGJET"]
-    sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET"]
-    variables = ["Res_mjj_regressed", "Res_dijet_mass", "nonRes_mjj_regressed", "mass", "nonRes_dijet_mass", "minMVAID", "maxMVAID", "n_jets", "sublead_eta", "lead_eta", "sublead_pt", "lead_pt", "pt", "eta", "lead_mvaID", "sublead_mvaID"]
-    out_path = f"{base_path}/"
+    #sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET"]
+    #sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET", "TTG_10_100", "TTG_100_200", "TTG_200", "TT"]
+    sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET", "TTG_100_200", "TTG_200"]
+    #sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET", "TTG_100_200", "TTG_200"]
+    variables_ = ["Res_mjj_regressed", "Res_dijet_mass", "nonRes_mjj_regressed", "mass", "nonRes_dijet_mass", "minMVAID", "maxMVAID", "n_jets", "sublead_eta", "lead_eta", "sublead_pt", "lead_pt", "pt", "eta", "lead_mvaID", "sublead_mvaID", "nonResReg_dijet_mass_DNNreg", "nonResReg_HHbbggCandidate_mass", "nonResReg_dijet_pt", "nonResReg_lead_bjet_eta", "nonResReg_sublead_bjet_eta", "nonResReg_lead_bjet_pt", "nonResReg_sublead_bjet_pt"]
+    extra_vars = ["mass", "nonRes_dijet_mass", "Res_dijet_mass", "weight", "pt", "nonRes_dijet_pt", "Res_dijet_pt", "Res_lead_bjet_pt", "Res_sublead_bjet_pt", "Res_lead_bjet_ptPNetCorr", "Res_sublead_bjet_ptPNetCorr", "nonRes_HHbbggCandidate_mass", "Res_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "Res_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "jet1_mass", "jet2_mass", "jet3_mass", "jet4_mass", "jet5_mass", "jet6_mass", "Res_lead_bjet_jet_idx", "Res_sublead_bjet_jet_idx", "jet1_index", "jet2_index", "jet3_index", "jet4_index", "jet5_index", "jet6_index",
+                            "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet1_eta", "jet2_eta", "jet3_eta", "jet4_eta", "jet5_eta", "jet6_eta", "jet1_phi", "jet2_phi", "jet3_phi", "jet4_phi", "jet5_phi", "jet6_phi"]
 
+    # variables_ = ["mass", "nonRes_dijet_mass", "nonResReg_dijet_mass", "nonResReg_dijet_mass_DNNreg", "nonResReg_DNNpair_dijet_mass", "nonResReg_DNNpair_dijet_mass_DNNreg", "pt", "nonRes_dijet_pt", "nonRes_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "lead_eta", "lead_phi", "sublead_eta", "sublead_phi"]
+
+    for BSM_sample in ["GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00"]:
+        if BSM_sample in training_config["sample_to_class"].keys():
+            sim_samples.append(BSM_sample)    
+
+    input_vars_path = args.training_config_path.replace("training_config.yaml", "input_variables.yaml")
+    with open(input_vars_path, "r") as f:
+        input_vars = yaml.safe_load(f)
+    
+    variables = variables_ + extra_vars + input_vars["mlp"]["vars"]
+    # remove duplicate variables in this
+    variables = list(set(variables))
+
+
+    out_path = f"{base_path}/"
     plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, signal_scale=1000)
     plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, signal_scale=1000, only_MC=True)

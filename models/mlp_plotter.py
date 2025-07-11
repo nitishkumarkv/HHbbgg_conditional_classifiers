@@ -5,12 +5,10 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 import numpy as np
 import matplotlib.pyplot as plt
 import json
-import seaborn as sns
 import tqdm
 import copy
 from sklearn.metrics import confusion_matrix, classification_report, roc_curve, auc
 from sklearn.preprocessing import label_binarize
-import optuna
 import os
 import awkward as ak
 import mplhep as hep
@@ -18,7 +16,7 @@ from mlp import MLP
 import pickle
 
 def load_checkpoint(file_path):
-    checkpoint = torch.load(file_path)
+    checkpoint = torch.load(file_path, weights_only=False)
     #model.load_state_dict(checkpoint['model_state_dict'])
     #optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     #scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
@@ -140,6 +138,10 @@ if __name__ == "__main__":
     plt.grid(True)
     plt.tight_layout()
     plt.savefig(f'{path_for_plots}/roc_curve_one_vs_all.png')
+
+    plt.xlim([0.0001, 1.0])
+    plt.xscale('log')
+    plt.savefig(f'{path_for_plots}/roc_curve_one_vs_all_logx.png')
     plt.clf()
 
     # save auc scores
@@ -193,6 +195,10 @@ if __name__ == "__main__":
 
     # Save the combined plot
     plt.savefig(f'{path_for_plots}/roc_curve_{class_name_i}_vs_all_individual.png')
+
+    plt.xlim([0.0001, 1.0])
+    plt.xscale('log')
+    plt.savefig(f'{path_for_plots}/roc_curve_{class_name_i}_vs_all_individual_logx.png')
     plt.clf()
 
     #save the auc scores
@@ -246,6 +252,11 @@ if __name__ == "__main__":
 
         # Save the combined plot
         plt.savefig(f'{path_for_plots}/roc_curve_{class_name_i}_vs_all_individual.png')
+
+        plt.xlim([0.0001, 1.0])
+        plt.xscale('log')
+        plt.savefig(f'{path_for_plots}/roc_curve_{class_name_i}_vs_all_individual_logx.png')
+
         plt.clf()
 
         # save AUC scores
@@ -277,6 +288,9 @@ if __name__ == "__main__":
     plt.grid(True)
     plt.tight_layout()
     plt.savefig(f'{path_for_plots}/train_roc_curve_one_vs_all.png')
+    plt.xlim([0.0001, 1.0])
+    plt.xscale('log')
+    plt.savefig(f'{path_for_plots}/train_roc_curve_one_vs_all_logx.png')
     plt.clf()
 
     if n_classes>4:

@@ -37,6 +37,10 @@ def prepare_inputs(args):
         print('INFO: Preparing the inputs for prediction data', '\n')
         prep_inputs.prep_inputs_for_prediction_data()
 
+    # prepare the inputs for systematics
+    if args.prepare_inputs_pred_sys:
+        print('INFO: Preparing the inputs for prediction systematics', '\n')
+        prep_inputs.prep_inputs_for_prediction_sim_sys()
 
 def perform_training(args):
 
@@ -72,8 +76,13 @@ def perform_training(args):
     
     # get the predictions
     if args.get_predictions:
-        print('INFO: Getting the predictions')
-        subprocess.run(f"python3 models/get_prediction.py --model_folder {out_path}/after_random_search_best1/ --samples_path {out_path} --config_path {config_path}", shell=True)
+        print('INFO: Getting the predictions nominal')
+        subprocess.run(f"python3 models/get_prediction.py --model_folder {out_path}/after_random_search_best1/ --samples_path {out_path} --config_path {config_path} --get_pred_nominal", shell=True)
+
+    # get the predictions for systematics
+    if args.get_predictions_sys:
+        print('INFO: Getting the predictions systematics')
+        subprocess.run(f"python3 models/get_prediction.py --model_folder {out_path}/after_random_search_best1/ --samples_path {out_path} --config_path {config_path} --get_pred_sys", shell=True)
 
     # get non resonant mass for different ggFHH score cuts
     if args.test_mass_sculpting:
@@ -85,26 +94,34 @@ def perform_training(args):
         print('INFO: Getting data-MC plots')
         subprocess.run(f"python3 utils/plotting_utils.py --base-path {out_path} --training_config_path {training_config_path}", shell=True)
 
+    # get score shapes for different kl samples
+    if args.get_score_shape_diff_kl:
+        print('INFO: Getting score shape differences')
+        subprocess.run(f"python3 utils/score_shape_diff_kl.py --folder {out_path}/individual_samples/", shell=True)
+
 def perform_categorisation(args):
     pass
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Preform MLP based classification')
+    parser = argparse.ArgumentParser(description='Perform MLP based classification')
     parser.add_argument('--config_path', type=str, help='Path to the configuration files')
     parser.add_argument('--out_path', type=str, help='Path to save the inputs')
     parser.add_argument('--prep_inputs_for_training', action='store_true', help='Prepare inputs for training')
     parser.add_argument('--prepare_inputs_pred_sim', action='store_true', help='Prepare inputs for prediction')
     parser.add_argument('--prepare_inputs_pred_data', action='store_true', help='Prepare inputs for prediction data')
+    parser.add_argument('--prepare_inputs_pred_sys', action='store_true', help='Prepare inputs for prediction systematics')
     parser.add_argument('--train_best_model', action='store_true', help='Train the best model')
     parser.add_argument('--plot_training_results', action='store_true', help='Plot training results')
     parser.add_argument('--get_permutation_importance', action='store_true', help='Get permutation importance')
-    parser.add_argument('--get_predictions', action='store_true', help='Get feature importance')
+    parser.add_argument('--get_predictions', action='store_true', help='Get predictions for nominal MC and data')
+    parser.add_argument('--get_predictions_sys', action='store_true', help='Get predictions for systematics')
     parser.add_argument('--test_mass_sculpting', action='store_true', help='Test mass sculpting')
     parser.add_argument('--perform_training', action='store_true', help='Perform training')
     parser.add_argument('--get_data_mc_plots', action='store_true', help='Get data-MC plots')
     parser.add_argument('--perform_categorisation', action='store_true', help='Perform categorisation')
     parser.add_argument('--prepare_inputs', action='store_true', help='Prepare all inputs')
+    parser.add_argument('--get_score_shape_diff_kl', action='store_true', help='Get score shape differences using kl samples')
     parser.add_argument('--do_all', action='store_true', help='Perform all steps')
     args = parser.parse_args()
 
@@ -117,14 +134,17 @@ if __name__ == "__main__":
         args.prep_inputs_for_training = True
         args.prepare_inputs_pred_sim = True
         args.prepare_inputs_pred_data = True
+        args.prepare_inputs_pred_sys = True
 
     if args.perform_training:
-        args.train_best_model
+        args.train_best_model = True
         args.plot_training_results = True
         args.get_permutation_importance = True
         args.get_predictions = True
+        args.get_predictions_sys = True
         args.test_mass_sculpting = True
         args.get_data_mc_plots = True
+        args.get_score_shape_diff_kl = True
 
     # prepare inputs
     prepare_inputs(args)

@@ -55,7 +55,7 @@ def objective(trial):
     batches_per_epoch = len(X_train) // batch_size
 
     best_loss = np.inf
-    patience = 75
+    patience = 25
     counter = 0
 
     for epoch in range(n_epochs):

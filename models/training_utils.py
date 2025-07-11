@@ -149,7 +149,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.benchmark = False
 
     # Set device
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:'+training_config["cuda_device"] if torch.cuda.is_available() else 'cpu')
     print('\n', 'INFO: Used device is', device, '\n')
 
     input_path = args.input_path
@@ -158,7 +158,7 @@ if __name__ == "__main__":
         print("Using predefined parameters which are saved in the folder")
 
         os.makedirs(f'{input_path}/random_search_1', exist_ok=True)
-        best_params = {"num_layers": 5, "num_nodes": 1024, "act_fn_name": "ELU", "lr": 2.027496582741043e-05, "weight_decay": 5.159904717896079e-05, "dropout_prob": 0.15, "n_trials": 0}
+        best_params = {"num_layers": 5, "num_nodes": 1024, "act_fn_name": "ELU", "lr": 2.027496582741043e-05, "weight_decay": 5.159904717896079e-05, "dropout_prob": 0.25, "n_trials": 0}
         with open(f'{input_path}/random_search_1/best_params.json', 'w') as f:
             json.dump(best_params, f)
 
@@ -235,7 +235,7 @@ if __name__ == "__main__":
 
     # Create data loaders
     g = torch.Generator().manual_seed(seed)
-    batch_size = 1024
+    batch_size = 1024 #16384 # 8192 # 32768 # 1024 #16384
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, generator=g)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
@@ -247,9 +247,10 @@ if __name__ == "__main__":
 
     # Training loop parameters
     n_epochs = 500
+    print(f"INFO: Training for {n_epochs} epochs", '\n')
     best_loss = np.inf
     best_weights = None
-    patience = 75
+    patience = 50
     counter = 0
 
     train_loss_hist = []
@@ -303,16 +304,38 @@ if __name__ == "__main__":
 
     # Save predictions (optional)
     best_model.eval()
-    with torch.no_grad():
-        y_pred_train = best_model(X_train.to(device))
-        y_pred_val = best_model(X_val.to(device))
+    batch_size = 1024
+    y_pred_train_probs = []
+    for i in range(0, len(X_train), batch_size):
+        X_batch = X_train[i:i + batch_size].to(device)
+        with torch.no_grad():
+            y_batch = best_model(X_batch)
+            y_batch = F.softmax(y_batch, dim=1)
+            y_pred_train_probs.append(y_batch.cpu().numpy())
+    y_pred_train_probs = np.concatenate(y_pred_train_probs, axis=0)
 
-    y_pred_train_probs = F.softmax(y_pred_train, dim=1)
-    y_pred_train_np = y_pred_train_probs.cpu().detach().numpy()
+    y_pred_val_probs = []
+    for i in range(0, len(X_val), batch_size):
+        X_batch = X_val[i:i + batch_size].to(device)
+        with torch.no_grad():
+            y_batch = best_model(X_batch)
+            y_batch = F.softmax(y_batch, dim=1)
+            y_pred_val_probs.append(y_batch.cpu().numpy())
+    y_pred_val_probs = np.concatenate(y_pred_val_probs, axis=0)
+
+    # best_model.eval()
+    # with torch.no_grad():
+    #     y_pred_train = best_model(X_train.to(device))
+    #     y_pred_val = best_model(X_val.to(device))
+
+    # y_pred_train_probs = F.softmax(y_pred_train, dim=1)
+    #y_pred_train_np = y_pred_train_probs.cpu().detach().numpy()
+    y_pred_train_np = y_pred_train_probs
     y_train_np = y_train.cpu().numpy()
 
-    y_pred_val_probs = F.softmax(y_pred_val, dim=1)
-    y_pred_val_np = y_pred_val_probs.cpu().detach().numpy()
+    # y_pred_val_probs = F.softmax(y_pred_val, dim=1)
+    #y_pred_val_np = y_pred_val_probs.cpu().detach().numpy()
+    y_pred_val_np = y_pred_val_probs
     y_val_np = y_val.cpu().numpy()
 
     # Save predictions
