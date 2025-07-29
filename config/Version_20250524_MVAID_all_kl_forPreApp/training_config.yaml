@@ -35,6 +35,7 @@ cuda_device: "0"
 
 samples_info: 
     samples_path: /eos/cms/store/group/phys_b2g/HHbbgg/HiggsDNA_parquet/v3/ # samples path
+    #samples_path: /ceph/cms/store/group/Hgg/HHbbgg_Run3/HiggsDNA_parquet/v3_central/ # samples path
     eras:
     - preEE
     - postEE

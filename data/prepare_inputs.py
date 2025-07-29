@@ -38,7 +38,9 @@ class PrepareInputs:
         #self.extra_vars = ["mass", "nonRes_dijet_mass", "Res_dijet_mass", "nonRes_has_two_btagged_jets", "weight", "pt", "nonRes_dijet_pt", "Res_dijet_pt", "Res_lead_bjet_pt", "Res_sublead_bjet_pt", "Res_lead_bjet_ptPNetCorr", "Res_sublead_bjet_ptPNetCorr", "nonRes_HHbbggCandidate_mass", "Res_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "Res_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "jet1_mass", "jet2_mass", "jet3_mass", "jet4_mass", "jet5_mass", "jet6_mass", "Res_lead_bjet_jet_idx", "Res_sublead_bjet_jet_idx", "jet1_index", "jet2_index", "jet3_index", "jet4_index", "jet5_index", "jet6_index",
         #                   "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet1_eta", "jet2_eta", "jet3_eta", "jet4_eta", "jet5_eta", "jet6_eta", "jet1_phi", "jet2_phi", "jet3_phi", "jet4_phi", "jet5_phi", "jet6_phi", "lead_phi", "sublead_phi"]
 
-        self.extra_vars = ["mass", "nonRes_dijet_mass", "nonResReg_dijet_mass", "nonResReg_dijet_mass_DNNreg", "nonResReg_HHbbggCandidate_mass", "nonResReg_dijet_pt", "nonResReg_lead_bjet_pt", "nonResReg_sublead_bjet_pt", "nonResReg_lead_bjet_eta", "nonResReg_DNNpair_dijet_mass", "nonResReg_DNNpair_dijet_mass_DNNreg", "weight", "pt", "nonRes_dijet_pt", "nonRes_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "lead_eta", "lead_phi", "sublead_eta", "sublead_phi"]
+        self.extra_vars = ["mass", "nonRes_dijet_mass", "nonResReg_dijet_mass", "nonResReg_dijet_mass_DNNreg", "nonResReg_HHbbggCandidate_mass", "nonResReg_dijet_pt", "nonResReg_lead_bjet_pt", "nonResReg_sublead_bjet_pt", "nonResReg_lead_bjet_eta", "nonResReg_DNNpair_dijet_mass", "nonResReg_DNNpair_dijet_mass_DNNreg", "nonResReg_lead_bjet_btagPNetB", "nonResReg_sublead_bjet_btagPNetB", "weight", "pt", "nonRes_dijet_pt", "nonRes_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "lead_eta", "lead_phi", "sublead_eta", "sublead_phi"] # "lead_genPartFlav", "sublead_genPartFlav", "weight_tot" added for sim predictions only in the dedicated functions
+
+        self.vars_for_boosted = ['sublead_mvaID', 'fatjet3_tau2', 'fatjet3_particleNet_XbbVsQCD', 'fatjet4_subjet2_eta', 'sublead_eta', 'fatjet2_phi', 'fatjet1_mass', 'nonResReg_CosThetaStar_gg', 'fatjet4_particleNet_XbbVsQCD', 'lead_phi', 'fatjet4_pt', 'fatjet4_tau1', 'fatjet4_tau2', 'fatjet2_particleNet_XbbVsQCD', 'fatjet3_subjet1_eta', 'fatjet1_subjet1_eta', 'lead_eta', 'fatjet3_msoftdrop', 'fatjet4_mass', 'fatjet4_particleNet_massCorr', 'fatjet1_tau1', 'eta', 'fatjet2_pt', 'phi', 'fatjet1_subjet2_phi', 'fatjet3_eta', 'fatjet1_subjet2_eta', 'nonResReg_phosublead_PtOverM', 'fatjet4_subjet1_phi', 'fatjet3_subjet2_phi', 'fatjet3_subjet1_phi', 'fatjet2_tau2', 'n_jets', 'fatjet2_msoftdrop', 'fatjet2_subjet2_phi', 'fatjet3_pt', 'fatjet2_eta', 'fatjet3_tau1', 'fatjet4_eta', 'fatjet1_eta', 'fatjet3_mass', 'n_fatjets', 'fatjet1_pt', 'fatjet3_subjet2_eta', 'fatjet1_subjet1_phi', 'fatjet1_msoftdrop', 'lead_mvaID', 'fatjet4_subjet1_eta', 'nonResReg_pholead_PtOverM', 'fatjet2_tau1', 'fatjet2_mass', 'fatjet2_subjet2_eta', 'fatjet3_phi', 'n_leptons', 'fatjet1_particleNet_massCorr', 'fatjet2_subjet1_phi', 'fatjet4_subjet2_phi', 'fatjet1_tau2', 'fatjet1_phi', 'fatjet2_subjet1_eta', 'fatjet4_phi', 'fatjet1_particleNet_XbbVsQCD', 'fatjet3_particleNet_massCorr', 'fatjet4_msoftdrop', 'sublead_phi', 'fatjet2_particleNet_massCorr']
         
         # prepare process numbers for proccesses in each class
         num_process_each_class = {
@@ -94,14 +96,67 @@ class PrepareInputs:
         # add deltaR between lead and sublead photon
         events["deltaR_gg"] = self.deltaR(events.lead_eta, events.lead_phi, events.sublead_eta, events.sublead_phi)
 
-        # if era == "preEE":
+        # add b-tagging working points
+        if era == "preEE":
+            events["nonResReg_lead_bjet_btagPNetB_WP_L"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.047, int)
+            events["nonResReg_lead_bjet_btagPNetB_WP_M"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.245, int)
+            events["nonResReg_lead_bjet_btagPNetB_WP_T"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.6734, int)
+            events["nonResReg_lead_bjet_btagPNetB_WP_XT"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.7862, int)
+            events["nonResReg_lead_bjet_btagPNetB_WP_XXT"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.961, int)
+            events["nonResReg_sublead_bjet_btagPNetB_WP_L"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.047, int)
+            events["nonResReg_sublead_bjet_btagPNetB_WP_M"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.245, int)
+            events["nonResReg_sublead_bjet_btagPNetB_WP_T"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.6734, int)
+            events["nonResReg_sublead_bjet_btagPNetB_WP_XT"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.7862, int)
+            events["nonResReg_sublead_bjet_btagPNetB_WP_XXT"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.961, int)
         #     events["era"] = 0
-        # elif era == "postEE":
+        elif era == "postEE":
+            events["nonResReg_lead_bjet_btagPNetB_WP_L"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.0499, int)
+            events["nonResReg_lead_bjet_btagPNetB_WP_M"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.2605, int)
+            events["nonResReg_lead_bjet_btagPNetB_WP_T"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.6915, int)
+            events["nonResReg_lead_bjet_btagPNetB_WP_XT"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.8033, int)
+            events["nonResReg_lead_bjet_btagPNetB_WP_XXT"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.9664, int)
+            events["nonResReg_sublead_bjet_btagPNetB_WP_L"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.0499, int)
+            events["nonResReg_sublead_bjet_btagPNetB_WP_M"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.2605, int)
+            events["nonResReg_sublead_bjet_btagPNetB_WP_T"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.6915, int)
+            events["nonResReg_sublead_bjet_btagPNetB_WP_XT"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.8033, int)
+            events["nonResReg_sublead_bjet_btagPNetB_WP_XXT"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.9664, int)
         #     events["era"] = 1
-        # elif era == "preBPix":
+        elif era == "preBPix":
+            events["nonResReg_lead_bjet_btagPNetB_WP_L"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.0358, int)
+            events["nonResReg_lead_bjet_btagPNetB_WP_M"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.1917, int)
+            events["nonResReg_lead_bjet_btagPNetB_WP_T"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.6172, int)
+            events["nonResReg_lead_bjet_btagPNetB_WP_XT"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.7515, int)
+            events["nonResReg_lead_bjet_btagPNetB_WP_XXT"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.9659, int)
+            events["nonResReg_sublead_bjet_btagPNetB_WP_L"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.0358, int)
+            events["nonResReg_sublead_bjet_btagPNetB_WP_M"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.1917, int)
+            events["nonResReg_sublead_bjet_btagPNetB_WP_T"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.6172, int)
+            events["nonResReg_sublead_bjet_btagPNetB_WP_XT"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.7515, int)
+            events["nonResReg_sublead_bjet_btagPNetB_WP_XXT"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.9659, int)
         #     events["era"] = 2
-        # elif era == "postBPix":
+        elif era == "postBPix":
+            events["nonResReg_lead_bjet_btagPNetB_WP_L"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.0359, int)
+            events["nonResReg_lead_bjet_btagPNetB_WP_M"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.1919, int)
+            events["nonResReg_lead_bjet_btagPNetB_WP_T"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.6133, int)
+            events["nonResReg_lead_bjet_btagPNetB_WP_XT"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.7544, int)
+            events["nonResReg_lead_bjet_btagPNetB_WP_XXT"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.9688, int)
+            events["nonResReg_sublead_bjet_btagPNetB_WP_L"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.0359, int)
+            events["nonResReg_sublead_bjet_btagPNetB_WP_M"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.1919, int)
+            events["nonResReg_sublead_bjet_btagPNetB_WP_T"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.6133, int)
+            events["nonResReg_sublead_bjet_btagPNetB_WP_XT"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.7544, int)
+            events["nonResReg_sublead_bjet_btagPNetB_WP_XXT"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.9688, int)
         #     events["era"] = 3
+        elif era == "2024":
+            events["nonResReg_lead_bjet_btagUParTAK4B_WP_L"] = ak.values_astype(events["nonResReg_lead_bjet_btagUParTAK4B"] > 0.0246, int)
+            events["nonResReg_lead_bjet_btagUParTAK4B_WP_M"] = ak.values_astype(events["nonResReg_lead_bjet_btagUParTAK4B"] > 0.1272, int)
+            events["nonResReg_lead_bjet_btagUParTAK4B_WP_T"] = ak.values_astype(events["nonResReg_lead_bjet_btagUParTAK4B"] > 0.4648, int)
+            events["nonResReg_lead_bjet_btagUParTAK4B_WP_XT"] = ak.values_astype(events["nonResReg_lead_bjet_btagUParTAK4B"] > 0.6298, int)
+            events["nonResReg_lead_bjet_btagUParTAK4B_WP_XXT"] = ak.values_astype(events["nonResReg_lead_bjet_btagUParTAK4B"] > 0.9739, int)
+            events["nonResReg_sublead_bjet_btagUParTAK4B_WP_L"] = ak.values_astype(events["nonResReg_sublead_bjet_btagUParTAK4B"] > 0.0246, int)
+            events["nonResReg_sublead_bjet_btagUParTAK4B_WP_M"] = ak.values_astype(events["nonResReg_sublead_bjet_btagUParTAK4B"] > 0.1272, int)
+            events["nonResReg_sublead_bjet_btagUParTAK4B_WP_T"] = ak.values_astype(events["nonResReg_sublead_bjet_btagUParTAK4B"] > 0.4648, int)
+            events["nonResReg_sublead_bjet_btagUParTAK4B_WP_XT"] = ak.values_astype(events["nonResReg_sublead_bjet_btagUParTAK4B"] > 0.6298, int)
+            events["nonResReg_sublead_bjet_btagUParTAK4B_WP_XXT"] = ak.values_astype(events["nonResReg_sublead_bjet_btagUParTAK4B"] > 0.9739, int)
+        #     events["era"] = 4
 
         # add jet related mass
             
@@ -656,7 +711,7 @@ class PrepareInputs:
 
         # vars_for_log = vars_config["vars_for_log_transform"]
 
-        vars_to_load = vars_for_training + self.extra_vars
+        vars_to_load = vars_for_training + self.extra_vars + self.vars_for_boosted + ["lead_genPartFlav", "sublead_genPartFlav", "weight_tot"]
 
         samples_path = training_info["samples_info"]["samples_path"]
 
@@ -749,7 +804,7 @@ class PrepareInputs:
 
         # vars_for_log = vars_config["vars_for_log_transform"]
 
-        vars_to_load = vars_for_training + self.extra_vars
+        vars_to_load = vars_for_training + self.extra_vars + self.vars_for_boosted + ["lead_genPartFlav", "sublead_genPartFlav", "weight_tot"]
 
         samples_path = training_info["samples_info"]["samples_path"]
 
@@ -849,7 +904,7 @@ class PrepareInputs:
 
         # vars_for_log = vars_config["vars_for_log_transform"]
 
-        vars_to_load = vars_for_training + self.extra_vars
+        vars_to_load = vars_for_training + self.extra_vars + self.vars_for_boosted
 
         samples_path = training_info["samples_info"]["samples_path"]
         datas = training_info["samples_info"]["data"]
@@ -923,9 +978,3 @@ class PrepareInputs:
             ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
 
         return
-    
-
-    
-
-
-    
