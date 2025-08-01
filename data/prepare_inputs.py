@@ -33,6 +33,7 @@ class PrepareInputs:
             self.classes = self.training_info["classes"]
             self.random_seed = self.training_info["random_seed"]
             self.weight_scheme_process = self.training_info["weight_scheme_process"]
+            self.write_chunk = self.training_info["write_chunk"]
         self.fill_nan = -9
 
         #self.extra_vars = ["mass", "nonRes_dijet_mass", "Res_dijet_mass", "nonRes_has_two_btagged_jets", "weight", "pt", "nonRes_dijet_pt", "Res_dijet_pt", "Res_lead_bjet_pt", "Res_sublead_bjet_pt", "Res_lead_bjet_ptPNetCorr", "Res_sublead_bjet_ptPNetCorr", "nonRes_HHbbggCandidate_mass", "Res_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "Res_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "jet1_mass", "jet2_mass", "jet3_mass", "jet4_mass", "jet5_mass", "jet6_mass", "Res_lead_bjet_jet_idx", "Res_sublead_bjet_jet_idx", "jet1_index", "jet2_index", "jet3_index", "jet4_index", "jet5_index", "jet6_index",
@@ -553,11 +554,11 @@ class PrepareInputs:
                 corr_out_path = f"{out_path}/correlation_matrix/{samples}_{era}.pdf"
                 self.corr_with_mgg_mjj(events, vars_for_training, corr_out_path)
 
-        print("INFO: Combining all the samples")
-        comb_inputs = ak.concatenate(comb_inputs, axis=0)
+                print("INFO: Appending process samples to whole dataframe")
+                events = pd.DataFrame(ak.to_list(events))
+                comb_inputs = pd.concat([comb_inputs, events])
 
-        comb_inputs = pd.DataFrame(ak.to_list(comb_inputs))
-
+        print("INFO: Plotting variables")
         plot_path = f"{out_path}/var_plots/"
         os.makedirs(plot_path, exist_ok=True)
         self.plot_variables(comb_inputs, vars_for_training, plot_path)
@@ -680,7 +681,18 @@ class PrepareInputs:
                 # get relative weights according to cross section of the process
                 events = self.get_relative_xsec_weight(events, samples, era)
                 
-                comb_inputs = pd.DataFrame(ak.to_list(events))
+                # also save the event
+                full_path_to_save = f"{out_path}/{era}/{samples}/"
+                os.makedirs(full_path_to_save, exist_ok=True)
+                ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
+
+                comb_inputs = pd.DataFrame()
+                i = 0
+                while len(events) > 0:
+                    events_intermediate = events[:self.write_chunk]
+                    events = events[self.write_chunk:]
+                    comb_inputs = pd.concat([comb_inputs, pd.DataFrame(ak.to_list(events_intermediate))])
+                    i+=1
 
                 X = comb_inputs[vars_for_training]
                 #Y = comb_inputs[[cls for cls in self.classes]]
@@ -714,9 +726,6 @@ class PrepareInputs:
 
                 # save all the numpy arrays
                 print("INFO: saving inputs for mlp")
-                full_path_to_save = f"{out_path}/{era}/{samples}/"
-                os.makedirs(full_path_to_save, exist_ok=True)
-
                 np.save(f"{full_path_to_save}/X", X)
                 np.save(f"{full_path_to_save}/rel_w", relative_weights)
 
@@ -780,7 +789,18 @@ class PrepareInputs:
                     # get relative weights according to cross section of the process
                     events = self.get_relative_xsec_weight(events, samples, era)
 
-                    comb_inputs = pd.DataFrame(ak.to_list(events))
+                    # also save the event
+                    full_path_to_save = f"{out_path}/{era}/{samples}/{sys}/"
+                    os.makedirs(full_path_to_save, exist_ok=True)
+                    ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
+
+                    comb_inputs = pd.DataFrame()
+                    i = 0
+                    while len(events) > 0:
+                        events_intermediate = events[:self.write_chunk]
+                        events = events[self.write_chunk:]
+                        comb_inputs = pd.concat([comb_inputs, pd.DataFrame(ak.to_list(events_intermediate))])
+                        i+=1
 
                     X = comb_inputs[vars_for_training]
                     #Y = comb_inputs[[cls for cls in self.classes]]
@@ -814,9 +834,6 @@ class PrepareInputs:
 
                     # save all the numpy arrays
                     #print("INFO: saving inputs for mlp")
-                    full_path_to_save = f"{out_path}/{era}/{samples}/{sys}/"
-                    os.makedirs(full_path_to_save, exist_ok=True)
-
                     np.save(f"{full_path_to_save}/X", X)
                     np.save(f"{full_path_to_save}/rel_w", relative_weights)
 
@@ -876,7 +893,18 @@ class PrepareInputs:
             # add more variables
             events = self.add_var(events, sample_to_era[data])
 
-            comb_inputs = pd.DataFrame(ak.to_list(events))
+            # also save the event
+            full_path_to_save = f"{out_path}/{data}/"
+            os.makedirs(full_path_to_save, exist_ok=True)
+            ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
+
+            comb_inputs = pd.DataFrame()
+            i = 0
+            while len(events) > 0:
+                events_intermediate = events[:self.write_chunk]
+                events = events[self.write_chunk:]
+                comb_inputs = pd.concat([comb_inputs, pd.DataFrame(ak.to_list(events_intermediate))])
+                i+=1
 
             X = comb_inputs[vars_for_training]
 
@@ -907,9 +935,6 @@ class PrepareInputs:
             # save all the numpy arrays
             print(f"INFO: saving inputs for {data}")
             #full_path_to_save = f"{out_path}/"
-            full_path_to_save = f"{out_path}/{data}/"
-            os.makedirs(full_path_to_save, exist_ok=True)
-
             np.save(f"{full_path_to_save}/X", X)
 
             # ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
@@ -919,8 +944,6 @@ class PrepareInputs:
                 }
             with open(f"{out_path}/mean_std_dict.pkl", 'wb') as f:
                 pickle.dump(mean_std_dict, f)
-
-            ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
 
         return
     
