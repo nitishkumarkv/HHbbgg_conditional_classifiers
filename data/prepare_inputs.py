@@ -510,7 +510,7 @@ class PrepareInputs:
         out_path = self.outpath
         os.makedirs(out_path, exist_ok=True)
 
-        comb_inputs = []
+        comb_inputs = pd.DataFrame()
 
         # get the variables required for training
         vars_config = self.load_vars(self.input_var_json)[self.model_type]
@@ -543,7 +543,7 @@ class PrepareInputs:
                     events[cls] = ak.zeros_like(events.eta)
 
                 events[self.sample_to_class[samples]] = ak.ones_like(events.pt) # one-hot encoded
-                comb_inputs.append(events)
+                # comb_inputs.append(events)
                 events["sample_type"] = samples
 
                 # add process number which is specific for each class
@@ -729,9 +729,6 @@ class PrepareInputs:
                 np.save(f"{full_path_to_save}/X", X)
                 np.save(f"{full_path_to_save}/rel_w", relative_weights)
 
-                # also save the event
-                ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
-
                 # save the training mean ans std_dev. This will be used for standardizing data
                 mean_std_dict = {
                     "mean": mean,
@@ -836,9 +833,6 @@ class PrepareInputs:
                     #print("INFO: saving inputs for mlp")
                     np.save(f"{full_path_to_save}/X", X)
                     np.save(f"{full_path_to_save}/rel_w", relative_weights)
-
-                    # also save the event
-                    ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
 
                     # save the training mean ans std_dev. This will be used for standardizing data
                     mean_std_dict = {
