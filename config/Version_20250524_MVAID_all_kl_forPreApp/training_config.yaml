@@ -32,6 +32,7 @@ num_random_search: 1
 weight_scheme: weighted_abs # weighted_only_positive # weighted_CRUW_abs # weighted_CRUW_only_positive
 random_seed: 42
 cuda_device: "0"
+max_epoch: 500
 
 samples_info: 
     samples_path: /eos/cms/store/group/phys_b2g/HHbbgg/HiggsDNA_parquet/v3/ # samples path

@@ -138,6 +138,7 @@ if __name__ == "__main__":
 
     seed = training_config["random_seed"]
     weight_scheme = training_config["weight_scheme"]
+    max_epoch = training_config.get("max_epoch", 500)
 
     # --- REPROD SETUP ---
     import random, numpy as np, torch
@@ -246,8 +247,7 @@ if __name__ == "__main__":
     best_scheduler = ReduceLROnPlateau(best_optimizer, mode='min', factor=0.5, patience=15, min_lr=1e-6)
 
     # Training loop parameters
-    n_epochs = 500
-    print(f"INFO: Training for {n_epochs} epochs", '\n')
+    print(f"INFO: Training for {max_epoch} epochs", '\n')
     best_loss = np.inf
     best_weights = None
     patience = 50
@@ -261,7 +261,7 @@ if __name__ == "__main__":
     lr_hist = []
 
     # Training loop
-    for epoch in range(n_epochs):
+    for epoch in range(max_epoch):
         # Training
         train_loss, train_acc, train_loss_no_absolute = train_one_epoch(best_model, best_optimizer, train_loader, loss_fn, device)
         train_loss_hist.append(train_loss)
