@@ -28,7 +28,8 @@ class OptunaCategorizer:
                 side_band_threshold=10,
                 beta=0.1,
                 gamma_strategy="linear",
-                SR_strategy="sequential"
+                SR_strategy="sequential",
+                mHH_cats=[]
                 ):
 
         self.base_path = base_path
@@ -46,6 +47,7 @@ class OptunaCategorizer:
         self.beta = beta
         self.gamma_strategy = gamma_strategy
         self.SR_strategy = SR_strategy
+        self.mHH_cats = mHH_cats
 
         if self.cat_folder is None:
             print("INFO: No output directory specified, using default: optuna_categorization")
@@ -119,12 +121,13 @@ class OptunaCategorizer:
         only if *nothing* is collected.
         """
         data = {k: [] for k in (
-            "score", "diphoton_mass", "dijet_mass",
+            "score", "diphoton_mass", "dijet_mass", "HHbbggCandidate_mass",
             "weights", "labels", "sample"
         )}
 
         eras = ("preEE", "postEE", "preBPix", "postBPix")
         dijet_mass_key = "nonResReg_dijet_mass_DNNreg"
+        mHH_key = "nonResReg_HHbbggCandidate_mass"
 
         for era in eras:
             for sample in self.samples_list:
@@ -144,7 +147,7 @@ class OptunaCategorizer:
                     events = ak.from_parquet(
                         evt_file,
                         columns=[
-                            "mass", dijet_mass_key,
+                            "mass", dijet_mass_key, mHH_key,
                             "lead_genPartFlav", "sublead_genPartFlav",
                             "weight_tot",
                             "lead_mvaID", "sublead_mvaID",
@@ -169,6 +172,7 @@ class OptunaCategorizer:
                 data["score"].append(y)
                 data["diphoton_mass"].append(np.asarray(events["mass"]))
                 data["dijet_mass"].append(np.asarray(events[dijet_mass_key]))
+                data["HHbbggCandidate_mass"].append(np.asarray(events[mHH_key]))
                 data["weights"].append(np.asarray(events["weight_tot"]))
                 data["labels"].append(
                     np.full(len(y), 1 if sample in self.signal_samples else 0, dtype=int)
@@ -371,6 +375,9 @@ class OptunaCategorizer:
             "nonResReg_dijet_mass_DNNreg": {"label": r"$m_{jj}^{reg}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
             "Res_mjj_regressed": {"label": r"$m_{jj}^{reg}$ [GeV]", "bins": 23, "range": (80, 180), "log": True},
             "Res_dijet_mass": {"label": r" Resonant $m_{jj}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
+            "nonRes_HHbbggCandidate_mass": {"label": r"$m_{HH}$ [GeV] (Nonresonant $m_{jj}$ cuts)", "bins": 30, "range": (100, 2500), "log": True},
+            "nonResReg_HHbbggCandidate_mass": {"label": r"$m_{HH}$ [GeV] (Nonresonant $m_{jj}$ regressed cuts)", "bins": 30, "range": (100, 2500), "log": True},
+            "Res_HHbbggCandidate_mass": {"label": r"$m_{HH}$ [GeV] (Resonant $m_{jj}$ cuts)", "bins": 30, "range": (100, 2500), "log": True},
             "non_resonant_bkg_score": {"label": "non_resonant_bkg_score", "bins": 30, "range": (0, 1), "log": True},
             "ttH_score": {"label": "ttH_score", "bins": 30, "range": (0, 1), "log": True},
             "other_single_H_score": {"label": "other_single_H_score", "bins": 30, "range": (0, 1), "log": True},
@@ -648,7 +655,7 @@ class OptunaCategorizer:
     # Sequential categorization using Optuna
     #############################################
     
-    def optmize_SR_sequential(self, samples_input):
+    def optmize_SR_sequential(self, samples_input, mHH_cat=""):
         """
         For each category, use Optuna to find the best multidimensional cuts:
           - The signal score must be above a threshold.
@@ -664,7 +671,10 @@ class OptunaCategorizer:
           - The weighted signal in the peak (120-130 GeV)
           - The weighted background in the sidebands
         """
-        cat_path = os.path.join(self.base_path, f"{self.cat_folder}")
+        if mHH_cat == "":
+            cat_path = os.path.join(self.base_path, f"{self.cat_folder}")
+        else:
+            cat_path = os.path.join(self.base_path, f"{self.cat_folder}/mHH{mHH_cat}")
         print(f"Creating output directory: {cat_path}")
         os.makedirs(cat_path, exist_ok=True)
 
@@ -819,31 +829,32 @@ class OptunaCategorizer:
         best_cut_params_list,
         cat_path)
 
-        # save the best cut parameters
-        best_params_path = os.path.join(cat_path, "best_cut_params.txt")
-        with open(best_params_path, "w") as f:
-            for i, params in enumerate(best_cut_params_list, start=1):
-                f.write(f"Category {i}:\n")
-                for k, v in params.items():
-                    f.write(f"{k}: {v}\n")
-                f.write("\n")
-            # also save the best run number
-            f.write(f"Best run number: {max_index}\n")
-            # also save the best significance value
-            f.write(f"Best significance value: {best_sig_values}\n")
+        # # save the best cut parameters
+        # best_params_path = os.path.join(cat_path, "best_cut_params.txt")
+        # with open(best_params_path, "w") as f:
+        #     for i, params in enumerate(best_cut_params_list, start=1):
+        #         f.write(f"Category {i}:\n")
+        #         for k, v in params.items():
+        #             f.write(f"{k}: {v}\n")
+        #         f.write("\n")
+        #     # also save the best run number
+        #     f.write(f"Best run number: {max_index}\n")
+        #     # also save the best significance value
+        #     f.write(f"Best significance value: {best_sig_values}\n")
 
-        # also save it as a JSON file
-        best_params_json_path = os.path.join(cat_path, "best_cut_params.json")
-        with open(best_params_json_path, "w") as f:
-            json.dump(best_cut_params_list, f, indent=4)
+        # # also save it as a JSON file
+        # best_params_json_path = os.path.join(cat_path, "best_cut_params.json")
+        # with open(best_params_json_path, "w") as f:
+        #     json.dump(best_cut_params_list, f, indent=4)
 
-        return best_cut_params_list, best_sig_values
+        return best_cut_params_list, best_sig_values, max_index
 
     def store_categorization_events_with_score(
         self, 
         base_path,
         best_cut_values,
         folder_name,
+        mHH_cat=[]
     ):
         """
         Categorize events into:
@@ -870,6 +881,9 @@ class OptunaCategorizer:
               For reference, e.g. [["ttHtoGG_M_125"], ["BBHto2G_M_125","GluGluHToGG_M_125"]].
           cr_name (list[str] or None):
               The name you want to give each CR category (e.g. ["CR_ttH", "CR_singleH"]).
+          mHH_cat (list, defaults to empty):
+              The upper and lower bounds of the mHH category, empty if not doing mHH categories.
+              If a bound is -1, then no upper or lower bound.
         """
 
         nsr = 3
@@ -911,8 +925,9 @@ class OptunaCategorizer:
             "TT"
         ]
         dijet_mass_key = "nonResReg_dijet_mass_DNNreg"
+        mHH_key = "nonResReg_HHbbggCandidate_mass"
 
-        columns = ["mass", dijet_mass_key, "lead_genPartFlav", "sublead_genPartFlav", "lead_mvaID", "sublead_mvaID", "weight_tot"]
+        columns = ["mass", dijet_mass_key, mHH_key, "lead_genPartFlav", "sublead_genPartFlav", "lead_mvaID", "sublead_mvaID", "weight_tot"]
 
         for era in ["preEE", "postEE", "preBPix", "postBPix"]:
             for sample in samples:
@@ -937,18 +952,31 @@ class OptunaCategorizer:
                     scores = scores[prompt_photon_bool]
 
                 events["dijet_mass"] = events[dijet_mass_key]
+                events["HHbbggCandidate_mass"] = events[mHH_key]
 
                 # Keep track of leftover
                 selected_events = events
                 selected_scores = scores
+                selected_mHH = events["HHbbggCandidate_mass"]
 
                 # ============= SR Categories (cat1, cat2, cat3) =============
                 for i in range(nsr):
+
+                    # ============= mHH category =============
+                    mask_mHH = np.ones(len(selected_mHH), dtype=bool)
+                    if len(mHH_cat) > 0:
+                        if mHH_cat[0] != -1:
+                            mask_mHH &= ak.to_numpy(selected_mHH >= mHH_cat[0])
+                        if mHH_cat[1] != -1:
+                            mask_mHH &= ak.to_numpy(selected_mHH < mHH_cat[1])
+
                     score_cuts = best_cut_values[i]
 
                     mask = (selected_scores[:, 3] > score_cuts["th_signal"])
                     for b in [0, 1, 2]:
                         mask &= (selected_scores[:, b] < score_cuts[f"th_bg_{b}"])
+
+                    mask &= mask_mHH
 
                     cat_outdir = f"{out_dir}/cat{i+1}/{era}/{sample}"
                     os.makedirs(cat_outdir, exist_ok=True)
@@ -964,6 +992,7 @@ class OptunaCategorizer:
                     # Remove from leftover
                     selected_events = selected_events[~mask]
                     selected_scores = selected_scores[~mask]
+                    selected_mHH = selected_mHH[~mask]
 
         # ----------------------
         # Process Data samples
@@ -987,6 +1016,7 @@ class OptunaCategorizer:
             # For data, weight_tot = 1
             events["weight_tot"] = ak.ones_like(events[dijet_mass_key])
             events["dijet_mass"] = events[dijet_mass_key]
+            events["HHbbggCandidate_mass"] = events[mHH_key]
 
             # Apply selection if needed
             if self.apply_preselection:
@@ -994,13 +1024,25 @@ class OptunaCategorizer:
 
             selected_events = events
             selected_scores = scores
+            selected_mHH = events["HHbbggCandidate_mass"]
 
             # ============= SR (cat1, cat2, cat3) =============
             for i in range(nsr):
                 score_cuts = best_cut_values[i]
+
+                # ============= mHH category =============
+                mask_mHH = np.ones(len(selected_mHH), dtype=bool)
+                if len(mHH_cat) > 0:
+                    if mHH_cat[0] != -1:
+                        mask_mHH &= ak.to_numpy(selected_mHH >= mHH_cat[0])
+                    if mHH_cat[1] != -1:
+                        mask_mHH &= ak.to_numpy(selected_mHH < mHH_cat[1])
+                        
                 mask = (selected_scores[:, 3] > score_cuts["th_signal"])
                 for b in [0, 1, 2]:
                     mask &= (selected_scores[:, b] < score_cuts[f"th_bg_{b}"])
+                
+                mask &= mask_mHH
 
                 cat_outdir = f"{out_dir}/cat{i+1}/{data_sample}"
                 os.makedirs(cat_outdir, exist_ok=True)
@@ -1015,6 +1057,7 @@ class OptunaCategorizer:
 
                 selected_events = selected_events[~mask]
                 selected_scores = selected_scores[~mask]
+                selected_mHH = selected_mHH[~mask]
 
         # ----------------------
         # Write combined yields to a text file, grouped by category
@@ -1430,17 +1473,35 @@ class OptunaCategorizer:
         samples_input = self.load_samples()
 
         if self.SR_strategy == "sequential":
-            best_params, best_sig_values = self.optmize_SR_sequential(samples_input)
+                best_params, best_sig_values, max_index = self.optmize_SR_sequential(samples_input)
         elif self.SR_strategy == "simultaneous":
             raise NotImplementedError("Simultaneous SR strategy is not implemented yet.")
 
         # load the best cut values
-        with open(f"{self.base_path}/{self.cat_folder}/best_cut_params.json", "r") as f:
-            best_cut_values = json.load(f)
+        # with open(f"{self.base_path}/{self.cat_folder}/best_cut_params.json", "r") as f:
+        #     best_cut_values = json.load(f)
+
+        # save the best cut parameters
+        cat_path = os.path.join(self.base_path, f"{self.cat_folder}")
+        best_params_path = os.path.join(cat_path, "best_cut_params.txt")
+        with open(best_params_path, "w") as f:
+            for i, params in enumerate(best_params, start=1):
+                f.write(f"Category {i}:\n")
+                for k, v in params.items():
+                    f.write(f"{k}: {v}\n")
+                f.write("\n")
+            # also save the best run number
+            f.write(f"Best run number: {max_index}\n")
+            # also save the best significance value
+            f.write(f"Best significance value: {best_sig_values}\n")
+
+        best_params_json_path = os.path.join(cat_path, "best_cut_params.json")
+        with open(best_params_json_path, "w") as f:
+            json.dump(best_params, f, indent=4)
 
         self.store_categorization_events_with_score(
             self.base_path,
-            best_cut_values,
+            best_params,
             folder_name=self.cat_folder,
             )
         
@@ -1466,6 +1527,128 @@ class OptunaCategorizer:
             mass_range=(100, 180)  # Example mass range, adjust as needed
         )
 
+    def run_categorisation_mHH(self):
+    
+        # load the samples
+        samples_input = self.load_samples()
+
+        for i in range(0, len(self.mHH_cats) + 1):
+
+            mHH_bounds = []
+            samples_input_cats = pd.DataFrame()
+            if i == 0:
+                samples_input_cats = samples_input.loc[(samples_input["HHbbggCandidate_mass"] >= 250) & (samples_input["HHbbggCandidate_mass"] < self.mHH_cats[i])]
+                mHH_bounds = [250, self.mHH_cats[i]]
+            elif i == len(self.mHH_cats):
+                samples_input_cats = samples_input.loc[samples_input["HHbbggCandidate_mass"] >= self.mHH_cats[i-1]]
+                mHH_bounds = [self.mHH_cats[i-1], -1]
+            else:
+                samples_input_cats = samples_input.loc[(samples_input["HHbbggCandidate_mass"] >= self.mHH_cats[i-1]) & (samples_input["HHbbggCandidate_mass"] < self.mHH_cats[i])]
+                mHH_bounds = [self.mHH_cats[i-1], self.mHH_cats[i]]
+                
+            if self.SR_strategy == "sequential":
+                best_params, best_sig_values, max_index = self.optmize_SR_sequential(samples_input_cats, mHH_cat=i)
+            elif self.SR_strategy == "simultaneous":
+                raise NotImplementedError("Simultaneous SR strategy is not implemented yet.")
+
+
+            # save the best cut parameters
+            cat_path = os.path.join(self.base_path, f"{self.cat_folder}")
+            best_params_path = os.path.join(cat_path, "best_cut_params.txt")
+            if i == 0:
+                with open(best_params_path, "w") as f:
+                    f.write(f"----mHH category: 250 - {self.mHH_cats[i]}----\n")
+                    for j, params in enumerate(best_params, start=1):
+                        f.write(f"Category {j}:\n")
+                        for k, v in params.items():
+                            f.write(f"{k}: {v}\n")
+                        f.write("\n")
+                    # also save the best run number
+                    f.write(f"Best run number: {max_index}\n")
+                    # also save the best significance value
+                    f.write(f"Best significance value: {best_sig_values}\n\n")
+            elif i == len(self.mHH_cats):
+                with open(best_params_path, "a") as f:
+                    f.write(f"----mHH category: {self.mHH_cats[i-1]} - inf----\n")
+                    for j, params in enumerate(best_params, start=1):
+                        f.write(f"Category {j}:\n")
+                        for k, v in params.items():
+                            f.write(f"{k}: {v}\n")
+                        f.write("\n")
+                    # also save the best run number
+                    f.write(f"Best run number: {max_index}\n")
+                    # also save the best significance value
+                    f.write(f"Best significance value: {best_sig_values}\n")
+            else:
+                with open(best_params_path, "a") as f:
+                    f.write(f"----mHH category: {self.mHH_cats[i-1]} - {self.mHH_cats[i]}----\n")
+                    for j, params in enumerate(best_params, start=1):
+                        f.write(f"Category {j}:\n")
+                        for k, v in params.items():
+                            f.write(f"{k}: {v}\n")
+                        f.write("\n")
+                    # also save the best run number
+                    f.write(f"Best run number: {max_index}\n")
+                    # also save the best significance value
+                    f.write(f"Best significance value: {best_sig_values}\n\n")
+
+            # also save it as a JSON file
+            best_params_json_path = os.path.join(cat_path, "best_cut_params.json")
+            if i == 0:
+                with open(best_params_json_path, "w") as f:
+                    mHH_cat_dict = {"mHH low": 250,
+                                    "mHH high": self.mHH_cats[i],
+                                    "DNN cuts" : best_params
+                                    }
+                    json.dump(mHH_cat_dict, f, indent=4)
+            elif i == len(self.mHH_cats):
+                with open(best_params_json_path, "a") as f:
+                    mHH_cat_dict = {"mHH low": self.mHH_cats[i-1],
+                                    "mHH high": "inf",
+                                    "DNN cuts" : best_params
+                                    }
+                    json.dump(mHH_cat_dict, f, indent=4)
+            else:
+                with open(best_params_json_path, "a") as f:
+                    mHH_cat_dict = {"mHH low": self.mHH_cats[i-1],
+                                    "mHH high": self.mHH_cats[i],
+                                    "DNN cuts" : best_params
+                                    }
+                    json.dump(mHH_cat_dict, f, indent=4)
+
+            # # load the best cut values
+            # with open(f"{self.base_path}/{self.cat_folder}/best_cut_params.json", "r") as f:
+            #     best_cut_values = json.load(f)
+
+            self.store_categorization_events_with_score(
+                self.base_path,
+                best_params,
+                folder_name=f"{self.cat_folder}/mHH{i}",
+                mHH_cat = mHH_bounds
+                )
+            
+            folder_list = [f"cat{j}" for j in range(1, 4)]
+
+            # plots for sculpting test
+            print("Testing mass sculpting...")
+            self.test_mass_sculpting(f"{self.base_path}", folder_list, f"{self.cat_folder}/mHH{i}")
+
+            # plot data-MC for SRs
+            sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET", "TTG_100_200", "TTG_200"]
+            variables = ["mass", "nonResReg_dijet_mass_DNNreg", "nonResReg_HHbbggCandidate_mass"]
+            for folder in folder_list:
+                sim_folder = f"{self.base_path}/{self.cat_folder}/mHH{i}/{folder}"
+                data_folder = f"{self.base_path}/{self.cat_folder}/mHH{i}/{folder}"
+                out_path = f"{self.base_path}/{self.cat_folder}/mHH{i}/{folder}"
+                self.plot_stacked_histogram(sim_folder, data_folder, sim_samples, variables, out_path, signal_scale=100)
+
+            # collect event yields
+            self.collect_event_yields(
+                f"{self.base_path}/{self.cat_folder}/mHH{i}/",
+                folder_list,
+                mass_range=(100, 180)  # Example mass range, adjust as needed
+            )
+
 
 
 #############################################
@@ -1482,6 +1665,7 @@ if __name__ == "__main__":
     parser.add_argument("--n_runs", type=int, default=15, help="Number of complete runs for the categorization")
     parser.add_argument("--gamma_strategy", type=str, choices=["sqrt", "linear"], default="linear", help="Gamma strategy for TPE sampler")
     parser.add_argument("--side_band_threshold", type=int, default=10, help="Threshold for sideband requirements")
+    parser.add_argument("--mHH_cats", type=int, nargs="+", default=[], help="Inner boundaries of mHH categories, if using. Lower bound of 250 GeV and no upper bound assumed.")
 
     args = parser.parse_args()
 
@@ -1490,7 +1674,12 @@ if __name__ == "__main__":
                                     n_categories=args.n_categories,
                                     n_trials_optuna=args.n_trials,
                                     n_runs=args.n_runs,
-                                    SR_strategy=args.SR_strategy)
-    categoriser.run_categorisation()
+                                    SR_strategy=args.SR_strategy,
+                                    mHH_cats=args.mHH_cats)
+
+    if len(args.mHH_cats) > 0:
+        categoriser.run_categorisation_mHH()
+    else:
+        categoriser.run_categorisation()
 
     
