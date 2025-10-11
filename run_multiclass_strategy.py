@@ -15,13 +15,13 @@ def prepare_inputs(args):
     input_vars_path = f"{config_path}/input_variables.yaml"
 
     # Load the configuration yaml files
-    with open(f"{config_path}/training_config.yaml", 'r') as f:
+    with open(f"{config_path}/training_config.yaml", 'r', encoding='utf-8') as f:
         training_config = yaml.safe_load(f)
 
     prep_inputs = PrepareInputs(input_var_json=input_vars_path,
                                 training_info = training_config,
                                 outpath=out_path,)
-    
+
     # prepare the inputs for training
     if args.prep_inputs_for_training:
         print('INFO: Preparing the inputs for training', '\n')
@@ -68,12 +68,12 @@ def perform_training(args):
     if args.plot_training_results:
         print('INFO: Getting the results plots')
         subprocess.run(f"python3 models/mlp_plotter.py --input_path {out_path}", shell=True)
-        
+
     # get permutaion importance
     if args.get_permutation_importance:
         print('INFO: Getting permutation importance')
         subprocess.run(f"python3 models/permutation_importance.py --input_path {out_path}", shell=True)
-    
+
     # get the predictions
     if args.get_predictions:
         print('INFO: Getting the predictions nominal')
@@ -99,14 +99,29 @@ def perform_training(args):
         print('INFO: Getting score shape differences')
         subprocess.run(f"python3 utils/score_shape_diff_kl.py --folder {out_path}/individual_samples/", shell=True)
 
-def perform_categorisation(args):
+def perform_categorization(args):
+    # Load categorization config yaml file
+    categorization_config_path = f"{args.config_path}/categorization_config.yaml"
+    with open(f"{categorization_config_path}", 'r') as f:
+        categorization_config = yaml.safe_load(f)
+
+    n_categories = categorization_config["n_categories"]
+    n_runs = categorization_config["n_runs"]
+
+    if args.perform_categorisation:
+        print('INFO: Performing categorisation')
+        subprocess.run(f"python3 categorisation/bayesian_categorization.py --n_categories {n_categories} --base_path {args.out_path} --n_runs {n_runs}", shell=True)
+
     pass
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Perform MLP based classification')
+    # Main arguments
     parser.add_argument('--config_path', type=str, help='Path to the configuration files')
     parser.add_argument('--out_path', type=str, help='Path to save the inputs')
+
+    # Steps 
     parser.add_argument('--prep_inputs_for_training', action='store_true', help='Prepare inputs for training')
     parser.add_argument('--prepare_inputs_pred_sim', action='store_true', help='Prepare inputs for prediction')
     parser.add_argument('--prepare_inputs_pred_data', action='store_true', help='Prepare inputs for prediction data')
@@ -117,11 +132,13 @@ if __name__ == "__main__":
     parser.add_argument('--get_predictions', action='store_true', help='Get predictions for nominal MC and data')
     parser.add_argument('--get_predictions_sys', action='store_true', help='Get predictions for systematics')
     parser.add_argument('--test_mass_sculpting', action='store_true', help='Test mass sculpting')
-    parser.add_argument('--perform_training', action='store_true', help='Perform training')
     parser.add_argument('--get_data_mc_plots', action='store_true', help='Get data-MC plots')
     parser.add_argument('--perform_categorisation', action='store_true', help='Perform categorisation')
-    parser.add_argument('--prepare_inputs', action='store_true', help='Prepare all inputs')
     parser.add_argument('--get_score_shape_diff_kl', action='store_true', help='Get score shape differences using kl samples')
+
+    # Groups
+    parser.add_argument('--perform_training', action='store_true', help='Perform training')
+    parser.add_argument('--prepare_inputs', action='store_true', help='Prepare all inputs')
     parser.add_argument('--do_all', action='store_true', help='Perform all steps')
     args = parser.parse_args()
 
@@ -153,4 +170,4 @@ if __name__ == "__main__":
     perform_training(args)
 
     # perform categorisation
-    perform_categorisation(args)
+    perform_categorization(args)
