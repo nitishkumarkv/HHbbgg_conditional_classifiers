@@ -32,7 +32,7 @@ class CustomDataset(Dataset):
 
 
 # Training and evaluation functions
-def train_one_epoch(model, optimizer, data_loader, loss_fn, device):
+def train_one_epoch(model, optimizer, data_loader, loss_fn, device, epoch):
     model.train()
     batch_losses = []
     batch_accs = []
@@ -40,6 +40,15 @@ def train_one_epoch(model, optimizer, data_loader, loss_fn, device):
 
     progress_bar = tqdm(data_loader, desc=f"Epoch {epoch} [Training]", leave=False)
     for X_batch, y_batch, weights_batch, weights_batch_no in progress_bar:
+        # Print first parts
+        print()
+        print(f"DEBUG: X_batch shape: {X_batch.shape}, y_batch shape: {y_batch.shape}")
+        print(f"DEBUG: weights_batch shape: {weights_batch.shape}, weights_batch_no shape: {weights_batch_no.shape}")
+        print(f"DEBUG: X_batch[:5]: {X_batch[:5]}")
+        print(f"DEBUG: y_batch[:5]: {y_batch[:5]}")
+        print(f"DEBUG: weights_batch[:5]: {weights_batch[:5]}")
+        print(f"DEBUG: weights_batch_no[:5]: {weights_batch_no[:5]}")
+        print()
         X_batch = X_batch.to(device)
         y_batch = y_batch.to(device)
         weights_batch = weights_batch.to(device)
@@ -72,7 +81,7 @@ def train_one_epoch(model, optimizer, data_loader, loss_fn, device):
     return np.mean(batch_losses), np.mean(batch_accs), np.mean(batch_losses_no_abs)
 
 
-def evaluate(model, data_loader, loss_fn, device):
+def evaluate(model, data_loader, loss_fn, device, epoch):
     model.eval()
     val_losses = []
     val_accs = []
@@ -104,7 +113,7 @@ def evaluate(model, data_loader, loss_fn, device):
 
 
 # Save the best model
-def save_checkpoint(epoch, model, optimizer, scheduler, train_loss_hist, train_loss_hist_no_absolute_weights, val_loss_hist, train_acc_hist, val_acc_hist, best_weights, best_loss, file_path):
+def save_checkpoint(epoch, model, optimizer, scheduler, train_loss_hist, train_loss_hist_no_absolute_weights, val_loss_hist, train_acc_hist, val_acc_hist, best_weights, best_loss, file_path, lr_hist):
     checkpoint = {
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
@@ -263,13 +272,13 @@ if __name__ == "__main__":
     # Training loop
     for epoch in range(max_epoch):
         # Training
-        train_loss, train_acc, train_loss_no_absolute = train_one_epoch(best_model, best_optimizer, train_loader, loss_fn, device)
+        train_loss, train_acc, train_loss_no_absolute = train_one_epoch(best_model, best_optimizer, train_loader, loss_fn, device, epoch)
         train_loss_hist.append(train_loss)
         train_acc_hist.append(train_acc)
         train_loss_hist_no_absolute_weights.append(train_loss_no_absolute)
 
         # Validation
-        val_loss, val_acc = evaluate(best_model, val_loader, loss_fn, device)
+        val_loss, val_acc = evaluate(best_model, val_loader, loss_fn, device, epoch)
         val_loss_hist.append(val_loss)
         val_acc_hist.append(val_acc)
 
@@ -297,7 +306,7 @@ if __name__ == "__main__":
 
     save_checkpoint(epoch, best_model, best_optimizer, best_scheduler, 
                 train_loss_hist, train_loss_hist_no_absolute_weights, val_loss_hist, train_acc_hist, val_acc_hist, 
-                best_weights, best_loss, f"{path_to_checkpoint}/mlp.pth")
+                best_weights, best_loss, f"{path_to_checkpoint}/mlp.pth", lr_hist)
 
     # Load the best state of the model
     best_model.load_state_dict(best_weights)

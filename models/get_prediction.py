@@ -6,6 +6,20 @@ import torch.nn as nn
 import torch.nn.functional as F
 import yaml
 
+# DEPENDS ON:
+#   <configs>/training_config.yaml
+#   <model_folder>/params.json
+#   <model_folder>/mlp.pth
+#   if nominal:
+#       <samples_path>/individual_samples/<era>/<sample>/X.npy
+#    if syst:
+#       <samples_path>/individual_samples/<era>/<sample>/<syst>/X.npy
+# CREATES:
+#   if nominal:
+#       <samples_path>/individual_samples/<era>/<sample>/y.npy
+#   if syst:
+#       <samples_path>/individual_samples/<era>/<sample>/<syst>/y.npy
+
 
 def get_prediction(model_dict_path, model_path, X):
 

@@ -19,12 +19,14 @@ class PrepareInputs:
         self,
         input_var_json: Optional[Dict[str, Any]] = None,
         training_info: Optional[Dict[str, Any]] = None,
+        sculpting_study_info: Optional[Dict[str, Any]] = None,
         outpath: Optional[Dict[str, Any]] = None,
         predict_parquet_info: Optional[Dict[str, Any]] = None,
         ) -> None:
         self.model_type = "mlp"
         self.input_var_json = input_var_json
         self.training_info = training_info
+        self.sculpting_study_info = sculpting_study_info
         self.outpath = outpath
         self.predict_parquet_info = predict_parquet_info
         
@@ -352,6 +354,7 @@ class PrepareInputs:
 
         corr_matrix = np.zeros([len(vars_for_training), 4])
         for i in range(len(vars_for_training)):
+            # print("DEBUG: correlation - processing variable:", vars_for_training[i])
             var = vars_for_training[i]
             # calculate correlation with mgg and mjj, do not include -999 values
             mask = ((events[var] > -998.0) & (events.mass > -998.0))
@@ -504,6 +507,32 @@ class PrepareInputs:
 
 
     def prep_inputs_for_training(self):
+        """_summary_
+
+        Steps:
+            - Make self.output directory
+            - Load variables from input var yaml and select variables from particular model (eg. 'mlp')
+            - Loop over eras and samples:
+                - Load events from awkward parquet files
+                - Apply preselection
+                - Add more variables
+                - Add relative weights according to cross section of the process
+                - Add bools for each class
+                - Plot correlation matrix for each sample in /correlation_matrix/ dir
+                - Append events to a common dataframe
+            - Plot variables in /var_plots/ dir
+            - Construct X and Y arrays
+            - Train-test split
+            - Standardize the data
+            - Get class weights, abs(weights), and only positive weights for training
+            - Write to input_vars.txt
+            - Save train, val, test, and weights numpy arrays
+            - Save mean and std to mean_std_dict.pkl
+                
+
+        Returns:
+            int: 0 if successful
+        """
 
         fill_nan = self.fill_nan
 
@@ -552,7 +581,7 @@ class PrepareInputs:
                 # plot_correlation_matrix
                 os.makedirs(f"{out_path}/correlation_matrix/", exist_ok=True)
                 corr_out_path = f"{out_path}/correlation_matrix/{samples}_{era}.pdf"
-                self.corr_with_mgg_mjj(events, vars_for_training, corr_out_path)
+                # self.corr_with_mgg_mjj(events, vars_for_training, corr_out_path)
 
                 print("INFO: Appending process samples to whole dataframe")
                 events = pd.DataFrame(ak.to_list(events))
@@ -561,12 +590,12 @@ class PrepareInputs:
         print("INFO: Plotting variables")
         plot_path = f"{out_path}/var_plots/"
         os.makedirs(plot_path, exist_ok=True)
-        self.plot_variables(comb_inputs, vars_for_training, plot_path)
+        # self.plot_variables(comb_inputs, vars_for_training, plot_path)
 
         for cls in self.classes:
             print("\n", f"INFO: Number of events in {cls}: {sum(comb_inputs[cls])}")
 
-        X = comb_inputs[vars_for_training]
+        X = comb_inputs[vars_for_training].copy()
         Y = comb_inputs[[cls for cls in self.classes]]
         relative_weights = comb_inputs["rel_xsec_weight"]
 
@@ -574,9 +603,9 @@ class PrepareInputs:
         # for var in vars_for_log:
         #     X[var] = np.log(X[var])
 
-        X = X.values
-        Y = Y.values
-        relative_weights = relative_weights.values
+        # X = X.values
+        # Y = Y.values
+        # relative_weights = relative_weights.values
         process_number = comb_inputs["process_number"].values
         
         # mask -999.0 to nan
@@ -584,6 +613,27 @@ class PrepareInputs:
         X[mask] = np.nan
 
         X_train, X_val, X_test, y_train, y_val, y_test, rel_w_train, rel_w_val, rel_w_test, proc_num_train, proc_num_val, proc_num_test = self.train_test_split(X, Y, relative_weights, process_number)
+
+        # Save indices as numpy arrays
+        np.save(f"{out_path}/train_indices.npy", X_train.index)
+        np.save(f"{out_path}/val_indices.npy", X_val.index)
+        if X_test is not None:
+            np.save(f"{out_path}/test_indices.npy", X_test.index)
+
+
+        X_train = X_train.values
+        X_val = X_val.values
+        if X_test is not None:
+            X_test = X_test.values
+        y_train = y_train.values
+        y_val = y_val.values
+        if y_test is not None:
+            y_test = y_test.values
+        rel_w_train = rel_w_train.values
+        rel_w_val = rel_w_val.values
+        if rel_w_test is not None:
+            rel_w_test = rel_w_test.values
+
 
         # get mean according to training data set
         mean = np.nanmean(X_train, axis=0)
@@ -642,6 +692,26 @@ class PrepareInputs:
         return 0
     
     def prep_inputs_for_prediction_sim(self):
+        """
+
+        Steps:
+            - Make /individual_samples/ directory
+            - Load vars names from input_vars.txt
+            - Add extra vars from self.extra_vars
+            - Loop over eras and samples
+                - Load events from awkward parquet file (either all or only required columns)
+                - Apply preselection (self.preselection_for_pred)
+                - Add more variables (self.add_var)
+                - Get relative weights according to cross section of the process (self.get_relative_xsec_weight)
+                - Save the processed events to individual parquet files (/individual_samples/{era}/{sample}/events.parquet)
+                - Convert events to pandas dataframe in chunks of self.write_chunk
+                - Extract X (features) and relative weights
+                - Standardize X using training mean and std_dev from mean_std_dict.pkl
+                - Save X and relative weights as numpy arrays (/individual_samples/{era}/{sample}/X.npy, rel_w.npy)
+
+        Returns:
+            int: 0 if successful
+        """
 
         fill_nan = self.fill_nan
         training_info = self.training_info
@@ -686,12 +756,13 @@ class PrepareInputs:
                 os.makedirs(full_path_to_save, exist_ok=True)
                 ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
 
+                # put in pandas dataframe in chunks
                 comb_inputs = pd.DataFrame()
                 i = 0
                 while len(events) > 0:
-                    events_intermediate = events[:self.write_chunk]
-                    events = events[self.write_chunk:]
-                    comb_inputs = pd.concat([comb_inputs, pd.DataFrame(ak.to_list(events_intermediate))])
+                    events_intermediate = events[:self.write_chunk] # take only a chunk
+                    events = events[self.write_chunk:] # keep the rest for next iteration
+                    comb_inputs = pd.concat([comb_inputs, pd.DataFrame(ak.to_list(events_intermediate))]) # convert to pandas dataframe and concatenate
                     i+=1
 
                 X = comb_inputs[vars_for_training]
@@ -729,7 +800,7 @@ class PrepareInputs:
                 np.save(f"{full_path_to_save}/X", X)
                 np.save(f"{full_path_to_save}/rel_w", relative_weights)
 
-                # save the training mean ans std_dev. This will be used for standardizing data
+                # save the training mean and std_dev. This will be used for standardizing data
                 mean_std_dict = {
                     "mean": mean,
                     "std_dev": std
@@ -940,9 +1011,146 @@ class PrepareInputs:
                 pickle.dump(mean_std_dict, f)
 
         return
-    
 
     
+    def prep_inputs_for_sculpting_study(self):
+        """_summary_
+
+        Fast Way:
+            - If 
+
+        Returns:
+            _type_: _description_
+        """
+
+        fill_nan = self.fill_nan
+        out_path = self.outpath
+        os.makedirs(out_path, exist_ok=True)
+
+        comb_inputs = pd.DataFrame()
+
+        assert self.training_info is not None, "ERROR: training_info is None. Please provide training_info for sculpting study."
+        assert self.sculpting_study_info is not None, "ERROR: sculpting_study_info is None. Please provide sculpting_study_info for sculpting study."
+
+        # Get sculpting study target variable from config
+        target_vars = self.sculpting_study_info["target_variables"]
+        print("INFO: Target variables for sculpting study:", target_vars)
+
+        vars_config = self.load_vars(self.input_var_json)[self.model_type]
+        vars_for_training = vars_config["vars"]
+
+        # Essential vars for preselection and weighting:
+        # - mass
+        # - nonResReg_dijet_mass_DNNreg
+        # - lead_mvaID
+        # - sublead_mvaID
+        # - weight
+        # - weight_tot
+        # - eta
+        # - pt
+
+        essential_vars = ["mass", "nonResReg_dijet_mass_DNNreg", "lead_mvaID", "sublead_mvaID", "weight", "weight_tot", "eta", "pt"]
+
+        # vars_to_load = vars_for_training + self.extra_vars + target_vars
+        vars_to_load = list(set(target_vars + essential_vars))
+        print("DEBUG: vars_to_load", vars_to_load)
+
+        for era in self.training_info["samples_info"]["eras"]:
+            for samples in self.sample_to_class.keys():                
+
+                samples_path = self.training_info["samples_info"]["samples_path"]
+                parquet_path = self.training_info["samples_info"][era][samples]
+                events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
+
+                events = self.preselection(events)
+
+                # get relative weights according to cross section of the process
+                events = self.get_relative_xsec_weight(events, samples, era)
+                
+                print(f"INFO: Number of MC events in {samples} after selection for {era}: {len(events)}")
+                print(f"INFO: Sum of weight_tot in {samples} after selection for {era}: {sum(events.weight_tot)}")
+
+                # add the bools for each class
+                for cls in self.classes:  # first intialize everything to zero
+                    events[cls] = ak.zeros_like(events.eta)
+
+                events[self.sample_to_class[samples]] = ak.ones_like(events.pt) # one-hot encoded
+                events["sample_type"] = samples
+
+                # add process number which is specific for each class
+                events["process_number"] = self.process_numbers[samples]
+
+                print("INFO: Appending process samples to whole dataframe")
+                events = pd.DataFrame(ak.to_list(events))
+                comb_inputs = pd.concat([comb_inputs, events])
+                
+
+        for cls in self.classes:
+            print("\n", f"INFO: Number of events in {cls}: {sum(comb_inputs[cls])}")
+        
+        Y = comb_inputs[[y for y in target_vars]]
+
+        # Load indices files and partition Y into train, val, test
+        with open(f"{out_path}/train_indices.npy", 'rb') as f:
+            train_indices = np.load(f)
+        with open(f"{out_path}/val_indices.npy", 'rb') as f:
+            val_indices = np.load(f)
+        test_indices = None
+        if os.path.exists(f"{out_path}/test_indices.npy"):
+            with open(f"{out_path}/test_indices.npy", 'rb') as f:
+                test_indices = np.load(f)
+
+        print("DEBUG: Y.shape: ", Y.shape)
+        print(Y.head())
+
+        y_train = Y.iloc[train_indices].copy()
+        y_val = Y.iloc[val_indices].copy()
+        y_test = None
+        if test_indices is not None:
+            y_test = Y.iloc[test_indices].copy()
+
+        # Get mean and std_dev from train set
+        mean = np.nanmean(y_train.values, axis=0)
+        std = np.nanstd(y_train.values, axis=0)
+
+        print("DEBUG: y_train.shape", y_train.shape)
+        print("DEBUG: y_val.shape", y_val.shape)
+        print("DEBUG: train_indices.shape", train_indices.shape)
+        print("DEBUG: val_indices.shape", val_indices.shape)
+
+        # Standardize
+        y_train = self.standardize(y_train.values, mean, std)
+        y_val = self.standardize(y_val.values, mean, std)
+        if y_test is not None:
+            y_test = self.standardize(y_test.values, mean, std)
+
+        y_train = np.nan_to_num(y_train, nan=fill_nan)
+        y_val = np.nan_to_num(y_val, nan=fill_nan)
+        if y_test is not None:
+            y_test = np.nan_to_num(y_test, nan=fill_nan)
+
+        mean_std_dict = {
+            "mean": mean,
+            "std_dev": std
+        }
+        # Save Y mean and std_dev from training
+        os.makedirs(f"{out_path}/sculpting_study/", exist_ok=True)
+        scale_file = f"{out_path}/sculpting_study/y_mean_std_dict.pkl"
+        with open(scale_file, 'wb') as f:
+            pickle.dump(mean_std_dict, f)
+
+        # Save str of input variables
+        with open(f"{out_path}/sculpting_study/target_vars.txt", 'w', encoding="utf-8") as f:
+            json.dump(target_vars, f)
+            f.write("\n")
+        
+        # Save Y arrays
+        np.save(f"{out_path}/sculpting_study/y_train.npy", y_train)
+        np.save(f"{out_path}/sculpting_study/y_val.npy", y_val)
+        if y_test is not None:
+            np.save(f"{out_path}/sculpting_study/y_test.npy", y_test)
+
+        return 0
 
 
     

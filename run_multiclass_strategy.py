@@ -112,7 +112,46 @@ def perform_categorization(args):
         print('INFO: Performing categorisation')
         subprocess.run(f"python3 categorisation/bayesian_categorization.py --n_categories {n_categories} --base_path {args.out_path} --n_runs {n_runs}", shell=True)
 
-    pass
+
+def perform_mjj_sculpting_study(args):
+    out_path = args.out_path
+    config_path = args.config_path
+
+    # Path to input variables
+    input_vars_path = f"{config_path}/input_variables.yaml"
+
+    # Load the configuration yaml files
+    sculpting_study_config_path = f"{config_path}/sculpting_study_config.yaml"
+    try:
+        with open(f"{sculpting_study_config_path}", 'r') as f:
+            sculpting_study_config = yaml.safe_load(f)
+    except FileNotFoundError as e:
+        raise FileNotFoundError(f"ERROR: The specified sculpting_study_config.yaml file was not found at {sculpting_study_config_path}. Please ensure the file exists and the path is correct.") from e
+
+    training_config_path = f"{config_path}/training_config.yaml"
+    with open(f"{training_config_path}", 'r') as f:
+        training_config = yaml.safe_load(f)
+    
+
+    prep_inputs = PrepareInputs(input_var_json = input_vars_path,
+                                training_info = training_config,
+                                sculpting_study_info = sculpting_study_config,
+                                outpath=out_path,)
+
+    # prepare the inputs for mjj sculpting study
+    if args.prepare_sculpting_study_inputs:
+        print('INFO: Preparing the inputs for Mjj sculpting study')
+        prep_inputs.prep_inputs_for_sculpting_study()
+
+    # train the mjj predictor
+    if args.train_mjj_predictor:
+        print('INFO: Training the Mjj predictor for sculpting study')
+        subprocess.run(f"python3 models/mjj_training_utils.py --input_path {out_path} --training_config_path {training_config_path} --sculpting_study_config_path {sculpting_study_config_path}", shell=True)
+
+    # get permutaion importance for mjj predictor
+    if args.mjj_predictor_permutation_importance:
+        print('INFO: Getting permutation importance for Mjj predictor')
+        subprocess.run(f"python3 models/mjj_permutation_importance.py --input_path {out_path}", shell=True)
 
 
 if __name__ == "__main__":
@@ -121,7 +160,7 @@ if __name__ == "__main__":
     parser.add_argument('--config_path', type=str, help='Path to the configuration files')
     parser.add_argument('--out_path', type=str, help='Path to save the inputs')
 
-    # Steps 
+    # Steps
     parser.add_argument('--prep_inputs_for_training', action='store_true', help='Prepare inputs for training')
     parser.add_argument('--prepare_inputs_pred_sim', action='store_true', help='Prepare inputs for prediction')
     parser.add_argument('--prepare_inputs_pred_data', action='store_true', help='Prepare inputs for prediction data')
@@ -136,9 +175,15 @@ if __name__ == "__main__":
     parser.add_argument('--perform_categorisation', action='store_true', help='Perform categorisation')
     parser.add_argument('--get_score_shape_diff_kl', action='store_true', help='Get score shape differences using kl samples')
 
+    # Mjj Sculpting Study
+    parser.add_argument('--prepare_sculpting_study_inputs', action='store_true', help='Prepare inputs for Mjj sculpting study')
+    parser.add_argument('--train_mjj_predictor', action='store_true', help='Train Mjj predictor for sculpting study')
+    parser.add_argument('--mjj_predictor_permutation_importance', action='store_true', help='Get permutation importance for Mjj predictor')
+
     # Groups
     parser.add_argument('--perform_training', action='store_true', help='Perform training')
     parser.add_argument('--prepare_inputs', action='store_true', help='Prepare all inputs')
+    parser.add_argument('--mjj_sculpting_study', action='store_true', help='Perform all steps for Mjj sculpting study')
     parser.add_argument('--do_all', action='store_true', help='Perform all steps')
     args = parser.parse_args()
 
@@ -162,6 +207,11 @@ if __name__ == "__main__":
         args.test_mass_sculpting = True
         args.get_data_mc_plots = True
         args.get_score_shape_diff_kl = True
+    
+    if args.mjj_sculpting_study:
+        args.prepare_sculpting_study_inputs = True
+        args.train_mjj_predictor = True
+        args.mjj_predictor_permutation_importance = True
 
     # prepare inputs
     prepare_inputs(args)
@@ -171,3 +221,7 @@ if __name__ == "__main__":
 
     # perform categorisation
     perform_categorization(args)
+
+    # Mjj sculpting study
+    perform_mjj_sculpting_study(args)
+    
