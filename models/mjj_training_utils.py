@@ -35,15 +35,15 @@ def train_one_epoch_regression(model, optimizer, data_loader, loss_fn, device, e
     batch_losses_no_abs = []
 
     # Make another 2D histogram of mjj feature vs target
-    x_feat = np.asarray(data_loader.dataset.X[:,-4]).reshape(-1)
-    y_targ = np.asarray(data_loader.dataset.y).reshape(-1)
-    plt.hist2d(x_feat, y_targ, bins=[100, 100], cmap='Blues')
-    plt.colorbar(label='Counts')
-    plt.xlabel('Mjj Feature')
-    plt.ylabel('Target Variable')
-    plt.title('2D Histogram of Mjj Feature vs Target Variable')
-    plt.savefig(f"{input_path}/sculpting_study/mjj_feature_vs_target_2d_hist_4.png")
-    plt.close()
+    # x_feat = np.asarray(data_loader.dataset.X[:,-4]).reshape(-1)
+    # y_targ = np.asarray(data_loader.dataset.y).reshape(-1)
+    # plt.hist2d(x_feat, y_targ, bins=[100, 100], cmap='Blues')
+    # plt.colorbar(label='Counts')
+    # plt.xlabel('Mjj Feature')
+    # plt.ylabel('Target Variable')
+    # plt.title('2D Histogram of Mjj Feature vs Target Variable')
+    # plt.savefig(f"{input_path}/sculpting_study/mjj_feature_vs_target_2d_hist_4.png")
+    # plt.close()
 
     progress_bar = tqdm(data_loader, desc=f"Epoch {epoch} [Training]", leave=False)
     ibatch = 0
@@ -64,38 +64,36 @@ def train_one_epoch_regression(model, optimizer, data_loader, loss_fn, device, e
         # print(f"DEBUG: weights_batch_no[:5]: {weights_batch_no[:5]}")
         # print()
 
-        if ibatch == 0 and epoch == 0:
-            # Make yet another 2D histogram of mjj feature vs target for first batch
-            x_feat_batch = np.asarray(X_batch[:,-4].cpu()).reshape(-1)
-            y_targ_batch = np.asarray(y_batch.cpu()).reshape(-1)
-            plt.hist2d(x_feat_batch, y_targ_batch, bins=[100, 100], cmap='Blues')
-            plt.colorbar(label='Counts')
-            plt.xlabel('Mjj Feature')
-            plt.ylabel('Target Variable')
-            plt.title('2D Histogram of Mjj Feature vs Target Variable')
-            plt.savefig(f"{input_path}/sculpting_study/mjj_feature_vs_target_2d_hist_5.png")
-            plt.close()
+        # if ibatch == 0 and epoch == 0:
+        #     # Make yet another 2D histogram of mjj feature vs target for first batch
+        #     x_feat_batch = np.asarray(X_batch[:,-4].cpu()).reshape(-1)
+        #     y_targ_batch = np.asarray(y_batch.cpu()).reshape(-1)
+        #     plt.hist2d(x_feat_batch, y_targ_batch, bins=[100, 100], cmap='Blues')
+        #     plt.colorbar(label='Counts')
+        #     plt.xlabel('Mjj Feature')
+        #     plt.ylabel('Target Variable')
+        #     plt.title('2D Histogram of Mjj Feature vs Target Variable')
+        #     plt.savefig(f"{input_path}/sculpting_study/mjj_feature_vs_target_2d_hist_5.png")
+        #     plt.close()
             
         X_batch = X_batch.to(device)
         y_batch = y_batch.to(device).float().squeeze()  # Ensure float for regression and match dimensions
         weights_batch = weights_batch.to(device)
 
-        if ibatch == 0 and epoch == 0:
-            # Make yet another 2D histogram of mjj feature vs target for first batch
-            x_feat_batch = np.asarray(X_batch[:,-4].cpu()).reshape(-1)
-            y_targ_batch = np.asarray(y_batch.cpu()).reshape(-1)
-            plt.hist2d(x_feat_batch, y_targ_batch, bins=[100, 100], cmap='Blues')
-            plt.colorbar(label='Counts')
-            plt.xlabel('Mjj Feature')
-            plt.ylabel('Target Variable')
-            plt.title('2D Histogram of Mjj Feature vs Target Variable')
-            plt.savefig(f"{input_path}/sculpting_study/mjj_feature_vs_target_2d_hist_6.png")
-            plt.close()
+        # if ibatch == 0 and epoch == 0:
+        #     # Make yet another 2D histogram of mjj feature vs target for first batch
+        #     x_feat_batch = np.asarray(X_batch[:,-4].cpu()).reshape(-1)
+        #     y_targ_batch = np.asarray(y_batch.cpu()).reshape(-1)
+        #     plt.hist2d(x_feat_batch, y_targ_batch, bins=[100, 100], cmap='Blues')
+        #     plt.colorbar(label='Counts')
+        #     plt.xlabel('Mjj Feature')
+        #     plt.ylabel('Target Variable')
+        #     plt.title('2D Histogram of Mjj Feature vs Target Variable')
+        #     plt.savefig(f"{input_path}/sculpting_study/mjj_feature_vs_target_2d_hist_6.png")
+        #     plt.close()
 
         optimizer.zero_grad()
         y_pred = model(X_batch).squeeze()  # Remove extra dimension for regression
-        print(f"DEBUG: y_pred shape: {y_pred.shape}")
-        print(f"DEBUG: y_batch shape: {y_batch.shape}")
         if not DO_WEIGHTS:
             _loss = _loss_no_weights(loss_fn, y_pred, y_batch, optimizer)
             batch_losses.append(_loss)
