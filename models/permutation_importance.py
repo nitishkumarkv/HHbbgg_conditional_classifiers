@@ -116,6 +116,12 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description='Permutation Importance for MLP')
     parser.add_argument('--input_path', type=str, required=True, help='Path to the input data')
+    parser.add_argument('--X_path', type=str, default="X_val.npy", help='Path to the input features numpy file relative to input_path')
+    parser.add_argument("--y_path", type=str, default="y_val.npy", help='Path to the target labels numpy file relative to input_path')
+    parser.add_argument('--rel_w_path', type=str, default="rel_w_val.npy", help='Path to the relative weights numpy file relative to input_path')
+    parser.add_argument("--weights_path", type=str, default="class_weights_for_val.npy", help='Path to the class weights numpy file relative to input_path')
+    parser.add_argument("--input_vars_path", type=str, default="input_vars.txt", help='Path to the input variable names text file relative to input_path')
+    parser.add_argument("--training_folder", type=str, default="after_random_search_best1", help='Path to the training folder containing model and params.json relative to input_path')
     args = parser.parse_args()
     input_path= args.input_path
 
@@ -127,14 +133,14 @@ if __name__ == "__main__":
 
     # class_weights_for_train_no_aboslute = np.load(f'{input_path}/true_class_weights.npy')
 
-    X_val = np.load(f'{input_path}/X_val.npy')
-    y_val = np.load(f'{input_path}/y_val.npy')
-    rel_w_val = np.load(f'{input_path}/rel_w_val.npy')
-    class_weights_for_val = np.load(f'{input_path}/class_weights_for_val.npy')
+    X_val = np.load(os.path.join(args.input_path, args.X_path))
+    y_val = np.load(os.path.join(args.input_path, args.y_path))
+    rel_w_val = np.load(os.path.join(args.input_path, args.rel_w_path))
+    class_weights_for_val = np.load(os.path.join(args.input_path, args.weights_path))
     print(y_val)
 
     # load list of input features
-    with open(f'{input_path}/input_vars.txt', 'r') as f:
+    with open(os.path.join(args.input_path, args.input_vars_path), 'r', encoding="utf-8") as f:
         input_vars = json.load(f)
 
     print("INFO: Inputs loaded")
@@ -142,16 +148,16 @@ if __name__ == "__main__":
 
     ####### Permutation Importance #######
     # Paths to your model dictionary and model state
-    training_folder = f"{input_path}/after_random_search_best1/"
-    param_dict_path = f'{training_folder}/params.json'
-    model_path = f'{training_folder}/mlp.pth'
-    path_to_importance_plots = f'{training_folder}/permutation_importances_plots/'
+    training_folder = os.path.join(args.input_path, args.training_folder)
+    param_dict_path = os.path.join(training_folder, 'params.json')
+    model_path = os.path.join(training_folder, 'mlp.pth')
+    path_to_importance_plots = os.path.join(training_folder, 'permutation_importances_plots')
     os.makedirs(path_to_importance_plots, exist_ok=True)
 
     # Instantiate your model wrapper
     model_wrapper = ModelEstimatorWrapper(param_dict_path, model_path)
 
-    if not os.path.exists(f'{path_to_importance_plots}/permutation_importances.pkl'):
+    if not os.path.exists(os.path.join(path_to_importance_plots, 'permutation_importances.pkl')):
 
         # Compute permutation importance for weighted log loss
         print("Computing permutation importance using weighted log loss...")
