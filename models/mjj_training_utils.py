@@ -497,23 +497,23 @@ if __name__ == "__main__":
         # print(f"DEBUG: y_train.shape: {y_train.shape}")
         # print(f"DEBUG: y_val.shape: {y_val.shape}")
         # Generate indices safely based on training tensor length
-        dataset_len = X_train.shape[0]
-        rand_inds = list(set(np.random.randint(0, dataset_len, size=min(10000, dataset_len))))
-        y_pred = get_predictions(best_model, train_loader, device, indices=list(rand_inds))
-        if epoch == 0:
-            y_true = y_train.cpu().numpy()[rand_inds].squeeze()
-            if len(y_pred) != len(y_true):
-                print(f"WARNING: y_pred and y_true have different lengths: {len(y_pred)} vs {len(y_true)}")
-                print(f"DEBUG: rand_inds: {rand_inds}")
-                print(f"DEBUG: max(rand_inds): {np.max(rand_inds)}, min(rand_inds): {np.min(rand_inds)}")
+        # dataset_len = X_train.shape[0]
+        # rand_inds = list(set(np.random.randint(0, dataset_len, size=min(10000, dataset_len))))
+        # y_pred = get_predictions(best_model, train_loader, device, indices=list(rand_inds))
+        # if epoch == 0:
+        #     y_true = y_train.cpu().numpy()[rand_inds].squeeze()
+        #     if len(y_pred) != len(y_true):
+        #         print(f"WARNING: y_pred and y_true have different lengths: {len(y_pred)} vs {len(y_true)}")
+        #         print(f"DEBUG: rand_inds: {rand_inds}")
+        #         print(f"DEBUG: max(rand_inds): {np.max(rand_inds)}, min(rand_inds): {np.min(rand_inds)}")
 
         print(f"DEBUG: Compare train y_pred vs y_true:")
         for i in range(n_compare):
             print(f"  y_pred: {y_pred_to_print[i]:.4f}, y_true: {y_train[i].item():.4f}")
 
-        save_y_pred_hist(y_pred, f"{path_to_checkpoint}/plots/training/y_pred/y_pred_epoch{epoch}.png")
-        if epoch == 0:
-            save_y_true_hist(y_true, f"{path_to_checkpoint}/plots/training/y_true/y_true_epoch{epoch}.png")
+        # save_y_pred_hist(y_pred, f"{path_to_checkpoint}/plots/training/y_pred/y_pred_epoch{epoch}.png")
+        # if epoch == 0:
+        #     save_y_true_hist(y_true, f"{path_to_checkpoint}/plots/training/y_true/y_true_epoch{epoch}.png")
         # save_pred_vs_true_2d_hist(y_pred, y_true, f"{path_to_checkpoint}/plots/training/y_pred_vs_true/y_pred_vs_true_epoch{epoch}.png")
 
 

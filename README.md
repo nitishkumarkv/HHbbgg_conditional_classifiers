@@ -26,3 +26,20 @@ Config path has yaml files which define the input variables to use, the classes,
 python3 categorisation/bayesian_categorization.py --n_categories 4 --base_path Version_20250524_MVAID_forPreApp/ --n_runs {default=15}
 ```
 `--n_run` defines the number of complete categorisation runs to choose the best one. The script also has several other useful arguments which you can have a look.
+
+
+# Sculpting Study
+
+## Example Workflow
+
+```bash
+python3 run_multiclass_strategy.py --config_path config/Version_20250524_MVAID_forPreApp/ --out_path Version_20250524_MVAID_forPreApp/ --prep_inputs_for_training
+```
+
+```bash
+python3 run_multiclass_strategy.py --config_path config/Version_20250524_MVAID_forPreApp/ --out_path Version_20250524_MVAID_forPreApp/ --prepare_sculpting_study_inputs
+```
+
+```bash
+python3 run_multiclass_strategy.py --config_path config/Version_20250524_MVAID_forPreApp/ --out_path Version_20250524_MVAID_forPreApp/ --train_mjj_predictor
+```
