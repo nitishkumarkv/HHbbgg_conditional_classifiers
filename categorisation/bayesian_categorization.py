@@ -1596,23 +1596,23 @@ class OptunaCategorizer:
             # also save it as a JSON file
             best_params_json_path = os.path.join(cat_path, "best_cut_params.json")
             if i == 0:
-                with open(best_params_json_path, "w") as f:
-                    mHH_cat_dict[f"mHHcat{i}"] = {"mHH_low": 250,
-                                    "mHH_high": self.mHH_cats[i],
-                                    "DNN_cuts" : best_params
-                                    }
+                # with open(best_params_json_path, "w") as f:
+                mHH_cat_dict[f"mHHcat{i}"] = {"mHH_low": 250,
+                                "mHH_high": self.mHH_cats[i],
+                                "DNN_cuts" : best_params
+                                }
             elif i == len(self.mHH_cats):
-                with open(best_params_json_path, "a") as f:
-                    mHH_cat_dict[f"mHHcat{i}"] = {"mHH_low": self.mHH_cats[i-1],
-                                    "mHH_high": -1,
-                                    "DNN_cuts" : best_params
-                                    }
+                # with open(best_params_json_path, "a") as f:
+                mHH_cat_dict[f"mHHcat{i}"] = {"mHH_low": self.mHH_cats[i-1],
+                                "mHH_high": -1,
+                                "DNN_cuts" : best_params
+                                }
             else:
-                with open(best_params_json_path, "a") as f:
-                    mHH_cat_dict[f"mHHcat{i}"] = {"mHH_low": self.mHH_cats[i-1],
-                                    "mHH_high": self.mHH_cats[i],
-                                    "DNN_cuts" : best_params
-                                    }
+                # with open(best_params_json_path, "a") as f:
+                mHH_cat_dict[f"mHHcat{i}"] = {"mHH_low": self.mHH_cats[i-1],
+                                "mHH_high": self.mHH_cats[i],
+                                "DNN_cuts" : best_params
+                                }
 
             # # load the best cut values
             # with open(f"{self.base_path}/{self.cat_folder}/best_cut_params.json", "r") as f:
@@ -1647,7 +1647,8 @@ class OptunaCategorizer:
                 mass_range=(100, 180)  # Example mass range, adjust as needed
             )
 
-        json.dump(mHH_cat_dict, f, indent=4)
+        with open(best_params_json_path, "w") as f:
+            json.dump(mHH_cat_dict, f, indent=4)
 
 
 #############################################
