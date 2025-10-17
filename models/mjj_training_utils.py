@@ -34,19 +34,7 @@ def train_one_epoch_regression(model, optimizer, data_loader, loss_fn, device, e
     batch_losses = []
     batch_losses_no_abs = []
 
-    # Make another 2D histogram of mjj feature vs target
-    # x_feat = np.asarray(data_loader.dataset.X[:,-4]).reshape(-1)
-    # y_targ = np.asarray(data_loader.dataset.y).reshape(-1)
-    # plt.hist2d(x_feat, y_targ, bins=[100, 100], cmap='Blues')
-    # plt.colorbar(label='Counts')
-    # plt.xlabel('Mjj Feature')
-    # plt.ylabel('Target Variable')
-    # plt.title('2D Histogram of Mjj Feature vs Target Variable')
-    # plt.savefig(f"{input_path}/sculpting_study/mjj_feature_vs_target_2d_hist_4.png")
-    # plt.close()
-
     progress_bar = tqdm(data_loader, desc=f"Epoch {epoch} [Training]", leave=False)
-    ibatch = 0
     for batch_data in progress_bar:
         if len(batch_data) == 4:  # Training data with both weight types
             X_batch, y_batch, weights_batch, weights_batch_no = batch_data
@@ -54,43 +42,10 @@ def train_one_epoch_regression(model, optimizer, data_loader, loss_fn, device, e
         else:  # Validation data with single weight type
             X_batch, y_batch, weights_batch = batch_data
             weights_batch_no = weights_batch  # Use same weights
-        # Print first parts
-        # print()
-        # print(f"DEBUG: X_batch shape: {X_batch.shape}, y_batch shape: {y_batch.shape}")
-        # print(f"DEBUG: weights_batch shape: {weights_batch.shape}, weights_batch_no shape: {weights_batch_no.shape}")
-        # print(f"DEBUG: X_batch[:5]: {X_batch[:5]}")
-        # print(f"DEBUG: y_batch[:5]: {y_batch[:5]}")
-        # print(f"DEBUG: weights_batch[:5]: {weights_batch[:5]}")
-        # print(f"DEBUG: weights_batch_no[:5]: {weights_batch_no[:5]}")
-        # print()
 
-        # if ibatch == 0 and epoch == 0:
-        #     # Make yet another 2D histogram of mjj feature vs target for first batch
-        #     x_feat_batch = np.asarray(X_batch[:,-4].cpu()).reshape(-1)
-        #     y_targ_batch = np.asarray(y_batch.cpu()).reshape(-1)
-        #     plt.hist2d(x_feat_batch, y_targ_batch, bins=[100, 100], cmap='Blues')
-        #     plt.colorbar(label='Counts')
-        #     plt.xlabel('Mjj Feature')
-        #     plt.ylabel('Target Variable')
-        #     plt.title('2D Histogram of Mjj Feature vs Target Variable')
-        #     plt.savefig(f"{input_path}/sculpting_study/mjj_feature_vs_target_2d_hist_5.png")
-        #     plt.close()
-            
         X_batch = X_batch.to(device)
         y_batch = y_batch.to(device).float().squeeze()  # Ensure float for regression and match dimensions
         weights_batch = weights_batch.to(device)
-
-        # if ibatch == 0 and epoch == 0:
-        #     # Make yet another 2D histogram of mjj feature vs target for first batch
-        #     x_feat_batch = np.asarray(X_batch[:,-4].cpu()).reshape(-1)
-        #     y_targ_batch = np.asarray(y_batch.cpu()).reshape(-1)
-        #     plt.hist2d(x_feat_batch, y_targ_batch, bins=[100, 100], cmap='Blues')
-        #     plt.colorbar(label='Counts')
-        #     plt.xlabel('Mjj Feature')
-        #     plt.ylabel('Target Variable')
-        #     plt.title('2D Histogram of Mjj Feature vs Target Variable')
-        #     plt.savefig(f"{input_path}/sculpting_study/mjj_feature_vs_target_2d_hist_6.png")
-        #     plt.close()
 
         optimizer.zero_grad()
         y_pred = model(X_batch).squeeze()  # Remove extra dimension for regression
@@ -113,11 +68,6 @@ def train_one_epoch_regression(model, optimizer, data_loader, loss_fn, device, e
             # Guard against division by zero if weights are pathological
             weighted_loss = (loss * weights_batch).sum() / (weights_batch.sum() + 1e-12)
             weighted_loss.backward()
-
-            # Weighted loss diagnostics
-            # print(f"DEBUG: Loss diagnostics - mean: {loss.mean().item():.4f}, sum: {loss.sum().item():.4f}, stddev: {loss.std().item():.4f}, min: {loss.min().item():.4f}, max: {loss.max().item():.4f}")
-            # print(f"DEBUG: Weights diagnostics - mean: {weights_batch.mean().item():.4f}, sum: {weights_batch.sum().item():.4f}, stddev: {weights_batch.std().item():.4f}, min: {weights_batch.min().item():.4f}, max: {weights_batch.max().item():.4f}")
-            # print(f"DEBUG: Weighted loss diagnostics - mean: {weighted_loss.mean().item():.4f}, sum: {weighted_loss.sum().item():.4f}, stddev: {weighted_loss.std().item():.4f}, min: {weighted_loss.min().item():.4f}, max: {weighted_loss.max().item():.4f}")
             
             # Add gradient monitoring
             total_norm = 0
@@ -142,24 +92,6 @@ def train_one_epoch_regression(model, optimizer, data_loader, loss_fn, device, e
             progress_bar.set_postfix({
                 'Loss': f'{weighted_loss.item():.4f}'
             })
-
-        if ibatch == 0 and epoch == 0:
-            # Save a bunch of stuff to file for manual inspection
-            os.makedirs('debug_outputs', exist_ok=True)
-
-            # Save X and y
-            np.save('debug_outputs/X_batch.npy', X_batch.cpu().numpy())
-            np.save('debug_outputs/y_batch.npy', y_batch.cpu().numpy())
-            np.save('debug_outputs/y_pred.npy', y_pred.cpu().detach().numpy())
-            np.save('debug_outputs/weights_batch.npy', weights_batch.cpu().numpy())
-            np.save('debug_outputs/loss.npy', loss.cpu().detach().numpy())
-            np.save('debug_outputs/weighted_loss.npy', weighted_loss.cpu().detach().numpy())
-
-            # Save model
-            torch.save(model.state_dict(), 'debug_outputs/model.pth')
-            
-
-        ibatch += 1
 
     if batch_losses_no_abs:
         return np.mean(batch_losses), 0.0, np.mean(batch_losses_no_abs), total_norm  # No accuracy for regression
@@ -302,7 +234,7 @@ if __name__ == "__main__":
     if not os.path.exists(f'{input_path}/sculpting_study/best_params.json'):
         print('INFO: Creating best_params.json file with default best params')
 
-    best_params = {"num_layers": 2, "num_nodes": 60, "act_fn_name": "ReLU", "lr": 2.027496582741043e-03, "weight_decay": 5.159904717896079e-05, "dropout_prob": 0.05, "n_trials": 0}
+    best_params = {"num_layers": 3, "num_nodes": 100, "act_fn_name": "ELU", "lr": 2.027496582741043e-05, "weight_decay": 5.159904717896079e-05, "dropout_prob": 0.15, "n_trials": 0}
     with open(f'{input_path}/sculpting_study/best_params.json', 'w', encoding="utf-8") as f:
         json.dump(best_params, f)
     
@@ -519,8 +451,8 @@ if __name__ == "__main__":
 
         # Print first five values of y_pred vs y_true for a batch
 
-    save_checkpoint(epoch, best_model, best_optimizer, best_scheduler, 
-                train_loss_hist, train_loss_hist_no_absolute_weights, val_loss_hist, train_acc_hist, val_acc_hist, 
+    save_checkpoint(epoch, best_model, best_optimizer, best_scheduler,
+                train_loss_hist, train_loss_hist_no_absolute_weights, val_loss_hist, train_acc_hist, val_acc_hist,
                 best_weights, best_loss, f"{path_to_checkpoint}/mlp.pth", lr_hist)
     
     # Load the best state of the model

@@ -9,18 +9,29 @@ from sklearn.inspection import permutation_importance
 import torch
 import torch.nn as nn
 from mlp import MLP
+from mjj_predictor_mlp import MJJPredictorMLP
 import pickle
 import json
 import os
+import yaml
 hep.style.use("CMS")
 
 
 # Wrapper class for your model
 class ModelEstimatorWrapper:
-    def __init__(self, param_dict_path, model_path):
+    def __init__(self, param_dict_path, model_path, args, additional_config=None):
         self.param_dict_path = param_dict_path
         self.model_path = model_path
+        self.args = args
         self.model = None
+        self.sculpting_study_mode = "sculpting_study" in args.training_folder
+        # Task flag: sculpting study => regression; otherwise => classification
+        self.is_regression = self.sculpting_study_mode
+        additional_config = additional_config or {}
+        if self.sculpting_study_mode:
+            self.sculpting_study_config = additional_config
+        else:
+            self.sculpting_study_config = None
     
     def load_model(self, input_size):
         # Load the model parameters
@@ -40,13 +51,22 @@ class ModelEstimatorWrapper:
         best_act_fn_name = best_params['act_fn_name']
         best_act_fn = getattr(nn, best_act_fn_name)
         best_dropout_prob = best_params['dropout_prob']
-        output_size = best_params.get('output_size', 4)  # Adjust as per your problem
+        if self.sculpting_study_mode and self.sculpting_study_config is not None:
+            output_size = len(self.sculpting_study_config["target_variables"])
+        else:
+            output_size = best_params.get('output_size', 4)  # Adjust as per your problem
 
         # Define the model
-        self.model = MLP(
-            input_size, best_num_layers, best_num_nodes, output_size,
-            best_act_fn, best_dropout_prob
-        ).to(device)
+        if "sculpting_study" in self.args.training_folder:
+            self.model = MJJPredictorMLP(
+                input_size, best_num_layers, best_num_nodes, output_size,
+                best_act_fn, best_dropout_prob
+            ).to(device)
+        else:
+            self.model = MLP(
+                input_size, best_num_layers, best_num_nodes, output_size,
+                best_act_fn, best_dropout_prob
+            ).to(device)
 
         # Load the model state
         model_state = torch.load(self.model_path, map_location=device, weights_only=False)
@@ -63,6 +83,10 @@ class ModelEstimatorWrapper:
         X_tensor = torch.from_numpy(X).float().to(self.device)
         with torch.no_grad():
             outputs = self.model(X_tensor)
+            # For regression tasks, return raw outputs
+            if self.is_regression:
+                return outputs.cpu().numpy()
+            # For classification tasks, return class indices
             _, predicted = torch.max(outputs, 1)
         return predicted.cpu().numpy()
 
@@ -72,6 +96,9 @@ class ModelEstimatorWrapper:
         X_tensor = torch.from_numpy(X).float().to(self.device)
         with torch.no_grad():
             outputs = self.model(X_tensor)
+            # Only meaningful for classification
+            if self.is_regression:
+                raise ValueError("predict_proba called for regression task")
             probabilities = torch.softmax(outputs, dim=1)
         return probabilities.cpu().numpy()
 
@@ -82,6 +109,17 @@ def weighted_accuracy(y_true, y_pred, sample_weight):
 def weighted_log_loss(y_true, y_pred_proba, sample_weight):
     # Return negative log loss to align with scikit-learn's maximization
     return -log_loss(y_true, y_pred_proba, sample_weight=sample_weight)
+
+def weighted_mse(y_true, y_pred, sample_weight):
+    """Negative weighted MSE (so higher is better). Supports multi-output by averaging per sample."""
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
+    err = (y_true - y_pred) ** 2
+    if err.ndim == 2:
+        per_sample = err.mean(axis=1)
+    else:
+        per_sample = err
+    return -np.average(per_sample, weights=sample_weight)
 
 def plot_permutation_importance_log_loss(importances, stds, feature_names):
     # Sort importances and features
@@ -122,6 +160,7 @@ if __name__ == "__main__":
     parser.add_argument("--weights_path", type=str, default="class_weights_for_val.npy", help='Path to the class weights numpy file relative to input_path')
     parser.add_argument("--input_vars_path", type=str, default="input_vars.txt", help='Path to the input variable names text file relative to input_path')
     parser.add_argument("--training_folder", type=str, default="after_random_search_best1", help='Path to the training folder containing model and params.json relative to input_path')
+    parser.add_argument("--sculpting_study_config_path", type=str, default=None, help='Path to the sculpting study config file relative to input_path')
     args = parser.parse_args()
     input_path= args.input_path
 
@@ -143,6 +182,12 @@ if __name__ == "__main__":
     with open(os.path.join(args.input_path, args.input_vars_path), 'r', encoding="utf-8") as f:
         input_vars = json.load(f)
 
+    if args.sculpting_study_config_path is not None:
+        with open(args.sculpting_study_config_path, 'r', encoding="utf-8") as f:
+            additional_config = yaml.safe_load(f)
+    else:
+        additional_config = None
+
     print("INFO: Inputs loaded")
 
 
@@ -155,15 +200,21 @@ if __name__ == "__main__":
     os.makedirs(path_to_importance_plots, exist_ok=True)
 
     # Instantiate your model wrapper
-    model_wrapper = ModelEstimatorWrapper(param_dict_path, model_path)
+    model_wrapper = ModelEstimatorWrapper(param_dict_path, model_path, args, additional_config)
 
     if not os.path.exists(os.path.join(path_to_importance_plots, 'permutation_importances.pkl')):
 
-        # Compute permutation importance for weighted log loss
-        print("Computing permutation importance using weighted log loss...")
+        # Choose scoring based on task
+        if model_wrapper.is_regression:
+            print("Computing permutation importance using weighted MSE (regression)...")
+            scoring_fn = lambda estimator, X, y: weighted_mse(y, estimator.predict(X), class_weights_for_val)
+        else:
+            print("Computing permutation importance using weighted log loss (classification)...")
+            scoring_fn = lambda estimator, X, y: weighted_log_loss(y, estimator.predict_proba(X), class_weights_for_val)
+
         result_log_loss = permutation_importance(
             model_wrapper, X_val, y_val, n_repeats=5,
-            scoring=lambda estimator, X, y: weighted_log_loss(y, estimator.predict_proba(X), class_weights_for_val),
+            scoring=scoring_fn,
             random_state=42
         )
 

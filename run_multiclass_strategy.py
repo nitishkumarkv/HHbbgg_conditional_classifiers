@@ -148,11 +148,10 @@ def perform_mjj_sculpting_study(args):
         print('INFO: Training the Mjj predictor for sculpting study')
         subprocess.run(f"python3 models/mjj_training_utils.py --input_path {out_path} --training_config_path {training_config_path} --sculpting_study_config_path {sculpting_study_config_path}", shell=True)
 
-    # get permutaion importance for mjj predictor
+    # get permutaion importance
     if args.mjj_predictor_permutation_importance:
-        print('INFO: Getting permutation importance for Mjj predictor')
-        subprocess.run(f"python3 models/mjj_permutation_importance.py --input_path {out_path}", shell=True)
-
+        print('INFO: Getting permutation importance')
+        subprocess.run(f"python3 models/permutation_importance.py --input_path {out_path} --y_path sculpting_study/y_val.npy --training_folder sculpting_study --sculpting_study_config_path {sculpting_study_config_path}", shell=True)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Perform MLP based classification')

@@ -33,13 +33,15 @@ python3 categorisation/bayesian_categorization.py --n_categories 4 --base_path V
 ## Example Workflow
 
 ```bash
+# Re-run prep inputs to build X feature set
 python3 run_multiclass_strategy.py --config_path config/Version_20250524_MVAID_forPreApp/ --out_path Version_20250524_MVAID_forPreApp/ --prep_inputs_for_training
-```
 
-```bash
+# Prepare sculpting study inputs (y target set)
 python3 run_multiclass_strategy.py --config_path config/Version_20250524_MVAID_forPreApp/ --out_path Version_20250524_MVAID_forPreApp/ --prepare_sculpting_study_inputs
-```
 
-```bash
+# Train Mjj predictor DNN
 python3 run_multiclass_strategy.py --config_path config/Version_20250524_MVAID_forPreApp/ --out_path Version_20250524_MVAID_forPreApp/ --train_mjj_predictor
+
+# Get permutation importance for Mjj predictor
+python3 run_multiclass_strategy.py --config_path config/Version_20250524_MVAID_forPreApp/ --out_path Version_20250524_MVAID_forPreApp/ --mjj_predictor_permutation_importance
 ```

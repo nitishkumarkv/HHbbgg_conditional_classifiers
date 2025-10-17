@@ -1,0 +1,13 @@
+*.pyc
+*.png
+
+Version_20250524_MVAID_forPreApp/*
+
+# Dev files
+.pylintrc
+.vscode/
+HHbbgg_classifier.yaml
+
+# Notebooks
+merge_multiclass.ipynb
+sculpting.ipynb
