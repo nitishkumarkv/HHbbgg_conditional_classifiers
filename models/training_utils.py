@@ -1,64 +1,180 @@
 import os
 import json
+import yaml
+import copy
+from typing import Union
 import numpy as np
+from tqdm.auto import tqdm
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import Dataset, DataLoader
-from tqdm.auto import tqdm
-import copy
-from mlp import MLP
 import torch.nn.functional as F
-import yaml
+
+from models.mlp import MLP
+from utils.decorr_utils import distance_corr, distance_corr_multi
 
 
 # Define custom dataset
 class CustomDataset(Dataset):
-    def __init__(self, X, y, sample_weights, no_aboslute_weights=None):
+    def __init__(self, X, y, sample_weights, no_absolute_weights=None, disco_var=None):
         self.X = X
         self.y = y
         self.sample_weights = sample_weights
-        self.no_aboslute_weights = no_aboslute_weights
+        self.no_absolute_weights = no_absolute_weights
+        self.disco_var = disco_var # 1D tensor aligned to X (e.g. mjj)
 
     def __len__(self):
         return len(self.X)
 
     def __getitem__(self, idx):
-        if self.no_aboslute_weights is not None:
-            return self.X[idx], self.y[idx], self.sample_weights[idx], self.no_aboslute_weights[idx]
+        if self.disco_var is not None and self.no_absolute_weights is not None:
+            return self.X[idx], self.y[idx], self.sample_weights[idx], self.no_absolute_weights[idx], self.disco_var[idx]
+        elif self.disco_var is not None:
+            return self.X[idx], self.y[idx], self.sample_weights[idx], self.disco_var[idx]
+        elif self.no_absolute_weights is not None:
+            return self.X[idx], self.y[idx], self.sample_weights[idx], self.no_absolute_weights[idx]
         else:
             return self.X[idx], self.y[idx], self.sample_weights[idx]
 
 
+def apply_disco(
+        loss_nominal: torch.Tensor,
+        y_pred: torch.Tensor,
+        weights_batch: torch.Tensor,
+        disco_var_batch: torch.Tensor,
+        decorr_lambda: float,
+        disco_signal_class_idx: Union[int, list[int], None],
+        disco_reduce: str='mean'
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Apply the DisCo (Decorrelation) loss to the nominal loss.
+    """
+    USE_MULTIDIM_DISCO = False # Experimental. Baseline only supports 1-dim decorrelation.
+
+    norm_w = weights_batch / weights_batch.mean()
+    if y_pred.ndim == 2 and y_pred.shape[1] > 1:
+        probs = F.softmax(y_pred, dim=1) # [N,C]
+        if USE_MULTIDIM_DISCO:
+            if disco_signal_class_idx is None:
+                raise ValueError("disco_signal_class_idx must be provided when use_disco=True.")
+            d_corr = distance_corr_multi(disco_var_batch.reshape(-1), probs, norm_w, reduce=disco_reduce)
+        else:
+            if isinstance(disco_signal_class_idx, int):
+                class_indices = [disco_signal_class_idx]
+            elif isinstance(disco_signal_class_idx, list):
+                raise NotImplementedError("Multi-class DisCo with list of indices not implemented without USE_MULTIDIM_DISCO=True.")
+            else:
+                raise ValueError("disco_signal_class_idx must be int or list of int when y_pred is multi-dimensional.")
+            d_corr = distance_corr_multi(disco_var_batch.reshape(-1), probs[:, class_indices], norm_w, reduce=disco_reduce)
+    else:
+        # Single output (binary classification)
+        probs = torch.sigmoid(y_pred).reshape(-1) # [N]
+        d_corr = distance_corr(disco_var_batch.reshape(-1), probs, norm_w.reshape(-1))
+    total_loss = loss_nominal + decorr_lambda * d_corr
+
+    return total_loss, d_corr
+
+
 # Training and evaluation functions
-def train_one_epoch(model, optimizer, data_loader, loss_fn, device, epoch):
+def train_one_epoch(
+        model: nn.Module,
+        optimizer: optim.Optimizer,
+        data_loader: DataLoader,
+        loss_fn: nn.Module,
+        device: torch.device,
+        epoch: int,
+        use_disco=False,
+        decorr_lambda=0.1,
+        disco_signal_class_idx: Union[int, list[int], None]=0,
+        disco_reduce: str='mean'
+) -> tuple[float, float, float, float, Union[float, None], Union[float, None]]:
+    """
+    Train the model for one epoch.
+    
+    Args:
+        model (nn.Module): The neural network model to train.
+        optimizer (optim.Optimizer): The optimizer for updating model parameters.
+        data_loader (DataLoader): DataLoader providing training data batches.
+        loss_fn (nn.Module): Loss function to compute the loss, like BCE. Don't include DisCo in loss_fn itself.
+        device (torch.device): Device to run the training on (CPU or GPU).
+        epoch (int): Current epoch number (for logging).
+        use_disco (bool): Whether to include DisCo distance correlation in the loss.
+        decorr_lambda (float): Weighting factor for the DisCo term in the loss. Typically between 0 and 1.
+        disco_signal_class_idx (int | list[int] | None): Index/indices of class(es) in model output to use for DisCo decorrelation.
+            If None, don't use DisCo even if use_disco=True.
+            If int, use that one class index. (n.b. zero indexed)
+            If list[int], use those class indices (e.g. for multi-class classification).
+        disco_reduce (str): 'mean'|'sum'|'max'|'quadrature'|'none' to aggregate distance correlations across multiple classes.
+
+    Returns:
+        tuple: Average across batches for the epoch
+            - Avg. training loss
+            - Avg. accuracy
+            - Avg. loss without absolute weights
+            - Avg. loss without distance correlation
+            - Avg. distance correlation
+            - Avg. distance correlation times lambda
+    """
     model.train()
     batch_losses = []
     batch_accs = []
     batch_losses_no_abs = []
 
+    # Special for DisCo edits
+    batch_losses_no_dist_corr = []
+    batch_dist_corr = []
+
     progress_bar = tqdm(data_loader, desc=f"Epoch {epoch} [Training]", leave=False)
-    for X_batch, y_batch, weights_batch, weights_batch_no in progress_bar:
+    for batch in progress_bar:
+        # Unpack depending on options
+        if use_disco:
+            # Expect dataset to include disco_var in batch
+            if len(batch) == 5:
+                X_batch, y_batch, weights_batch, weights_batch_no, disco_var_batch = batch
+            else:
+                raise ValueError("use_disco=True but dataset does not include disco_var. Check how the dataset was created.")
+        else:
+            # Not using DisCo
+            if len(batch) == 4:
+                X_batch, y_batch, weights_batch, weights_batch_no = batch
+            else:
+                # Not using weights without absolute value (not using no_absolute_weights)
+                X_batch, y_batch, weights_batch = batch
+                weights_batch_no = weights_batch # dummy assignment to avoid errors
+
         # Print first parts
-        print()
-        print(f"DEBUG: X_batch shape: {X_batch.shape}, y_batch shape: {y_batch.shape}")
-        print(f"DEBUG: weights_batch shape: {weights_batch.shape}, weights_batch_no shape: {weights_batch_no.shape}")
-        print(f"DEBUG: X_batch[:5]: {X_batch[:5]}")
-        print(f"DEBUG: y_batch[:5]: {y_batch[:5]}")
-        print(f"DEBUG: weights_batch[:5]: {weights_batch[:5]}")
-        print(f"DEBUG: weights_batch_no[:5]: {weights_batch_no[:5]}")
-        print()
         X_batch = X_batch.to(device)
         y_batch = y_batch.to(device)
         weights_batch = weights_batch.to(device)
         weights_batch_no = weights_batch_no.to(device)
+        if use_disco:
+            disco_var_batch = disco_var_batch.to(device)
 
         optimizer.zero_grad()
         y_pred = model(X_batch)
-        loss = loss_fn(y_pred, y_batch)
-        weighted_loss = (loss * weights_batch).sum() / weights_batch.sum()
-        weighted_loss.backward()
+        loss = loss_fn(y_pred, y_batch) # [N]
+        wsum = weights_batch.sum()
+        weighted_loss = (loss * weights_batch).sum() / wsum
+
+        # Add DisCo term
+        if use_disco:
+            total_loss, d_corr = apply_disco(
+                weighted_loss,
+                y_pred,
+                weights_batch,
+                disco_var_batch,
+                decorr_lambda,
+                disco_signal_class_idx,
+                disco_reduce
+            )
+            assert d_corr is not None, "d_corr should not be None when using DisCo. Something is wrong inside the apply_disco function."
+        else:
+            total_loss = weighted_loss
+            d_corr = None # Dummy
+        
+        total_loss.backward()
         optimizer.step()
 
         weighted_loss_no_abs = (loss * weights_batch_no).sum() / weights_batch_no.sum()
@@ -67,27 +183,82 @@ def train_one_epoch(model, optimizer, data_loader, loss_fn, device, epoch):
         correct = (torch.argmax(y_pred, dim=1) == y_batch).float()
         weighted_acc = (correct * weights_batch).sum() / weights_batch.sum()
 
-        batch_losses.append(weighted_loss.item())
-        batch_accs.append(weighted_acc.item())
-        batch_losses_no_abs.append(weighted_loss_no_abs.item())
+        batch_losses.append(            weighted_loss.item())
+        batch_accs.append(              weighted_acc.item())
+        batch_losses_no_abs.append(     weighted_loss_no_abs.item())
+        batch_losses_no_dist_corr.append(weighted_loss.item() if not use_disco else (weighted_loss.item() - decorr_lambda * d_corr.item()))
+        batch_dist_corr.append(         d_corr.item() if d_corr is not None else None)
+
 
         # Update progress bar
-        progress_bar.set_postfix({
-            'Loss': f'{weighted_loss.item():.4f}',
-            'Acc': f'{weighted_acc.item():.4f}',
-            'Loss_no_abs': f'{weighted_loss_no_abs.item():.4f}'
-        })
+        if use_disco:
+            progress_bar.set_postfix({
+                'Loss': f'{weighted_loss.item() - decorr_lambda * d_corr.item():.4f} + {decorr_lambda}*{d_corr.item():.4f}',
+                'Acc': f'{weighted_acc.item():.4f}',
+                'Loss_no_abs': f'{weighted_loss_no_abs.item():.4f}'
+            })
+        else:
+            progress_bar.set_postfix({
+                'Loss': f'{weighted_loss.item():.4f}',
+                'Acc': f'{weighted_acc.item():.4f}',
+                'Loss_no_abs': f'{weighted_loss_no_abs.item():.4f}'
+            })
 
-    return np.mean(batch_losses), np.mean(batch_accs), np.mean(batch_losses_no_abs)
+        mean_batch_losses                   = float(np.mean(batch_losses))
+        mean_accs                           = float(np.mean(batch_accs))
+        mean_batch_losses_no_abs            = float(np.mean(batch_losses_no_abs))
+        mean_batch_losses_no_dist_corr      = float(np.mean(batch_losses_no_dist_corr))
+        mean_batch_dist_corr                = float(np.mean([dc for dc in batch_dist_corr if dc is not None])) if use_disco else None
+        mean_batch_dist_corr_times_lambda   = float(np.mean([dc * decorr_lambda for dc in batch_dist_corr if dc is not None])) if use_disco else None
+
+    return (
+        mean_batch_losses, 
+        mean_accs,
+        mean_batch_losses_no_abs,
+        mean_batch_losses_no_dist_corr,
+        mean_batch_dist_corr,
+        mean_batch_dist_corr_times_lambda
+    )
 
 
-def evaluate(model, data_loader, loss_fn, device, epoch):
+def evaluate(
+        model,
+        data_loader,
+        loss_fn,
+        device,
+        epoch,
+        use_disco=False,
+        decorr_lambda=0.1,
+        disco_signal_class_idx:
+        Union[int, list[int], None]=0, 
+        disco_reduce: str='mean'
+    ) -> tuple[float, float, float, Union[float, None], Union[float, None]]:
+    USE_MULTIDIM_DISCO = False # Experimental. Baseline only supports 1-dim decorrelation.
+
     model.eval()
     val_losses = []
     val_accs = []
+    val_losses_no_dist_corr = []
+    val_dist_corr = []
+    val_dist_corr_times_lambda = []
     progress_bar = tqdm(data_loader, desc=f"Epoch {epoch} [Validation]", leave=False)
     with torch.no_grad():
-        for X_batch, y_batch, weights_batch in progress_bar:
+        for batch in progress_bar:
+            if use_disco:
+                # Expect dataset to include disco_var in batch
+                if len(batch) == 5:
+                    X_batch, y_batch, weights_batch, weights_batch_no, disco_var_batch = batch
+                elif len(batch) == 4:
+                    X_batch, y_batch, weights_batch, disco_var_batch = batch
+                else:
+                    raise ValueError("use_disco=True but dataset does not include disco_var. Check how the dataset was created.")
+            else:
+                # Not using DisCo
+                if len(batch) == 4:
+                    X_batch, y_batch, weights_batch, weights_batch_no = batch
+                else:
+                    # Not using weights without absolute value (not using no_absolute_weights)
+                    X_batch, y_batch, weights_batch = batch
             X_batch = X_batch.to(device)
             y_batch = y_batch.to(device)
             weights_batch = weights_batch.to(device)
@@ -96,12 +267,32 @@ def evaluate(model, data_loader, loss_fn, device, epoch):
             loss = loss_fn(y_pred, y_batch)
             weighted_loss = (loss * weights_batch).sum() / weights_batch.sum()
 
+            # Add DisCo term
+            if use_disco:
+                disco_var_batch = disco_var_batch.to(device)
+                total_loss, d_corr = apply_disco(
+                    weighted_loss,
+                    y_pred,
+                    weights_batch,
+                    disco_var_batch,
+                    decorr_lambda,
+                    disco_signal_class_idx,
+                    disco_reduce
+                )
+            else:
+                total_loss = weighted_loss
+                d_corr = None # Dummy
+
             # compute weighted accuracy
             correct = (torch.argmax(y_pred, dim=1) == y_batch).float()
             weighted_acc = (correct * weights_batch).sum() / weights_batch.sum()
 
-            val_losses.append(weighted_loss.item())
-            val_accs.append(weighted_acc.item())
+
+            val_losses.append(                  total_loss.item())
+            val_accs.append(                    weighted_acc.item())
+            val_losses_no_dist_corr.append(     weighted_loss.item() if not use_disco else (weighted_loss.item() - decorr_lambda * d_corr.item()))
+            val_dist_corr.append(               d_corr.item() if d_corr is not None else None)
+            val_dist_corr_times_lambda.append(  d_corr.item() * decorr_lambda if d_corr is not None else None)
 
             # Update progress bar
             progress_bar.set_postfix({
@@ -109,27 +300,139 @@ def evaluate(model, data_loader, loss_fn, device, epoch):
                 'Acc': f'{weighted_acc.item():.4f}'
             })
 
-    return np.mean(val_losses), np.mean(val_accs)
+            mean_losses                 = float(np.mean(val_losses))
+            mean_accs                   = float(np.mean(val_accs))
+            mean_losses_no_dist_corr    = float(np.mean(val_losses_no_dist_corr))
+            mean_dist_corr              = float(np.mean(val_dist_corr)) if d_corr is not None else None
+            mean_dist_corr_times_lambda = float(np.mean(val_dist_corr_times_lambda)) if d_corr is not None else None
+
+    return (
+        mean_losses,
+        mean_accs,
+        mean_losses_no_dist_corr,
+        mean_dist_corr,
+        mean_dist_corr_times_lambda
+    )
 
 
 # Save the best model
-def save_checkpoint(epoch, model, optimizer, scheduler, train_loss_hist, train_loss_hist_no_absolute_weights, val_loss_hist, train_acc_hist, val_acc_hist, best_weights, best_loss, file_path, lr_hist):
+def save_checkpoint(**kwargs):
+    """Save checkpoint to disk.
+
+    Kwargs:
+        epoch: Current epoch number.
+        model: Model to save.
+        optimizer: Optimizer state.
+        scheduler: Scheduler state.
+        train_loss_hist: Training loss history.
+        train_loss_hist_no_absolute_weights: Training loss history without absolute weights.
+        train_loss_hist_no_dist_corr: Training loss history without distance correlation.
+        train_loss_hist_no_absolute_weights_no_dist_corr: Training loss history without absolute weights and without distance correlation.
+        val_loss_hist: Validation loss history.
+        train_acc_hist: Training accuracy history.
+        val_acc_hist: Validation accuracy history.
+        best_weights: Best model weights.
+        best_loss: Best loss value.
+        lr_hist: Learning rate history.
+        file_path: Path to save the checkpoint. 
+
+    Note: 
+        Unless specified otherwise, losses include distance correlation if it was used during training.
+        If distance correlation was not used, all losses are without it.
+    
+    """
+    _epoch = kwargs.get('epoch')
+    _model: torch.nn.Module | None              = kwargs.get('model', None)
+    _optimizer: torch.optim.Optimizer | None    = kwargs.get('optimizer', None)
+    _scheduler: ReduceLROnPlateau | None        = kwargs.get('scheduler', None)
+    _lr_hist: list[float] | None                = kwargs.get('lr_hist', None)
+    _disco_in_loss: bool | None                 = kwargs.get('disco_in_loss', None)
+    _file_path: str | None                      = kwargs.get('file_path', None)
+
+    assert _epoch is not None, "Epoch number must be provided"
+    assert _model is not None, "Model must be provided"
+    assert _optimizer is not None, "Optimizer must be provided"
+    assert _scheduler is not None, "Scheduler must be provided"
+    assert _lr_hist is not None, "Learning rate history must be provided"
+    assert _disco_in_loss is not None, "Whether DisCo was used in loss must be provided as bool, not None"
+    assert _file_path is not None, "File path for saving checkpoint must be provided"
+
+
+    # TRAIN LOSS
+    _train_loss_hist                        = kwargs.get('train_loss_hist', None) # loss used in training, with absolute weights
+    _train_loss_hist_no_absolute_weights    = kwargs.get('train_loss_hist_no_absolute_weights', None) # loss used in training, without absolute weights
+    _train_loss_hist_no_dist_corr           = kwargs.get('train_loss_hist_no_dist_corr', None) # no distcorr, regardless of DisCo usage
+    _train_loss_hist_no_absolute_weights_no_dist_corr = kwargs.get('train_loss_hist_no_absolute_weights_no_dist_corr', None) # no distcorr, regardless of DisCo usage
+    _train_dist_corr_hist                   = kwargs.get('train_dist_corr_hist', None) # distance correlation history during training
+
+    assert _train_loss_hist is not None, "Training loss history must be provided"
+    assert _train_loss_hist_no_absolute_weights is not None, "Training loss history without absolute weights must be provided"
+    assert _train_loss_hist_no_dist_corr is not None, "Training loss history without distance correlation must be provided"
+    assert _train_loss_hist_no_absolute_weights_no_dist_corr is not None, "Training loss history without absolute weights and without distance correlation must be provided"
+    # _train_dist_corr_hist can be None if not using DisCo
+
+
+    # VAL LOSS
+    _val_loss_hist                  = kwargs.get('val_loss_hist', None) # used validation loss
+    _val_loss_hist_no_dist_corr     = kwargs.get('val_loss_hist_no_dist_corr', None) # no distcorr, regardless of DisCo usage
+    _val_dist_corr_hist             = kwargs.get('val_dist_corr_hist', None) # distance correlation history during validation
+
+    assert _val_loss_hist is not None, "Validation loss history must be provided"
+    assert _val_loss_hist_no_dist_corr is not None, "Validation loss history without distance correlation must be provided"
+    # _val_dist_corr_hist can be None if not using DisCo
+
+
+    # BEST
+    _best_loss          = kwargs.get('best_loss', None) # includes/excludes distcorr based on training, nominally val loss
+    _best_weights       = kwargs.get('best_weights', None)
+    _best_dist_corr     = kwargs.get('best_dist_corr', None) # n.b. lowest = best
+
+    assert _best_loss is not None, "Best loss must be provided"
+    assert _best_weights is not None, "Best model weights must be provided"
+    # _best_dist_corr can be None if not using DisCo
+
+
+    # ACCURACY
+    _train_acc_hist = kwargs.get('train_acc_hist', None)
+    _val_acc_hist = kwargs.get('val_acc_hist', None)
+
+    assert _train_acc_hist is not None, "Training accuracy history must be provided"
+    assert _val_acc_hist is not None, "Validation accuracy history must be provided"
+
+    # If using DisCo, check all related values are not None
+    if _disco_in_loss:
+        assert _train_dist_corr_hist is not None, "Training distance correlation history must be provided when using DisCo"
+        assert _val_dist_corr_hist is not None, "Validation distance correlation history must be provided when using DisCo"
+        assert _best_dist_corr is not None, "Best distance correlation must be provided when using DisCo"
+
+
     checkpoint = {
-        'epoch': epoch,
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
-        'scheduler_state_dict': scheduler.state_dict(),
-        'train_loss_hist': train_loss_hist,
-        'train_loss_hist_no_absolute_weights': train_loss_hist_no_absolute_weights,
-        'val_loss_hist': val_loss_hist,
-        'train_acc_hist': train_acc_hist,
-        'val_acc_hist': val_acc_hist,
-        'lr_hist': lr_hist,
-        'best_weights': best_weights,
-        'best_loss': best_loss
+        'epoch':                    _epoch,
+        'model_state_dict':         _model.state_dict(),
+        'optimizer_state_dict':     _optimizer.state_dict(),
+        'scheduler_state_dict':     _scheduler.state_dict(),
+        'lr_hist':                  _lr_hist,
+        'disco_in_loss':            _disco_in_loss,
+
+        'train_loss_hist':                          _train_loss_hist,
+        'train_loss_hist_no_absolute_weights':      _train_loss_hist_no_absolute_weights,
+        'train_loss_hist_no_dist_corr':             _train_loss_hist_no_dist_corr,
+        'train_loss_hist_no_absolute_weights_no_dist_corr': _train_loss_hist_no_absolute_weights_no_dist_corr,
+        'train_dist_corr_hist':                      _train_dist_corr_hist,
+
+        'val_loss_hist':                _val_loss_hist,
+        'val_loss_hist_no_dist_corr':   _val_loss_hist_no_dist_corr,
+        'val_dist_corr_hist':           _val_dist_corr_hist,
+
+        'best_weights':                 _best_weights,
+        'best_loss':                    _best_loss,
+        'best_dist_corr':               _best_dist_corr,
+
+        'train_acc_hist':               _train_acc_hist,
+        'val_acc_hist':                 _val_acc_hist,
     }
-    torch.save(checkpoint, file_path)
-    print(f'Checkpoint saved to {file_path}')
+    torch.save(checkpoint, _file_path)
+    print(f'Checkpoint saved to {_file_path}')
 
 
 if __name__ == "__main__":
@@ -148,6 +451,8 @@ if __name__ == "__main__":
     seed = training_config["random_seed"]
     weight_scheme = training_config["weight_scheme"]
     max_epoch = training_config.get("max_epoch", 500)
+    use_disco = training_config.get("use_DisCo", False)
+    decorr_lambda = training_config.get("decorr_lambda", 0.1)
 
     # --- REPROD SETUP ---
     import random, numpy as np, torch
@@ -168,8 +473,9 @@ if __name__ == "__main__":
         print("Using predefined parameters which are saved in the folder")
 
         os.makedirs(f'{input_path}/random_search_1', exist_ok=True)
-        best_params = {"num_layers": 3, "num_nodes": 100, "act_fn_name": "ELU", "lr": 2.027496582741043e-05, "weight_decay": 5.159904717896079e-05, "dropout_prob": 0.05, "n_trials": 0}
-        with open(f'{input_path}/random_search_1/best_params.json', 'w') as f:
+        # best_params = {"num_layers": 3, "num_nodes": 100, "act_fn_name": "ELU", "lr": 2.027496582741043e-05, "weight_decay": 5.159904717896079e-05, "dropout_prob": 0.05, "n_trials": 0}
+        best_params = {"num_layers": 5, "num_nodes": 1024, "act_fn_name": "ELU", "lr": 2.027496582741043e-05, "weight_decay": 5.159904717896079e-05, "dropout_prob": 0.25, "n_trials": 0}
+        with open(f'{input_path}/random_search_1/best_params.json', 'w', encoding='utf-8') as f:
             json.dump(best_params, f)
 
     best_params_path = f'{input_path}/random_search_1/best_params.json'
@@ -239,9 +545,18 @@ if __name__ == "__main__":
     input_size = X_train.shape[1]
     output_size = len(np.unique(y_train))  # Number of classes
 
+    # Load DisCo variable if needed
+    if use_disco:
+        z_train = np.load(f'{input_path}/z_train.npy')  # e.g., mjj for decorrelation
+        z_val = np.load(f'{input_path}/z_val.npy')
+        disco_var_train = torch.tensor(z_train, dtype=torch.float32)
+        disco_var_val = torch.tensor(z_val, dtype=torch.float32)
+    else:
+        disco_var_train, disco_var_val = None, None
+
     # Create datasets
-    train_dataset = CustomDataset(X_train, y_train, class_weights_for_training, class_weights_for_train_no_aboslute)
-    val_dataset = CustomDataset(X_val, y_val, class_weights_for_val)
+    train_dataset = CustomDataset(X_train, y_train, class_weights_for_training, class_weights_for_train_no_aboslute, disco_var=disco_var_train)
+    val_dataset = CustomDataset(X_val, y_val, class_weights_for_val, disco_var=disco_var_val)
 
     # Create data loaders
     g = torch.Generator().manual_seed(seed)
@@ -258,6 +573,7 @@ if __name__ == "__main__":
     # Training loop parameters
     print(f"INFO: Training for {max_epoch} epochs", '\n')
     best_loss = np.inf
+    best_dist_corr = np.inf # n.b. should use raw dist corr, not weighted by lambda
     best_weights = None
     patience = 50
     counter = 0
@@ -268,19 +584,63 @@ if __name__ == "__main__":
     val_loss_hist = []
     val_acc_hist = []
     lr_hist = []
+    train_loss_hist_no_dist_corr = []
+    train_dist_corr_hist = []
+    train_dist_corr_times_lambda_hist = []
+    val_loss_hist_no_dist_corr = []
+    val_dist_corr_hist = []
+    val_dist_corr_times_lambda_hist = []
 
     # Training loop
     for epoch in range(max_epoch):
         # Training
-        train_loss, train_acc, train_loss_no_absolute = train_one_epoch(best_model, best_optimizer, train_loader, loss_fn, device, epoch)
+        packed_metrics = train_one_epoch(
+            best_model,
+            best_optimizer,
+            train_loader,
+            loss_fn,
+            device,
+            epoch,
+            use_disco=use_disco,
+            decorr_lambda=decorr_lambda,
+            disco_signal_class_idx=0,
+            disco_reduce='mean'
+        )
+
+        train_loss, train_acc, train_loss_no_absolute, train_loss_no_dist_corr, train_dist_corr, train_dist_corr_times_lambda = packed_metrics
+
         train_loss_hist.append(train_loss)
         train_acc_hist.append(train_acc)
         train_loss_hist_no_absolute_weights.append(train_loss_no_absolute)
+        train_loss_hist_no_dist_corr.append(train_loss_no_dist_corr)
+        assert train_loss_no_dist_corr is not None, "train_loss_no_dist_corr should not be None, even if not using DisCo"
+        if use_disco:
+            train_dist_corr_hist.append(train_dist_corr)
+            train_dist_corr_times_lambda_hist.append(train_dist_corr_times_lambda)
+            assert train_dist_corr is not None, "train_dist_corr should not be None when using DisCo"
+            assert decorr_lambda is not None, "decorr_lambda should not be None when using DisCo"
+
 
         # Validation
-        val_loss, val_acc = evaluate(best_model, val_loader, loss_fn, device, epoch)
+        val_loss, val_acc, val_loss_no_dist_corr, val_dist_corr, val_dist_corr_times_lambda = evaluate(
+            best_model,
+            val_loader,
+            loss_fn,
+            device,
+            epoch,
+            use_disco=use_disco,
+            decorr_lambda=decorr_lambda,
+            disco_signal_class_idx=0,
+            disco_reduce='mean'
+        )
         val_loss_hist.append(val_loss)
         val_acc_hist.append(val_acc)
+        val_loss_hist_no_dist_corr.append(val_loss_no_dist_corr)
+        assert val_loss_no_dist_corr is not None, "val_loss_no_dist_corr should not be None, even if not using DisCo"
+        if use_disco:
+            val_dist_corr_hist.append(val_dist_corr)
+            val_dist_corr_times_lambda_hist.append(val_dist_corr_times_lambda)
+            assert val_dist_corr is not None, "val_dist_corr should not be None when using DisCo"
 
         # Scheduler step
         best_scheduler.step(val_loss)
@@ -303,10 +663,37 @@ if __name__ == "__main__":
         print(f"Epoch {epoch} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
         print(f"Epoch {epoch} - Train Acc: {train_acc:.4f}, Val Acc: {val_acc:.4f}", '\n')
         print(f"Epoch {epoch} - Train Loss no abs: {train_loss_no_absolute:.4f}", '\n')
+        if use_disco:
+            print(f"Epoch {epoch} - Train Dist Corr: {train_dist_corr:.4f}, Val Dist Corr: {val_dist_corr:.4f}", '\n')
+            print(f"Epoch {epoch} - Train Loss no dist corr: {train_loss_no_dist_corr:.4f}", '\n')
+            print(f"Epoch {epoch} - Val Loss no dist corr: {val_loss_no_dist_corr:.4f}", '\n')
+            print(f"Epoch {epoch} - Loss = BCE + {decorr_lambda} * {train_dist_corr:.4f}", '\n')
 
-    save_checkpoint(epoch, best_model, best_optimizer, best_scheduler, 
-                train_loss_hist, train_loss_hist_no_absolute_weights, val_loss_hist, train_acc_hist, val_acc_hist, 
-                best_weights, best_loss, f"{path_to_checkpoint}/mlp.pth", lr_hist)
+
+    save_checkpoint(
+        epoch=epoch,
+        model=best_model,
+        optimizer=best_optimizer,
+        scheduler=best_scheduler,
+        file_path=f"{path_to_checkpoint}/mlp.pth",
+        lr_hist=lr_hist,
+        disco_in_loss=use_disco,
+
+        train_loss_hist=train_loss_hist,
+        train_loss_hist_no_absolute_weights=train_loss_hist_no_absolute_weights,
+        train_acc_hist=train_acc_hist,
+        train_loss_hist_no_dist_corr=train_loss_hist_no_dist_corr,
+        train_dist_corr_hist=train_dist_corr_hist,
+
+        val_loss_hist=val_loss_hist,
+        val_acc_hist=val_acc_hist,
+        val_loss_hist_no_dist_corr=val_loss_hist_no_dist_corr,
+        val_dist_corr_hist=val_dist_corr_hist,
+
+        best_weights=best_weights,
+        best_loss=best_loss,
+        best_dist_corr=best_dist_corr,
+        )
 
     # Load the best state of the model
     best_model.load_state_dict(best_weights)

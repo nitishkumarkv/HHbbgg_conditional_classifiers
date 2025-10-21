@@ -62,7 +62,7 @@ def perform_training(args):
     # perform trainging
     if args.train_best_model:
         print('INFO: Training the best model')
-        subprocess.run(f"python3 models/training_utils.py --input_path {out_path} --training_config_path {training_config_path}", shell=True)
+        subprocess.run(f"python3 -m models.training_utils --input_path {out_path} --training_config_path {training_config_path}", shell=True)
 
     # plot the training results
     if args.plot_training_results:

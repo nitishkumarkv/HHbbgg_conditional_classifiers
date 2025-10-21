@@ -1,16 +1,17 @@
+import os
+import json
+import yaml
+import glob
+import pickle
+from typing import Any, Dict, List, Optional
 import awkward as ak
 import numpy as np
-import yaml
-import json
-import os
-from typing import Any, Dict, List, Optional
 import pyarrow as pa
 import pyarrow.parquet as pq
-import glob
 import mplhep as hep
 import matplotlib.pyplot as plt
 import pandas as pd
-import pickle
+from sklearn.model_selection import train_test_split
 from vector import register_awkward
 register_awkward()
 
@@ -29,7 +30,7 @@ class PrepareInputs:
         self.sculpting_study_info = sculpting_study_info
         self.outpath = outpath
         self.predict_parquet_info = predict_parquet_info
-        
+
         if self.training_info is not None:
             self.sample_to_class = self.training_info["sample_to_class"]
             self.classes = self.training_info["classes"]
@@ -41,7 +42,19 @@ class PrepareInputs:
         #self.extra_vars = ["mass", "nonRes_dijet_mass", "Res_dijet_mass", "nonRes_has_two_btagged_jets", "weight", "pt", "nonRes_dijet_pt", "Res_dijet_pt", "Res_lead_bjet_pt", "Res_sublead_bjet_pt", "Res_lead_bjet_ptPNetCorr", "Res_sublead_bjet_ptPNetCorr", "nonRes_HHbbggCandidate_mass", "Res_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "Res_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "jet1_mass", "jet2_mass", "jet3_mass", "jet4_mass", "jet5_mass", "jet6_mass", "Res_lead_bjet_jet_idx", "Res_sublead_bjet_jet_idx", "jet1_index", "jet2_index", "jet3_index", "jet4_index", "jet5_index", "jet6_index",
         #                   "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet1_eta", "jet2_eta", "jet3_eta", "jet4_eta", "jet5_eta", "jet6_eta", "jet1_phi", "jet2_phi", "jet3_phi", "jet4_phi", "jet5_phi", "jet6_phi", "lead_phi", "sublead_phi"]
 
-        self.extra_vars = ["mass", "nonRes_dijet_mass", "nonResReg_dijet_mass", "nonResReg_dijet_mass_DNNreg", "nonResReg_HHbbggCandidate_mass", "nonResReg_dijet_pt", "nonResReg_lead_bjet_pt", "nonResReg_sublead_bjet_pt", "nonResReg_lead_bjet_eta", "nonResReg_DNNpair_dijet_mass", "nonResReg_DNNpair_dijet_mass_DNNreg", "weight", "pt", "nonRes_dijet_pt", "nonRes_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "lead_eta", "lead_phi", "sublead_eta", "sublead_phi", "lead_genPartFlav", "sublead_genPartFlav"]
+        self.extra_vars = [
+            "mass",                             "nonRes_dijet_mass",                    "nonResReg_dijet_mass", 
+            "nonResReg_dijet_mass_DNNreg",      "nonResReg_HHbbggCandidate_mass",       "nonResReg_dijet_pt", 
+            "nonResReg_lead_bjet_pt",           "nonResReg_sublead_bjet_pt",            "nonResReg_lead_bjet_eta", 
+            "nonResReg_DNNpair_dijet_mass",     "nonResReg_DNNpair_dijet_mass_DNNreg",  "weight", 
+            "pt",                               "nonRes_dijet_pt",                      "nonRes_HHbbggCandidate_mass", 
+            "eta",                              "nBTight",                              "nBMedium",
+            "nBLoose",                          "nonRes_lead_bjet_pt",                  "nonRes_sublead_bjet_pt", 
+            "lead_isScEtaEB",                   "lead_isScEtaEE",                       "sublead_isScEtaEB", 
+            "sublead_isScEtaEE",                "lead_mvaID",                           "sublead_mvaID", 
+            "lead_eta",                         "lead_phi",                             "sublead_eta", 
+            "sublead_phi",                      "lead_genPartFlav",                     "sublead_genPartFlav"
+        ]
         
         # prepare process numbers for proccesses in each class
         num_process_each_class = {
@@ -328,18 +341,48 @@ class PrepareInputs:
 
         return class_weights_for_val
 
-    def train_test_split(self, X, Y, relative_weights, proc_num, train_ratio=0.7, val_ratio=0.3):
+    def train_test_split(self, X, Y, relative_weights, proc_num, train_ratio=0.7, val_ratio=0.3, Z=None):
 
-        from sklearn.model_selection import train_test_split
 
-        X_train, X_test_val, y_train, y_test_val, rel_w_train, rel_w_test_val, proc_num_train, proc_num_val = train_test_split(X, Y, relative_weights, proc_num, train_size=train_ratio, shuffle=True, random_state=self.random_seed)
+        if Z is not None:
+            X_train, X_test_val, y_train, y_test_val, z_train, z_test_val, rel_w_train, rel_w_test_val, proc_num_train, proc_num_val = train_test_split(X, Y, Z, relative_weights, proc_num, train_size=train_ratio, shuffle=True, random_state=self.random_seed)
+        else:
+            X_train, X_test_val, y_train, y_test_val, rel_w_train, rel_w_test_val, proc_num_train, proc_num_val = train_test_split(X, Y, relative_weights, proc_num, train_size=train_ratio, shuffle=True, random_state=self.random_seed)
+            z_train, z_test_val = None, None
+
         if (train_ratio + val_ratio) == 1.0:
-            X_val, y_val, rel_w_val = X_test_val, y_test_val, rel_w_test_val
-            X_test, y_test, rel_w_test, proc_num_test = None, None, None, None
+            X_val, y_val, rel_w_val, z_val = X_test_val, y_test_val, rel_w_test_val, z_test_val
+            X_test, y_test, z_test, rel_w_test, proc_num_test = None, None, None, None, None
+        elif Z is not None:
+            X_val, X_test, y_val, y_test, z_val, z_test, rel_w_val, rel_w_test, proc_num_val, proc_num_test = train_test_split(X_test_val, y_test_val, z_test_val, rel_w_test_val, proc_num_val, train_size=0.5, shuffle=True, random_state=self.random_seed)
         else:
             X_val, X_test, y_val, y_test, rel_w_val, rel_w_test, proc_num_val, proc_num_test = train_test_split(X_test_val, y_test_val, rel_w_test_val, proc_num_val, train_size=0.5, shuffle=True, random_state=self.random_seed)
+            z_val, z_test = None, None
 
-        return X_train, X_val, X_test, y_train, y_val, y_test, rel_w_train, rel_w_val, rel_w_test, proc_num_train, proc_num_val, proc_num_test
+        out = {
+            "train": {
+                "X": X_train,
+                "y": y_train,
+                "rel_w": rel_w_train,
+                "proc_num": proc_num_train,
+                "z": z_train,
+            },
+            "val": {
+                "X": X_val,
+                "y": y_val,
+                "rel_w": rel_w_val,
+                "proc_num": proc_num_val,
+                "z": z_val,
+            },
+            "test": {
+                "X": X_test,
+                "y": y_test,
+                "rel_w": rel_w_test,
+                "proc_num": proc_num_test,
+                "z": z_test,
+            }
+        }
+        return out
 
 
     def standardize(self, X, mean, std):
@@ -392,7 +435,7 @@ class PrepareInputs:
         plt.savefig(f'{out_path}', dpi=300, )
         plt.clf()
 
-    
+
     def preselection(self, events):
         
         mass_bool = ((events.mass > 100) & (events.mass < 180))
@@ -404,7 +447,7 @@ class PrepareInputs:
         events = events[mass_bool & dijet_mass_bool & lead_mvaID_bool & sublead_mvaID_bool]
 
         return events
-    
+
     def preselection_for_pred(self, events):
         
         mass_bool = ((events.mass > 100) & (events.mass < 180))
@@ -415,7 +458,7 @@ class PrepareInputs:
         events = events[mass_bool & lead_mvaID_bool & sublead_mvaID_bool]
 
         return events
-    
+
     def plot_variables(self, comb_inputs, vars_for_training, plot_path):
 
         # add color scheme for each class
@@ -507,7 +550,7 @@ class PrepareInputs:
 
 
     def prep_inputs_for_training(self):
-        """_summary_
+        """Prepare datasets for Multiclass DNN training.
 
         Steps:
             - Make self.output directory
@@ -529,10 +572,10 @@ class PrepareInputs:
             - Save train, val, test, and weights numpy arrays
             - Save mean and std to mean_std_dict.pkl
                 
-
         Returns:
             int: 0 if successful
         """
+        assert self.training_info is not None, "Training info is not provided."
 
         fill_nan = self.fill_nan
 
@@ -544,10 +587,10 @@ class PrepareInputs:
         # get the variables required for training
         vars_config = self.load_vars(self.input_var_json)[self.model_type]
 
-        vars_for_training = vars_config["vars"] 
+        vars_for_training = vars_config["vars"]
         # vars_for_log = vars_config["vars_for_log_transform"]
 
-        vars_to_load = vars_for_training + self.extra_vars
+        vars_to_load = list(set(vars_for_training + self.extra_vars + self.training_info["z_variables"]))
 
         for era in self.training_info["samples_info"]["eras"]:
             for samples in self.sample_to_class.keys():                
@@ -599,8 +642,10 @@ class PrepareInputs:
         # Ensure a clean, unique RangeIndex before splitting
         comb_inputs.reset_index(drop=True, inplace=True)
 
+
         X = comb_inputs[vars_for_training].copy()
         Y = comb_inputs[[cls for cls in self.classes]]
+        Z = comb_inputs[[zv for zv in self.training_info["z_variables"]]]
         relative_weights = comb_inputs["rel_xsec_weight"]
 
         # perform log transformation for variables if needed
@@ -616,7 +661,23 @@ class PrepareInputs:
         mask = (X < -998.0)
         X[mask] = np.nan
 
-        X_train, X_val, X_test, y_train, y_val, y_test, rel_w_train, rel_w_val, rel_w_test, proc_num_train, proc_num_val, proc_num_test = self.train_test_split(X, Y, relative_weights, process_number)
+        # Split the data into training, validation, and test sets
+        split: dict = self.train_test_split(X, Y, relative_weights, process_number, Z=Z)
+        X_train         = split["train"]["X"]
+        X_val           = split["val"]["X"]
+        X_test          = split["test"]["X"]
+        y_train         = split["train"]["y"]
+        y_val           = split["val"]["y"]
+        y_test          = split["test"]["y"]
+        z_train         = split["train"]["z"]
+        z_val           = split["val"]["z"]
+        z_test          = split["test"]["z"]
+        rel_w_train     = split["train"]["rel_w"]
+        rel_w_val       = split["val"]["rel_w"]
+        rel_w_test      = split["test"]["rel_w"]
+        proc_num_train  = split["train"]["proc_num"]
+        proc_num_val    = split["val"]["proc_num"]
+        proc_num_test   = split["test"]["proc_num"]
 
         # Save positional indices as numpy arrays (ensure dtype is integer)
         np.save(f"{out_path}/train_indices.npy", X_train.index.values)
@@ -633,6 +694,12 @@ class PrepareInputs:
         y_val = y_val.values
         if y_test is not None:
             y_test = y_test.values
+        if z_train is not None:
+            z_train = z_train.values
+        if z_val is not None:
+            z_val = z_val.values
+        if z_test is not None:
+            z_test = z_test.values
         rel_w_train = rel_w_train.values
         rel_w_val = rel_w_val.values
         if rel_w_test is not None:
@@ -658,6 +725,24 @@ class PrepareInputs:
             X_test = self.standardize(X_test, mean, std)
             X_test = np.nan_to_num(X_test, nan=fill_nan)
             class_weights_for_test = self.get_weights_for_val_test(y_test, rel_w_test, proc_num_test)
+
+        if z_train is not None:
+            z_mean = np.nanmean(z_train, axis=0)
+            z_std = np.nanstd(z_train, axis=0)
+
+            # standardize z variables
+            z_train = self.standardize(z_train, z_mean, z_std)
+            z_val = self.standardize(z_val, z_mean, z_std)
+            if z_test is not None:
+                z_test = self.standardize(z_test, z_mean, z_std)
+            
+            # save the z mean and std_dev. This will be used for standardizing data
+            z_mean_std_dict = {
+                "mean": z_mean,
+                "std_dev": z_std
+            }
+            with open(f"{out_path}/z_mean_std_dict.pkl", 'wb') as f:
+                pickle.dump(z_mean_std_dict, f)
         
         # save all the numpy arrays
         print("\n INFO: saving inputs for mlp")
@@ -670,6 +755,11 @@ class PrepareInputs:
         
         np.save(f"{out_path}/y_train", y_train)
         np.save(f"{out_path}/y_val", y_val)
+
+        np.save(f"{out_path}/z_train", z_train)
+        np.save(f"{out_path}/z_val", z_val)
+        if z_test is not None:
+            np.save(f"{out_path}/z_test", z_test)
 
         np.save(f"{out_path}/rel_w_train", rel_w_train)
         np.save(f"{out_path}/rel_w_val", rel_w_val)

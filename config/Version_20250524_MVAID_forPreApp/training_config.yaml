@@ -29,7 +29,13 @@ num_random_search: 1
 weight_scheme: weighted_abs # weighted_only_positive # weighted_CRUW_abs # weighted_CRUW_only_positive
 random_seed: 42
 cuda_device: "0"
-max_epoch: 50
+max_epoch: 300
+
+# Decorrelation settings
+use_DisCo: True
+decorr_lambda: 0.1
+z_variables: # "Z dataset" variables to decorrelate against, e.g. mjj
+- nonResReg_dijet_mass_DNNreg 
 
 samples_info: 
     samples_path: /eos/cms/store/group/phys_b2g/HHbbgg/HiggsDNA_parquet/v3/ # samples path

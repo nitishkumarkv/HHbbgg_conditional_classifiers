@@ -15,6 +15,36 @@ from matplotlib.backends.backend_pdf import PdfPages
 
 
 class OptunaCategorizer:
+    """Find optimal category boundaries. 
+
+    Args:
+        base_path (_type_): _description_
+        cat_folder (_type_, optional): _description_. Defaults to None.
+        signal_class (int, optional): _description_. Defaults to 3.
+        signal_samples (_type_, optional): _description_. Defaults to None.
+        samples_list (_type_, optional): _description_. Defaults to None.
+        bkg_samples (_type_, optional): _description_. Defaults to None.
+        n_categories (int, optional): _description_. Defaults to 5.
+        n_trials_optuna (int, optional): _description_. Defaults to 150.
+        n_runs (int, optional): _description_. Defaults to 10.
+        side_band_threshold (int, optional): _description_. Defaults to 10.
+        beta (float, optional): _description_. Defaults to 0.1.
+        gamma_strategy (str, optional): _description_. Defaults to "linear".
+        SR_strategy (str, optional): _description_. Defaults to "sequential".
+
+    Example Usage:
+        ```python
+        categorizer = OptunaCategorizer(
+            base_path="Version_20250524_MVAID_forPreApp/",
+            cat_folder="optuna_categorization",
+            n_categories=4,
+            n_runs=15,
+            SR_strategy="sequential"
+        )
+        categorizer.run_categorization()
+        ```
+
+    """
     def __init__(self,
                 base_path,
                 cat_folder=None,
@@ -30,6 +60,7 @@ class OptunaCategorizer:
                 gamma_strategy="linear",
                 SR_strategy="sequential"
                 ):
+
 
         self.base_path = base_path
         self.cat_folder = cat_folder
@@ -628,7 +659,7 @@ class OptunaCategorizer:
         # Adjust spacing
         plt.tight_layout()
         # Save the figure
-        plt.savefig(f"{save_path}category_summary_new.png")
+        plt.savefig(f"{save_path}/category_summary_new.png")
         plt.close(fig)
 
 
@@ -1492,5 +1523,4 @@ if __name__ == "__main__":
                                     n_runs=args.n_runs,
                                     SR_strategy=args.SR_strategy)
     categoriser.run_categorisation()
-
     
