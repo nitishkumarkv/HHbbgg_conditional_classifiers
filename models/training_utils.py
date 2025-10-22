@@ -14,6 +14,7 @@ import torch.nn.functional as F
 
 from models.mlp import MLP
 from utils.decorr_utils import distance_corr, distance_corr_multi
+from models import mlp_plotter
 
 
 # Define custom dataset
@@ -89,7 +90,7 @@ def train_one_epoch(
         decorr_lambda=0.1,
         disco_signal_class_idx: Union[int, list[int], None]=0,
         disco_reduce: str='mean'
-) -> tuple[float, float, float, float, Union[float, None], Union[float, None]]:
+) -> tuple[float, float, float, float, float, Union[float, None], Union[float, None]]:
     """
     Train the model for one epoch.
     
@@ -125,6 +126,7 @@ def train_one_epoch(
     # Special for DisCo edits
     batch_losses_no_dist_corr = []
     batch_dist_corr = []
+    batch_losses_no_abs_no_dist_corr = []
 
     progress_bar = tqdm(data_loader, desc=f"Epoch {epoch} [Training]", leave=False)
     for batch in progress_bar:
@@ -188,12 +190,12 @@ def train_one_epoch(
         batch_losses_no_abs.append(     weighted_loss_no_abs.item())
         batch_losses_no_dist_corr.append(weighted_loss.item() if not use_disco else (weighted_loss.item() - decorr_lambda * d_corr.item()))
         batch_dist_corr.append(         d_corr.item() if d_corr is not None else None)
-
+        batch_losses_no_abs_no_dist_corr.append(weighted_loss_no_abs.item() if not use_disco else (weighted_loss_no_abs.item() - decorr_lambda * d_corr.item()))
 
         # Update progress bar
         if use_disco:
             progress_bar.set_postfix({
-                'Loss': f'{weighted_loss.item() - decorr_lambda * d_corr.item():.4f} + {decorr_lambda}*{d_corr.item():.4f}',
+                'Loss': f'{weighted_loss.item() - decorr_lambda * d_corr.item():.4f}+{decorr_lambda}*{d_corr.item():.4f}',
                 'Acc': f'{weighted_acc.item():.4f}',
                 'Loss_no_abs': f'{weighted_loss_no_abs.item():.4f}'
             })
@@ -204,18 +206,20 @@ def train_one_epoch(
                 'Loss_no_abs': f'{weighted_loss_no_abs.item():.4f}'
             })
 
-        mean_batch_losses                   = float(np.mean(batch_losses))
-        mean_accs                           = float(np.mean(batch_accs))
-        mean_batch_losses_no_abs            = float(np.mean(batch_losses_no_abs))
-        mean_batch_losses_no_dist_corr      = float(np.mean(batch_losses_no_dist_corr))
-        mean_batch_dist_corr                = float(np.mean([dc for dc in batch_dist_corr if dc is not None])) if use_disco else None
-        mean_batch_dist_corr_times_lambda   = float(np.mean([dc * decorr_lambda for dc in batch_dist_corr if dc is not None])) if use_disco else None
+        mean_batch_losses                       = float(np.mean(batch_losses))
+        mean_accs                               = float(np.mean(batch_accs))
+        mean_batch_losses_no_abs                = float(np.mean(batch_losses_no_abs))
+        mean_batch_losses_no_dist_corr          = float(np.mean(batch_losses_no_dist_corr))
+        mean_batch_losses_no_abs_no_dist_corr   = float(np.mean(batch_losses_no_abs_no_dist_corr))
+        mean_batch_dist_corr                    = float(np.mean([dc for dc in batch_dist_corr if dc is not None])) if use_disco else None
+        mean_batch_dist_corr_times_lambda       = float(np.mean([dc * decorr_lambda for dc in batch_dist_corr if dc is not None])) if use_disco else None
 
     return (
         mean_batch_losses, 
         mean_accs,
         mean_batch_losses_no_abs,
         mean_batch_losses_no_dist_corr,
+        mean_batch_losses_no_abs_no_dist_corr,
         mean_batch_dist_corr,
         mean_batch_dist_corr_times_lambda
     )
@@ -295,10 +299,16 @@ def evaluate(
             val_dist_corr_times_lambda.append(  d_corr.item() * decorr_lambda if d_corr is not None else None)
 
             # Update progress bar
-            progress_bar.set_postfix({
-                'Loss': f'{weighted_loss.item():.4f}',
-                'Acc': f'{weighted_acc.item():.4f}'
-            })
+            if use_disco:
+                progress_bar.set_postfix({
+                    'Loss': f'{weighted_loss.item() - decorr_lambda * d_corr.item():.4f}+{decorr_lambda}*{d_corr.item():.4f}',
+                    'Acc': f'{weighted_acc.item():.4f}',
+                })
+            else:
+                progress_bar.set_postfix({
+                    'Loss': f'{weighted_loss.item():.4f}',
+                    'Acc': f'{weighted_acc.item():.4f}',
+                })
 
             mean_losses                 = float(np.mean(val_losses))
             mean_accs                   = float(np.mean(val_accs))
@@ -320,21 +330,27 @@ def save_checkpoint(**kwargs):
     """Save checkpoint to disk.
 
     Kwargs:
-        epoch: Current epoch number.
-        model: Model to save.
-        optimizer: Optimizer state.
-        scheduler: Scheduler state.
-        train_loss_hist: Training loss history.
-        train_loss_hist_no_absolute_weights: Training loss history without absolute weights.
-        train_loss_hist_no_dist_corr: Training loss history without distance correlation.
-        train_loss_hist_no_absolute_weights_no_dist_corr: Training loss history without absolute weights and without distance correlation.
-        val_loss_hist: Validation loss history.
-        train_acc_hist: Training accuracy history.
-        val_acc_hist: Validation accuracy history.
-        best_weights: Best model weights.
-        best_loss: Best loss value.
-        lr_hist: Learning rate history.
-        file_path: Path to save the checkpoint. 
+        epoch (int): Current epoch number.
+        model (torch.nn.Module): Model to save.
+        optimizer (torch.optim.Optimizer): Optimizer state.
+        scheduler (torch.optim.lr_scheduler): Scheduler state.
+        lr_hist (list[float]): Learning rate history.
+        disco_in_loss (bool): Whether DisCo was used in the loss function.
+        file_path (str): Path to save the checkpoint.
+        
+        train_loss_hist (list[float]): Training loss history.
+        train_loss_hist_no_absolute_weights (list[float]): Training loss history without absolute weights.
+        train_loss_hist_no_dist_corr (list[float]): Training loss history without distance correlation.
+        train_loss_hist_no_absolute_weights_no_dist_corr (list[float]): Training loss history without absolute weights and without distance correlation.
+        train_dist_corr_hist (list[float]): Training distance correlation history.
+         
+        val_loss_hist (list[float]): Validation loss history.
+        train_acc_hist (list[float]): Training accuracy history.
+        val_acc_hist (list[float]): Validation accuracy history.
+
+        best_weights (dict): Best model weights.
+        best_loss (float): Best loss value.
+        best_dist_corr (float): Best distance correlation value.
 
     Note: 
         Unless specified otherwise, losses include distance correlation if it was used during training.
@@ -356,6 +372,8 @@ def save_checkpoint(**kwargs):
     assert _lr_hist is not None, "Learning rate history must be provided"
     assert _disco_in_loss is not None, "Whether DisCo was used in loss must be provided as bool, not None"
     assert _file_path is not None, "File path for saving checkpoint must be provided"
+
+    os.makedirs(os.path.dirname(_file_path), exist_ok=True)
 
 
     # TRAIN LOSS
@@ -441,12 +459,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Preform MLP based classification')
     parser.add_argument('--input_path', type=str, help='Path to the input files')
     parser.add_argument('--training_config_path', type=str, default=10, help='Training configuration path')
+    parser.add_argument('--job_config_path', type=str, default="", help='Job configuration path')
     #parser.add_argument('', type=str, help='Path to the best parameters')
     args = parser.parse_args()
 
     # Load training configuration
     with open(f"{args.training_config_path}", 'r') as f:
         training_config = yaml.safe_load(f)
+    with open(f"{args.job_config_path}", 'r') as f:
+        job_config = yaml.safe_load(f)
 
     seed = training_config["random_seed"]
     weight_scheme = training_config["weight_scheme"]
@@ -578,18 +599,13 @@ if __name__ == "__main__":
     patience = 50
     counter = 0
 
-    train_loss_hist = []
-    train_loss_hist_no_absolute_weights = []
-    train_acc_hist = []
-    val_loss_hist = []
-    val_acc_hist = []
-    lr_hist = []
-    train_loss_hist_no_dist_corr = []
-    train_dist_corr_hist = []
-    train_dist_corr_times_lambda_hist = []
-    val_loss_hist_no_dist_corr = []
-    val_dist_corr_hist = []
-    val_dist_corr_times_lambda_hist = []
+    train_loss_hist,                    val_loss_hist                   = [], []
+    train_loss_hist_no_absolute_weights                                 = []
+    train_acc_hist,                     val_acc_hist                    = [], []
+    lr_hist                                                             = []
+    train_loss_hist_no_dist_corr,       val_loss_hist_no_dist_corr      = [], []
+    train_dist_corr_hist,               val_dist_corr_hist              = [], []
+    train_dist_corr_times_lambda_hist,  val_dist_corr_times_lambda_hist = [], []
 
     # Training loop
     for epoch in range(max_epoch):
@@ -607,7 +623,7 @@ if __name__ == "__main__":
             disco_reduce='mean'
         )
 
-        train_loss, train_acc, train_loss_no_absolute, train_loss_no_dist_corr, train_dist_corr, train_dist_corr_times_lambda = packed_metrics
+        train_loss, train_acc, train_loss_no_absolute, train_loss_no_dist_corr, train_loss_no_abs_no_dist_corr, train_dist_corr, train_dist_corr_times_lambda = packed_metrics
 
         train_loss_hist.append(train_loss)
         train_acc_hist.append(train_acc)
@@ -648,6 +664,9 @@ if __name__ == "__main__":
         lr_hist.append(current_lr)
         print(f"Epoch {epoch}: Current learning rate = {current_lr}")
 
+        if val_dist_corr is not None and val_dist_corr < best_dist_corr:
+            best_dist_corr = val_dist_corr
+
         # Early stopping
         if val_loss < best_loss:
             best_loss = val_loss
@@ -664,10 +683,48 @@ if __name__ == "__main__":
         print(f"Epoch {epoch} - Train Acc: {train_acc:.4f}, Val Acc: {val_acc:.4f}", '\n')
         print(f"Epoch {epoch} - Train Loss no abs: {train_loss_no_absolute:.4f}", '\n')
         if use_disco:
-            print(f"Epoch {epoch} - Train Dist Corr: {train_dist_corr:.4f}, Val Dist Corr: {val_dist_corr:.4f}", '\n')
-            print(f"Epoch {epoch} - Train Loss no dist corr: {train_loss_no_dist_corr:.4f}", '\n')
-            print(f"Epoch {epoch} - Val Loss no dist corr: {val_loss_no_dist_corr:.4f}", '\n')
-            print(f"Epoch {epoch} - Loss = BCE + {decorr_lambda} * {train_dist_corr:.4f}", '\n')
+            print(f"Epoch {epoch} - Train Dist Corr: {train_dist_corr:.4f}, Val Dist Corr: {val_dist_corr:.4f}")
+            print(f"Epoch {epoch} - (no dist corr) Train Loss: {train_loss_no_dist_corr:.4f}, Val Loss: {val_loss_no_dist_corr:.4f}")
+            print(f"Epoch {epoch} - Train Loss = {train_loss_no_dist_corr:.4f} + {decorr_lambda} * {train_dist_corr:.4f}")
+        
+        # Save checkpoint every ___ epochs
+        if epoch % 10 == 0:
+            print(f"Saving checkpoint at epoch {epoch}")
+            save_checkpoint(
+                epoch=epoch,
+                model=best_model,
+                optimizer=best_optimizer,
+                scheduler=best_scheduler,
+                file_path=f"{path_to_checkpoint}/checkpoints/epoch{epoch}/mlp.pth",
+                lr_hist=lr_hist,
+                disco_in_loss=use_disco,
+
+                train_loss_hist=train_loss_hist,
+                train_loss_hist_no_absolute_weights=train_loss_hist_no_absolute_weights,
+                train_loss_hist_no_absolute_weights_no_dist_corr=train_loss_no_abs_no_dist_corr,
+                train_acc_hist=train_acc_hist,
+                train_loss_hist_no_dist_corr=train_loss_hist_no_dist_corr,
+                train_dist_corr_hist=train_dist_corr_hist,
+
+                val_loss_hist=val_loss_hist,
+                val_acc_hist=val_acc_hist,
+                val_loss_hist_no_dist_corr=val_loss_hist_no_dist_corr,
+                val_dist_corr_hist=val_dist_corr_hist,
+
+                best_weights=best_weights,
+                best_loss=best_loss,
+                best_dist_corr=best_dist_corr,
+            )
+            mlp_plotter.run_condor_job(
+                input_path=input_path,                                                    # base path to input files
+                condor_dir=f"{path_to_checkpoint}/condor/mlp_plotter/",                   # condor directory
+                plot_dir=f"{path_to_checkpoint}/checkpoints/epoch{epoch}/plots/",         # output directory for plots
+                checkpoint_file=f"{path_to_checkpoint}/checkpoints/epoch{epoch}/mlp.pth", # checkpoint path
+                job_config=job_config,
+                dry_run=False,
+            )
+
+
 
 
     save_checkpoint(
@@ -681,6 +738,7 @@ if __name__ == "__main__":
 
         train_loss_hist=train_loss_hist,
         train_loss_hist_no_absolute_weights=train_loss_hist_no_absolute_weights,
+        train_loss_hist_no_absolute_weights_no_dist_corr=train_loss_no_abs_no_dist_corr,
         train_acc_hist=train_acc_hist,
         train_loss_hist_no_dist_corr=train_loss_hist_no_dist_corr,
         train_dist_corr_hist=train_dist_corr_hist,

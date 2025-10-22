@@ -49,8 +49,10 @@ def perform_training(args):
 
     # Load the configuration yaml files
     training_config_path = f"{config_path}/training_config.yaml"
+    job_config_path = f"{config_path}/job_config.yaml"
     with open(f"{training_config_path}", 'r') as f:
         training_config = yaml.safe_load(f)
+
 
     do_random_search = training_config["do_random_search"]
 
@@ -62,14 +64,14 @@ def perform_training(args):
     # perform trainging
     if args.train_best_model:
         print('INFO: Training the best model')
-        subprocess.run(f"python3 -m models.training_utils --input_path {out_path} --training_config_path {training_config_path}", shell=True)
+        subprocess.run(f"python3 -m models.training_utils --input_path {out_path} --training_config_path {training_config_path} --job_config_path {job_config_path}", shell=True)
 
     # plot the training results
     if args.plot_training_results:
         print('INFO: Getting the results plots')
         subprocess.run(f"python3 models/mlp_plotter.py --input_path {out_path}", shell=True)
 
-    # get permutaion importance
+    # get permutation importance
     if args.get_permutation_importance:
         print('INFO: Getting permutation importance')
         subprocess.run(f"python3 models/permutation_importance.py --input_path {out_path}", shell=True)

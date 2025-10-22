@@ -1,19 +1,24 @@
+import copy
+import os
+import sys
+import json
+import pickle
+import warnings
+import tqdm
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import numpy as np
 import matplotlib.pyplot as plt
-import json
-import tqdm
-import copy
 from sklearn.metrics import confusion_matrix, classification_report, roc_curve, auc
 from sklearn.preprocessing import label_binarize
-import os
 import awkward as ak
-import mplhep as hep
-from mlp import MLP
-import pickle
+import mplhep
+
+from models.mlp import MLP
+
+plt.style.use(mplhep.style.CMS)
 
 def load_checkpoint(file_path):
     checkpoint = torch.load(file_path, weights_only=False)
@@ -21,16 +26,237 @@ def load_checkpoint(file_path):
     #optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     #scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
     train_loss_hist = checkpoint['train_loss_hist']
+    train_loss_hist_no_absolute = checkpoint['train_loss_hist_no_absolute_weights']
+
     val_loss_hist = checkpoint['val_loss_hist']
     train_acc_hist = checkpoint['train_acc_hist']
-    train_loss_hist_no_aboslute = checkpoint['train_loss_hist_no_absolute_weights']
     val_acc_hist = checkpoint['val_acc_hist']
     lr_hist = checkpoint['lr_hist']
     best_weights = checkpoint['best_weights']
     best_loss = checkpoint['best_loss']
     start_epoch = checkpoint['epoch']
     print(f'Checkpoint loaded from {file_path}, resuming from epoch {start_epoch + 1}')
-    return start_epoch, train_loss_hist, train_loss_hist_no_aboslute, val_loss_hist, train_acc_hist, val_acc_hist, lr_hist, best_weights, best_loss
+    return checkpoint
+    # return start_epoch, train_loss_hist, train_loss_hist_no_absolute, val_loss_hist, train_acc_hist, val_acc_hist, lr_hist, best_weights, best_loss
+
+
+
+
+def _in_venv() -> bool:
+    """
+    Checks if the current Python interpreter is running inside a virtual environment.
+
+    Returns:
+        bool: True if in a virtual environment, False otherwise.
+    """
+    base_prefix = getattr(sys, 'base_prefix', None)
+    real_prefix = getattr(sys, 'real_prefix', None)
+    prefix = sys.prefix
+
+    if real_prefix is not None:
+        # legacy virtualenv
+        return True
+    if base_prefix is not None and prefix != base_prefix:
+        return True
+    if os.environ.get("VIRTUAL_ENV", ""):
+        return True
+    
+    return False
+
+
+def _get_python_env_base(job_config: dict) -> str:
+    """
+    Gets the base path of the current Python environment (conda or venv).
+
+    Args:
+        job_config (dict): Job configuration dictionary from yaml file.
+
+    Returns:
+        str: Base path of the Python environment.
+    
+    Raises:
+        EnvironmentError: If not running inside a virtual environment.
+    """
+    if not _in_venv() and job_config.get('conda_env', None) is None:
+        raise EnvironmentError(
+            "Current Python interpreter is not running inside a virtual environment and no conda environment specified in job config. "
+            + "Please activate the appropriate conda/mamba environment before submitting this condor job or add appropriate configuration."
+        )
+
+    if job_config.get('conda_env', None) is not None:
+        config_conda_env = job_config['conda_env']
+        if not os.path.exists(config_conda_env):
+            raise FileNotFoundError(f"Conda environment path specified in job_config not found: {config_conda_env}")
+        return config_conda_env
+
+    # Check if conda
+    conda_prefix = os.environ.get('CONDA_PREFIX', None)
+    if conda_prefix is not None:
+        return conda_prefix
+    
+    # Otherwise, return venv
+    return sys.prefix
+
+
+def write_sub_file(condor_dir: str, plot_dir: str, checkpoint_path: str, input_path: str, script_path: str) -> str:
+    """
+    Writes a condor submission file with the given output path and keyword arguments.
+
+    Args:
+        condor_dir (str): Directory to store condor scripts and submission files.
+        plot_dir (str): Directory to save plots.
+        checkpoint_path (str): Path to the model checkpoint, including filename.
+        input_path (str): Path to the input data.
+        script_path (str): Path to the script to be executed.
+
+    Returns:
+        str: Path to submission file.
+    """
+    sub_file_name = 'mlp_plotter.sub'
+    sub_file_name_no_ext = os.path.splitext(sub_file_name)[0]
+    sub_file_path = os.path.join(condor_dir, sub_file_name)
+    os.makedirs(os.path.dirname(sub_file_path), exist_ok=True)
+
+    plotter_args = f"--input_path {input_path} --checkpoint_path {checkpoint_path} --path_for_plots {plot_dir}"
+
+    # script_path = os.path.join(condor_dir, 'mlp_plotter.sh')
+
+    with open(sub_file_path, 'w') as f:
+        f.write(f"# {sub_file_name}\n")
+        f.write("\n")
+        f.write("universe = vanilla\n")
+        f.write(f"executable = {script_path}\n")
+        f.write(f"arguments = \"{plotter_args}\"\n")
+        f.write("\n")
+        f.write(f"output = {condor_dir}/{sub_file_name_no_ext}_job_$(Cluster)_$(Process).out\n")
+        f.write(f"error = {condor_dir}/{sub_file_name_no_ext}_job_$(Cluster)_$(Process).err\n")
+        # f.write(f"log = {condor_dir}/{sub_file_name_no_ext}_job_$(Cluster)_$(Process).log\n")
+        f.write(f"log = {condor_dir}/condor_$(Cluster).log\n")
+        f.write("\n")
+        f.write("request_cpus = 1\n")
+        f.write("request_memory = 4GB\n")
+        f.write("request_disk = 2GB\n")
+        f.write("\n")
+        f.write("getenv = True\n")
+        # f.write(f"initialdir = {condor_dir}\n")
+        f.write(f"output_destination = {condor_dir}\n")
+        f.write("should_transfer_files = yes\n")
+        f.write("when_to_transfer_output = on_exit\n")
+        f.write("+JobFlavor = \"espresso\"\n")
+        f.write("\n")
+        f.write("queue\n")
+
+    print("[INFO] Condor submission file written to:", sub_file_path)
+    return sub_file_path
+
+
+def write_condor_script(condor_dir: str, job_config: dict) -> str:
+    """
+    Writes a condor script with the given script path and keyword arguments.
+
+    Args:
+        condor_dir (str): Directory to store condor scripts and submission files.
+        job_config (dict): Job configuration dictionary from yaml file.
+
+    Returns:
+        str: Path to condor script.
+    """
+    os.makedirs(condor_dir, exist_ok=True)
+
+    env_base = _get_python_env_base(job_config)
+    cwd = os.getcwd()
+
+    script_path = os.path.join(condor_dir, 'mlp_plotter.sh')
+
+    # plotter_args = f"--input_path {os.path.dirname(checkpoint_path)} --checkpoint_path {checkpoint_path} --path_for_plots {plot_dir}"
+
+    with open(script_path, 'w') as f:
+        f.write("#!/bin/bash\n")
+        f.write("\n")
+        f.write("echo \"Starting job on host $(hostname)\"\n")
+        f.write("echo \"User: $(whoami)\"\n")
+        f.write("echo \"Starting directory: $(pwd)\"\n")
+        f.write("echo \"Argument passed: $1\"\n")
+        f.write("echo \"Cluster = $2, Process = $3\"\n")
+        f.write("\n")
+        f.write(f"cd {cwd}\n")
+        # f.write(f"exec {env_base}/bin/python models/mlp_plotter.py {plotter_args}\"\n")
+        f.write(f"exec {env_base}/bin/python models/mlp_plotter.py \"$@\"\n")
+
+    return script_path
+        
+
+
+def submit_condor_job(sub_path: str) -> None:
+    """
+    Submits a condor job with the given script and keyword arguments.
+
+    Args:
+        sub_path (str): Path to the condor submission file.
+    """
+    # Construct the command with keyword arguments
+    cmd = f"condor_submit -spool {sub_path} "
+
+    print("[INFO] Submitting condor job with command:", cmd)
+    os.system(cmd)
+
+
+def run_condor_job(
+        input_path: str = "",
+        condor_dir: str = "", 
+        plot_dir: str = "", 
+        checkpoint_file: str = "",
+        job_config: dict = {},
+        **kwargs
+    ) -> None:
+    """
+    Runs a condor job for plotting MLP results.
+
+    Steps:
+    1. Write the condor submission file.
+    2. Write the condor bash script.
+    3. Submit condor job.
+
+    Args:
+        input_path (str): Base directory for the DNN. Usually inside of the project directory. (e.g. .../HHbbgg_conditional_classifiers/Version_20250524_MVAID_forPreApp/)
+        condor_dir (str): Directory to store condor scripts and submission files.
+        plot_dir (str): Directory to save plots.
+        checkpoint_file (str): Path to the model checkpoint, including filename.
+    """
+    config_conda_env: str | None = job_config.get('conda_env', None)
+
+    # Validate
+    if not input_path:
+        raise ValueError("Input directory 'input_path' must be provided. (e.g. .../HHbbgg_conditional_classifiers/Version_20250524_MVAID_forPreApp/)")
+    if not condor_dir:
+        raise ValueError("Condor directory 'condor_dir' must be provided. This is where condor scripts and submission files will be stored.")
+    if not plot_dir:
+        raise ValueError("Plot directory 'plot_dir' must be provided. This is where the output plots will be saved.")
+    if not checkpoint_file:
+        raise ValueError("Checkpoint file 'checkpoint_file' must be provided. This is the path to the model checkpoint, including filename.")
+
+    if not os.path.exists(checkpoint_file):
+        raise FileNotFoundError(f"Checkpoint file not found: {checkpoint_file}")
+
+
+    if config_conda_env is not None:
+        if not os.path.exists(config_conda_env):
+            raise FileNotFoundError(f"Conda environment path specified in job_config not found: {config_conda_env}")
+    elif not _in_venv() and config_conda_env is None:
+        raise EnvironmentError(
+            "Current Python interpreter is not running inside a virtual environment. "
+            + "Please activate the appropriate conda/mamba environment before submitting this condor job."
+        )
+
+    script_path = write_condor_script(condor_dir, job_config)
+    sub_path = write_sub_file(condor_dir, plot_dir, checkpoint_file, input_path, script_path)
+    if kwargs.get('dry_run', False):
+        print(f"mlp_plotter condor job dry run. Condor submission file written to: {sub_path}, script written to: {script_path}")
+    else:
+        submit_condor_job(sub_path)
+                                
+
+
 
 
 if __name__ == "__main__":
@@ -38,18 +264,61 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description='Plot the results of the MLP')
     parser.add_argument('--input_path', type=str, help='Path to the inputs')
+    parser.add_argument('--checkpoint_file', default=None, type=str, help='Path to the model checkpoint. If not provided, will use default path in <input_path>/after_random_search_best1/mlp.pth')
+    parser.add_argument('--path_for_plots', default=None, type=str, help='Path to save the plots. If not provided, will use default path in <input_path>/after_random_search_best1/plots/')
     args = parser.parse_args()
 
     #inputs_for_MLP = "../data/inputs_for_MLP_202411226/"
     #input_path="train_inputs_for_MLP_202411226/after_random_search_best1/"
     inputs_for_MLP = args.input_path
     input_path = f"{inputs_for_MLP}/after_random_search_best1/"
-    path_for_plots = f"{input_path}/plots/"
+    if args.path_for_plots is None:
+        path_for_plots = f"{input_path}/plots/"
+    else:
+        path_for_plots = args.path_for_plots
     os.makedirs(path_for_plots, exist_ok=True)
-    path_to_checkpoint = f"{input_path}/mlp.pth"
+    if args.checkpoint_file is None:
+        path_to_checkpoint = f"{input_path}/mlp.pth"
+    else:
+        path_to_checkpoint = args.checkpoint_file 
+        if not path_to_checkpoint.endswith('.pth'):
+            warnings.warn(
+                f"Filename '{path_to_checkpoint}' does not have the expected '.pth' extension. "
+                + "Please verify that this is the correct checkpoint file.",
+                UserWarning
+            )
 
     # load the checkpoint
-    start_epoch, train_loss_hist, train_loss_hist_no_absolute_weights, val_loss_hist, train_acc_hist, val_acc_hist, lr_hist, best_weights, best_loss = load_checkpoint(path_to_checkpoint)
+    # start_epoch, train_loss_hist, train_loss_hist_no_absolute_weights, val_loss_hist, train_acc_hist, val_acc_hist, lr_hist, best_weights, best_loss = load_checkpoint(path_to_checkpoint)
+    checkpoint = load_checkpoint(path_to_checkpoint)
+
+    train_loss_hist:                                    list[float]         = checkpoint['train_loss_hist']
+    train_loss_hist_no_absolute_weights:                list[float]         = checkpoint['train_loss_hist_no_absolute_weights']
+    train_loss_hist_no_dist_corr:                       list[float] | None  = checkpoint.get('train_loss_hist_no_dist_corr', None)
+    train_loss_hist_no_absolute_weights_no_dist_corr:   list[float] | None  = checkpoint.get('train_loss_hist_no_absolute_weights_no_dist_corr', None)
+    train_dist_corr_hist:                               list[float] | None  = checkpoint.get('train_dist_corr_hist', None)
+
+    val_loss_hist:              list[float]         = checkpoint['val_loss_hist']
+    val_loss_hist_no_dist_corr: list[float] | None  = checkpoint.get('val_loss_hist_no_dist_corr', None)
+    val_dist_corr_hist:         list[float] | None  = checkpoint.get('val_dist_corr_hist', None)
+
+    best_weights:   dict[str, torch.Tensor] = checkpoint['best_weights']
+    best_loss:      float                   = checkpoint['best_loss']
+    best_dist_corr: float | None            = checkpoint.get('best_dist_corr', None)
+    start_epoch:    int                     = checkpoint['epoch']
+
+    train_acc_hist: list[float] = checkpoint['train_acc_hist']
+    val_acc_hist:   list[float] = checkpoint['val_acc_hist']
+    lr_hist:        list[float] = checkpoint['lr_hist']
+    disco_in_loss:  bool | None = checkpoint.get('disco_in_loss', None)
+
+    # if disco_in_loss:
+
+        # train_loss_hist_no_dist_corr: list[float] = train_loss_hist_no_dist_corr
+        # train_loss_hist_no_absolute_weights_no_dist_corr: list[float] = train_loss_hist_no_absolute_weights_no_dist_corr
+        # train_dist_corr_hist: list[float] = train_dist_corr_hist
+        # val_loss_hist_no_dist_corr: list[float] = val_loss_hist_no_dist_corr
+        # val_dist_corr_hist: list[float] = val_dist_corr_hist
 
 
     colors = ['royalblue', 'darkorange', 'darkviolet', 'seagreen']
@@ -70,6 +339,76 @@ if __name__ == "__main__":
     plt.legend()
     plt.savefig(f'{path_for_plots}/loss_plot_no_abs.png')
     plt.clf()
+
+    # if distance correlation was used, plot those too
+    if disco_in_loss:
+        assert train_loss_hist_no_dist_corr is not None, "If distance correlation was used in loss, train_loss_hist_no_dist_corr must be in checkpoint."
+        assert train_loss_hist_no_absolute_weights_no_dist_corr is not None, "If distance correlation was used in loss, train_loss_hist_no_absolute_weights_no_dist_corr must be in checkpoint."
+        assert train_dist_corr_hist is not None, "If distance correlation was used in loss, train_dist_corr_hist must be in checkpoint."
+        assert val_loss_hist_no_dist_corr is not None, "If distance correlation was used in loss, val_loss_hist_no_dist_corr must be in checkpoint."
+        assert val_dist_corr_hist is not None, "If distance correlation was used in loss, val_dist_corr_hist must be in checkpoint."
+        assert best_dist_corr is not None, "If distance correlation was used in loss, best_dist_corr must be in checkpoint."
+
+        plt.plot(train_loss_hist_no_dist_corr, label="train (no dist corr)")
+        plt.plot(val_loss_hist_no_dist_corr, label="validation (no dist corr)")
+        plt.xlabel("epochs")
+        plt.ylabel("cross entropy")
+        plt.legend()
+        plt.savefig(f'{path_for_plots}/loss_plot_no_disco.png')
+        plt.clf()
+        
+        plt.plot(train_loss_hist_no_dist_corr, label="train (excluding dist corr)")
+        plt.plot(val_loss_hist_no_dist_corr, label="validation (excluding dist corr)")
+        plt.plot(train_loss_hist, label="train (including dist corr)")
+        plt.plot(val_loss_hist, label="validation (including dist corr)")
+        plt.xlabel("epochs")
+        plt.ylabel("cross entropy")
+        plt.legend()
+        plt.savefig(f'{path_for_plots}/loss_plot_DisCo_comparison.png')
+        plt.clf()
+
+        plt.plot(train_dist_corr_hist, label="train dist corr")
+        plt.plot(val_dist_corr_hist, label="validation dist corr")
+        plt.xlabel("epochs")
+        plt.ylabel("distance correlation")
+        plt.legend()
+        plt.savefig(f'{path_for_plots}/dist_corr_plot.png')
+        plt.clf()
+
+        # Plot comparing loss with dist corr, loss without dist corr, and dist corr
+        # Loss axes on left, dist corr axes on right
+        fig, ax1 = plt.subplots()
+        ax2 = ax1.twinx()
+        ax1.plot(train_loss_hist, 'b-', label="train loss (incl dist corr)")
+        ax1.plot(val_loss_hist, 'b--', label="val loss (incl dist corr)")
+        ax1.plot(train_loss_hist_no_dist_corr, 'g-', label="train loss (excl dist corr)")
+        ax1.plot(val_loss_hist_no_dist_corr, 'g--', label="val loss (excl dist corr)")
+        ax2.plot(train_dist_corr_hist, 'r-', label="train dist corr")
+        ax2.plot(val_dist_corr_hist, 'r--', label="val dist corr")
+        ax1.set_xlabel("epochs")
+        ax1.set_ylabel("cross entropy", color='b')
+        ax2.set_ylabel("distance correlation", color='r')
+        lines_1, labels_1 = ax1.get_legend_handles_labels()
+        lines_2, labels_2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper right')
+        plt.savefig(f'{path_for_plots}/loss_and_dist_corr_plot.png')
+        plt.clf()
+    
+        fig, ax1 = plt.subplots()
+        ax2 = ax1.twinx()
+        ax1.plot(train_loss_hist_no_absolute_weights, 'b-', label="train loss (incl dist corr)")
+        ax1.plot(train_loss_hist_no_absolute_weights_no_dist_corr, 'g-', label="train loss (excl dist corr)")
+        ax2.plot(train_dist_corr_hist, 'r-', label="train dist corr")
+        ax2.plot(val_dist_corr_hist, 'r--', label="val dist corr")
+        ax1.set_xlabel("epochs")
+        ax1.set_ylabel("cross entropy", color='b')
+        ax2.set_ylabel("distance correlation", color='r')
+        lines_1, labels_1 = ax1.get_legend_handles_labels()
+        lines_2, labels_2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper right')
+        plt.savefig(f'{path_for_plots}/loss_no_absolute_weights_and_dist_corr_plot.png')
+        plt.clf()
+
 
     # plot learning rate
     plt.plot(lr_hist)
@@ -381,120 +720,110 @@ if __name__ == "__main__":
     plt.savefig(f'{path_for_plots}/train_roc_curve_{class_name_i}_vs_all_individual.png')
     plt.close()
 
-import numpy as np
-import matplotlib.pyplot as plt
 
-colours = ['blue', 'red', 'green', 'orange', 'purple']
+    colours = ['blue', 'red', 'green', 'orange', 'purple']
 
-import numpy as np
-import matplotlib.pyplot as plt
-import mplhep
 
-plt.style.use(mplhep.style.CMS)  # Use CMS-like style
+    plt.style.use(mplhep.style.CMS)  # Use CMS-like style
 
-colours = ['blue', 'red', 'green', 'orange', 'purple']
+    colours = ['blue', 'red', 'green', 'orange', 'purple']
 
-import numpy as np
-import matplotlib.pyplot as plt
-import mplhep
 
-plt.style.use(mplhep.style.CMS)
+    colours = ['blue', 'red', 'green', 'orange', 'purple']
 
-colours = ['blue', 'red', 'green', 'orange', 'purple']
+    for i in range(n_classes):
+        fig, ax = plt.subplots(figsize=(8, 6))
+        class_name = class_names[i]
 
-for i in range(n_classes):
-    fig, ax = plt.subplots(figsize=(8, 6))
-    class_name = class_names[i]
+        max_y = 0  # Track max y for ylim
 
-    max_y = 0  # Track max y for ylim
+        # --- TRAIN: step plot with shaded uncertainty ---
+        for j in range(n_classes):
+            mask = y_train[:, j] == 1
+            y_vals = y_pred_train[mask, i]
+            weights = rel_w_train[mask]
+            weights_sq = weights**2
 
-    # --- TRAIN: step plot with shaded uncertainty ---
-    for j in range(n_classes):
-        mask = y_train[:, j] == 1
-        y_vals = y_pred_train[mask, i]
-        weights = rel_w_train[mask]
-        weights_sq = weights**2
+            hist_raw, bin_edges = np.histogram(y_vals, bins=25, weights=weights, range=(0, 1))
+            hist_sq_raw, _ = np.histogram(y_vals, bins=bin_edges, weights=weights_sq, range=(0, 1))
+            bin_widths = np.diff(bin_edges)
 
-        hist_raw, bin_edges = np.histogram(y_vals, bins=25, weights=weights, range=(0, 1))
-        hist_sq_raw, _ = np.histogram(y_vals, bins=bin_edges, weights=weights_sq, range=(0, 1))
-        bin_widths = np.diff(bin_edges)
+            total_weight = np.sum(hist_raw)
+            if total_weight == 0:
+                continue  # Avoid division by zero for empty bins/classes
 
-        total_weight = np.sum(hist_raw)
-        if total_weight == 0:
-            continue  # Avoid division by zero for empty bins/classes
+            # Normalize to density
+            hist_density = hist_raw / (total_weight * bin_widths)
+            uncertainty_density = np.sqrt(hist_sq_raw) / (total_weight * bin_widths)
+            bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
 
-        # Normalize to density
-        hist_density = hist_raw / (total_weight * bin_widths)
-        uncertainty_density = np.sqrt(hist_sq_raw) / (total_weight * bin_widths)
-        bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+            max_y = max(max_y, np.max(hist_density + uncertainty_density))
 
-        max_y = max(max_y, np.max(hist_density + uncertainty_density))
+            # Step line
+            ax.step(
+                bin_centers,
+                hist_density,
+                where='mid',
+                label=f'Train {class_names[j]}',
+                color=colours[j],
+                linewidth=2,
+            )
 
-        # Step line
-        ax.step(
-            bin_centers,
-            hist_density,
-            where='mid',
-            label=f'Train {class_names[j]}',
-            color=colours[j],
-            linewidth=2,
-        )
+            # Shaded uncertainty band
+            ax.fill_between(
+                bin_centers,
+                hist_density - uncertainty_density,
+                hist_density + uncertainty_density,
+                step='mid',
+                color=colours[j],
+                alpha=0.3,
+            )
 
-        # Shaded uncertainty band
-        ax.fill_between(
-            bin_centers,
-            hist_density - uncertainty_density,
-            hist_density + uncertainty_density,
-            step='mid',
-            color=colours[j],
-            alpha=0.3,
-        )
+        # --- VALIDATION: dots with error bars ---
+        for j in range(n_classes):
+            mask = y_val_[:, j] == 1
+            y_vals = y_pred_val_[mask, i]
+            weights = rel_w_val_[mask]
+            weights_sq = weights**2
 
-    # --- VALIDATION: dots with error bars ---
-    for j in range(n_classes):
-        mask = y_val_[:, j] == 1
-        y_vals = y_pred_val_[mask, i]
-        weights = rel_w_val_[mask]
-        weights_sq = weights**2
+            hist_raw, bin_edges = np.histogram(y_vals, bins=25, weights=weights, range=(0, 1))
+            hist_sq_raw, _ = np.histogram(y_vals, bins=bin_edges, weights=weights_sq, range=(0, 1))
+            bin_widths = np.diff(bin_edges)
 
-        hist_raw, bin_edges = np.histogram(y_vals, bins=25, weights=weights, range=(0, 1))
-        hist_sq_raw, _ = np.histogram(y_vals, bins=bin_edges, weights=weights_sq, range=(0, 1))
-        bin_widths = np.diff(bin_edges)
+            total_weight = np.sum(hist_raw)
+            if total_weight == 0:
+                continue
 
-        total_weight = np.sum(hist_raw)
-        if total_weight == 0:
-            continue
+            hist_density = hist_raw / (total_weight * bin_widths)
+            uncertainty_density = np.sqrt(hist_sq_raw) / (total_weight * bin_widths)
+            bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
 
-        hist_density = hist_raw / (total_weight * bin_widths)
-        uncertainty_density = np.sqrt(hist_sq_raw) / (total_weight * bin_widths)
-        bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+            max_y = max(max_y, np.max(hist_density + uncertainty_density))
 
-        max_y = max(max_y, np.max(hist_density + uncertainty_density))
+            ax.errorbar(
+                bin_centers,
+                hist_density,
+                yerr=uncertainty_density,
+                fmt='o',
+                label=f'Valid {class_names[j]}',
+                color=colours[j],
+                markersize=5,
+                capsize=2,
+                elinewidth=1,
+            )
 
-        ax.errorbar(
-            bin_centers,
-            hist_density,
-            yerr=uncertainty_density,
-            fmt='o',
-            label=f'Valid {class_names[j]}',
-            color=colours[j],
-            markersize=5,
-            capsize=2,
-            elinewidth=1,
-        )
+        # Labels and style
+        ax.set_xlabel(f'{class_name} score')
+        ax.set_ylabel('a.u.')
+        ax.set_yscale('log')
+        ax.set_ylim(bottom=1e-3, top=max_y * 100)
+        ax.set_xlim(left=0, right=1)
 
-    # Labels and style
-    ax.set_xlabel(f'{class_name} score')
-    ax.set_ylabel('a.u.')
-    ax.set_yscale('log')
-    ax.set_ylim(bottom=1e-3, top=max_y * 100)
-    ax.set_xlim(left=0, right=1)
+        ax.legend(ncol=2, fontsize=10)
+        # Uncomment this if you want the CMS label
+        # mplhep.cms.label(loc=0, data=True, label='Preliminary')
 
-    ax.legend(ncol=2, fontsize=10)
-    # Uncomment this if you want the CMS label
-    # mplhep.cms.label(loc=0, data=True, label='Preliminary')
-
-    fig.tight_layout()
-    fig.savefig(f'{path_for_plots}/{class_name}_score.png')
-    plt.close(fig)
+        fig.tight_layout()
+        fig.savefig(f'{path_for_plots}/{class_name}_score.png')
+        plt.close(fig)
 
