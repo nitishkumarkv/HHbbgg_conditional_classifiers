@@ -18,8 +18,8 @@ def prepare_inputs(args):
     with open(f"{config_path}/training_config.yaml", 'r', encoding='utf-8') as f:
         training_config = yaml.safe_load(f)
 
-    prep_inputs = PrepareInputs(input_var_json=input_vars_path,
-                                training_info = training_config,
+    prep_inputs = PrepareInputs(input_var_path=input_vars_path,
+                                training_info=training_config,
                                 outpath=out_path,)
 
     # prepare the inputs for training
@@ -135,7 +135,7 @@ def perform_mjj_sculpting_study(args):
         training_config = yaml.safe_load(f)
     
 
-    prep_inputs = PrepareInputs(input_var_json = input_vars_path,
+    prep_inputs = PrepareInputs(input_var_path = input_vars_path,
                                 training_info = training_config,
                                 sculpting_study_info = sculpting_study_config,
                                 outpath=out_path,)

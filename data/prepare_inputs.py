@@ -18,14 +18,14 @@ register_awkward()
 class PrepareInputs:
     def __init__(
         self,
-        input_var_json: Optional[Dict[str, Any]] = None,
+        input_var_path: Optional[str] = None,
         training_info: Optional[Dict[str, Any]] = None,
         sculpting_study_info: Optional[Dict[str, Any]] = None,
         outpath: Optional[Dict[str, Any]] = None,
         predict_parquet_info: Optional[Dict[str, Any]] = None,
         ) -> None:
         self.model_type = "mlp"
-        self.input_var_json = input_var_json
+        self.input_var_path = input_var_path
         self.training_info = training_info
         self.sculpting_study_info = sculpting_study_info
         self.outpath = outpath
@@ -38,6 +38,9 @@ class PrepareInputs:
             self.weight_scheme_process = self.training_info["weight_scheme_process"]
             self.write_chunk = self.training_info["write_chunk"]
         self.fill_nan = -9
+
+        if isinstance(self.input_var_path, dict):
+            raise ValueError("PrepareInputs argument 'input_var_path' should be a string path to the yaml file, not a dict.")
 
         #self.extra_vars = ["mass", "nonRes_dijet_mass", "Res_dijet_mass", "nonRes_has_two_btagged_jets", "weight", "pt", "nonRes_dijet_pt", "Res_dijet_pt", "Res_lead_bjet_pt", "Res_sublead_bjet_pt", "Res_lead_bjet_ptPNetCorr", "Res_sublead_bjet_ptPNetCorr", "nonRes_HHbbggCandidate_mass", "Res_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "Res_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "jet1_mass", "jet2_mass", "jet3_mass", "jet4_mass", "jet5_mass", "jet6_mass", "Res_lead_bjet_jet_idx", "Res_sublead_bjet_jet_idx", "jet1_index", "jet2_index", "jet3_index", "jet4_index", "jet5_index", "jet6_index",
         #                   "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet1_eta", "jet2_eta", "jet3_eta", "jet4_eta", "jet5_eta", "jet6_eta", "jet1_phi", "jet2_phi", "jet3_phi", "jet4_phi", "jet5_phi", "jet6_phi", "lead_phi", "sublead_phi"]
@@ -585,7 +588,7 @@ class PrepareInputs:
         comb_inputs = pd.DataFrame()
 
         # get the variables required for training
-        vars_config = self.load_vars(self.input_var_json)[self.model_type]
+        vars_config = self.load_vars(self.input_var_path)[self.model_type]
 
         vars_for_training = vars_config["vars"]
         # vars_for_log = vars_config["vars_for_log_transform"]
@@ -813,7 +816,7 @@ class PrepareInputs:
         out_path = f"{inputs_path}/individual_samples/"
         os.makedirs(out_path, exist_ok=True)
         # get the variables required for training
-        vars_config = self.load_vars(self.input_var_json)[self.model_type]
+        vars_config = self.load_vars(self.input_var_path)[self.model_type]
 
         with open(f"{inputs_path}/input_vars.txt", 'r') as f:
             vars = json.load(f)
@@ -912,7 +915,7 @@ class PrepareInputs:
         out_path = f"{inputs_path}/individual_samples/"
         os.makedirs(out_path, exist_ok=True)
         # get the variables required for training
-        vars_config = self.load_vars(self.input_var_json)[self.model_type]
+        vars_config = self.load_vars(self.input_var_path)[self.model_type]
 
         with open(f"{inputs_path}/input_vars.txt", 'r') as f:
             vars = json.load(f)
@@ -1018,7 +1021,7 @@ class PrepareInputs:
         os.makedirs(out_path, exist_ok=True)
 
         # get the variables required for training
-        vars_config = self.load_vars(self.input_var_json)[self.model_type]
+        vars_config = self.load_vars(self.input_var_path)[self.model_type]
         with open(f"{inputs_path}/input_vars.txt", 'r') as f:
             vars = json.load(f)
         vars_for_training = vars
