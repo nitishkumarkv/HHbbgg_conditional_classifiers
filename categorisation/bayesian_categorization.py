@@ -1538,8 +1538,8 @@ class OptunaCategorizer:
             mHH_bounds = []
             samples_input_cats = pd.DataFrame()
             if i == 0:
-                samples_input_cats = samples_input.loc[(samples_input["HHbbggCandidate_mass"] >= 250) & (samples_input["HHbbggCandidate_mass"] < self.mHH_cats[i])]
-                mHH_bounds = [250, self.mHH_cats[i]]
+                samples_input_cats = samples_input.loc[(samples_input["HHbbggCandidate_mass"] < self.mHH_cats[i])]
+                mHH_bounds = [-1, self.mHH_cats[i]]
             elif i == len(self.mHH_cats):
                 samples_input_cats = samples_input.loc[samples_input["HHbbggCandidate_mass"] >= self.mHH_cats[i-1]]
                 mHH_bounds = [self.mHH_cats[i-1], -1]
@@ -1558,7 +1558,7 @@ class OptunaCategorizer:
             best_params_path = os.path.join(cat_path, "best_cut_params.txt")
             if i == 0:
                 with open(best_params_path, "w") as f:
-                    f.write(f"----mHH category: 250 - {self.mHH_cats[i]}----\n")
+                    f.write(f"----mHH category: 0 - {self.mHH_cats[i]}----\n")
                     for j, params in enumerate(best_params, start=1):
                         f.write(f"Category {j}:\n")
                         for k, v in params.items():
@@ -1597,7 +1597,7 @@ class OptunaCategorizer:
             best_params_json_path = os.path.join(cat_path, "best_cut_params.json")
             if i == 0:
                 # with open(best_params_json_path, "w") as f:
-                mHH_cat_dict[f"mHHcat{i}"] = {"mHH_low": 250,
+                mHH_cat_dict[f"mHHcat{i}"] = {"mHH_low": -1,
                                 "mHH_high": self.mHH_cats[i],
                                 "DNN_cuts" : best_params
                                 }
@@ -1665,7 +1665,7 @@ if __name__ == "__main__":
     parser.add_argument("--n_runs", type=int, default=15, help="Number of complete runs for the categorization")
     parser.add_argument("--gamma_strategy", type=str, choices=["sqrt", "linear"], default="linear", help="Gamma strategy for TPE sampler")
     parser.add_argument("--side_band_threshold", type=int, default=10, help="Threshold for sideband requirements")
-    parser.add_argument("--mHH_cats", type=int, nargs="+", default=[], help="Inner boundaries of mHH categories, if using. Lower bound of 250 GeV and no upper bound assumed.")
+    parser.add_argument("--mHH_cats", type=int, nargs="+", default=[], help="Inner boundaries of mHH categories, if using. No lower or upper bound assumed.")
 
     args = parser.parse_args()
 
