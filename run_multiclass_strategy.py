@@ -104,15 +104,31 @@ def perform_training(args):
 def perform_categorization(args):
     # Load categorization config yaml file
     categorization_config_path = f"{args.config_path}/categorization_config.yaml"
-    with open(f"{categorization_config_path}", 'r') as f:
+    with open(f"{categorization_config_path}", 'r', encoding="utf-8") as f:
         categorization_config = yaml.safe_load(f)
 
-    n_categories = categorization_config["n_categories"]
-    n_runs = categorization_config["n_runs"]
+    n_categories        = categorization_config["n_categories"]
+    n_runs              = categorization_config["n_runs"]
+    optuna_folder       = categorization_config["optuna_folder"]
+    n_trials            = categorization_config["n_trials"]
+    sr_strategy         = categorization_config["SR_strategy"]
+    gamma_strategy      = categorization_config["gamma_strategy"]
+    side_band_threshold = categorization_config["side_band_threshold"]
 
     if args.perform_categorisation:
         print('INFO: Performing categorisation')
-        subprocess.run(f"python3 categorisation/bayesian_categorization.py --n_categories {n_categories} --base_path {args.out_path} --n_runs {n_runs}", shell=True)
+        subprocess.run(
+            "python3 categorisation/bayesian_categorization.py "
+            + f"--base_path {args.out_path} "
+            + f"--n_categories {n_categories} "
+            + f"--n_runs {n_runs} "
+            + f"--optuna_folder {optuna_folder} "
+            + f"--n_trials {n_trials} "
+            + f"--SR_strategy {sr_strategy} "
+            + f"--gamma_strategy {gamma_strategy} "
+            + f"--side_band_threshold {side_band_threshold} ",
+            shell=True, check=True
+        )
 
 
 def perform_mjj_sculpting_study(args):
