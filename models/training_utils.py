@@ -688,7 +688,12 @@ if __name__ == "__main__":
             print(f"Epoch {epoch} - Train Loss = {train_loss_no_dist_corr:.4f} + {decorr_lambda} * {train_dist_corr:.4f}")
         
         # Save checkpoint every ___ epochs
-        if epoch % 10 == 0:
+        # if epoch % 10 == 0:
+        if epoch % 1 == 0:
+            # WARNING: Be mindful of disk space when saving frequent checkpoints
+            # that include the full suite of y prediction arrays for ROC plots.
+            # 300 epochs x ~100 MB = ~30 GB   <-- That's not insignificant!
+            # 300 epochs x ~100 MB x 10% of epochs = ~3 GB   <-- More reasonable.
             print(f"Saving checkpoint at epoch {epoch}")
             save_checkpoint(
                 epoch=epoch,
@@ -715,6 +720,7 @@ if __name__ == "__main__":
                 best_loss=best_loss,
                 best_dist_corr=best_dist_corr,
             )
+            # TODO: Numpy save y_pred_train.npy, y_train.npy, y_pred_val.npy, and y_val.npy for checkpoint ROC plots
             mlp_plotter.run_condor_job(
                 input_path=input_path,                                                    # base path to input files
                 condor_dir=f"{path_to_checkpoint}/condor/mlp_plotter/",                   # condor directory
@@ -722,6 +728,7 @@ if __name__ == "__main__":
                 checkpoint_file=f"{path_to_checkpoint}/checkpoints/epoch{epoch}/mlp.pth", # checkpoint path
                 job_config=job_config,
                 dry_run=False,
+                epoch=epoch,
             )
 
 
