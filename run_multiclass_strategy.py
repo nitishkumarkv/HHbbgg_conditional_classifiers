@@ -1,10 +1,11 @@
-from data.prepare_inputs import PrepareInputs
 import os
 import argparse
 import subprocess
 import yaml
 
-def prepare_inputs(args):
+from data.prepare_inputs import PrepareInputs
+
+def prepare_inputs(args: argparse.Namespace):
 
     config_path = args.config_path
     out_path = args.out_path
@@ -42,64 +43,111 @@ def prepare_inputs(args):
         print('INFO: Preparing the inputs for prediction systematics', '\n')
         prep_inputs.prep_inputs_for_prediction_sim_sys()
 
-def perform_training(args):
 
+def perform_training(args: argparse.Namespace):
     out_path = args.out_path
     config_path = args.config_path
 
     # Load the configuration yaml files
     training_config_path = f"{config_path}/training_config.yaml"
     job_config_path = f"{config_path}/job_config.yaml"
-    with open(f"{training_config_path}", 'r') as f:
+    with open(f"{training_config_path}", 'r', encoding="utf-8") as f:
         training_config = yaml.safe_load(f)
-
 
     do_random_search = training_config["do_random_search"]
 
     # do random search
     if do_random_search:
         print('INFO: Performing random search')
-        subprocess.run(f"python3 models/random_search.py --input_path {out_path} --training_config_path {training_config_path}", shell=True)        
+        subprocess.run(
+            "python3 models/random_search.py "
+            + f"--input_path {out_path} "
+            + f"--training_config_path {training_config_path} ",
+            shell=True, check=True
+        )
 
-    # perform trainging
+    # perform training
     if args.train_best_model:
         print('INFO: Training the best model')
-        subprocess.run(f"python3 -m models.training_utils --input_path {out_path} --training_config_path {training_config_path} --job_config_path {job_config_path}", shell=True)
+        subprocess.run(
+            "python3 -m models.training_utils "
+            + f"--input_path {out_path} "
+            + f"--training_config_path {training_config_path} "
+            + f"--job_config_path {job_config_path} ",
+            shell=True, check=True
+        )
 
     # plot the training results
     if args.plot_training_results:
         print('INFO: Getting the results plots')
-        subprocess.run(f"python3 models/mlp_plotter.py --input_path {out_path}", shell=True)
+        subprocess.run(
+            "python3 -m models.mlp_plotter "
+            + f"--input_path {out_path} ",
+            shell=True, check=True
+        )
 
     # get permutation importance
     if args.get_permutation_importance:
         print('INFO: Getting permutation importance')
-        subprocess.run(f"python3 models/permutation_importance.py --input_path {out_path}", shell=True)
+        subprocess.run(
+            "python3 models/permutation_importance.py "
+            + f"--input_path {out_path} ",
+            shell=True, check=True
+        )
 
     # get the predictions
     if args.get_predictions:
         print('INFO: Getting the predictions nominal')
-        subprocess.run(f"python3 models/get_prediction.py --model_folder {out_path}/after_random_search_best1/ --samples_path {out_path} --config_path {config_path} --get_pred_nominal", shell=True)
+        subprocess.run(
+            "python3 models/get_prediction.py "
+            + f"--model_folder {out_path}/after_random_search_best1/ "
+            + f"--samples_path {out_path} "
+            + f"--config_path {config_path} "
+            + "--get_pred_nominal ",
+            shell=True, check=True
+        )
 
     # get the predictions for systematics
     if args.get_predictions_sys:
         print('INFO: Getting the predictions systematics')
-        subprocess.run(f"python3 models/get_prediction.py --model_folder {out_path}/after_random_search_best1/ --samples_path {out_path} --config_path {config_path} --get_pred_sys", shell=True)
+        subprocess.run(
+            "python3 models/get_prediction.py "
+            + f"--model_folder {out_path}/after_random_search_best1/ "
+            + f"--samples_path {out_path} "
+            + f"--config_path {config_path} "
+            + "--get_pred_sys ",
+            shell=True, check=True
+        )
 
     # get non resonant mass for different ggFHH score cuts
     if args.test_mass_sculpting:
         print('INFO: Getting non resonant mass for different ggFHH score cuts')
-        subprocess.run(f"python3 utils/test_cor_mass.py --input_path {out_path} --config_path {config_path}", shell=True)
+        subprocess.run(
+            "python3 utils/test_cor_mass.py "
+            + f"--input_path {out_path} "
+            + f"--config_path {config_path} ",
+            shell=True, check=True
+        )
 
     # get the predictions for data
     if args.get_data_mc_plots:
         print('INFO: Getting data-MC plots')
-        subprocess.run(f"python3 utils/plotting_utils.py --base-path {out_path} --training_config_path {training_config_path}", shell=True)
+        subprocess.run(
+            "python3 utils/plotting_utils.py "
+            + f"--base-path {out_path} "
+            + f"--training_config_path {training_config_path} ",
+            shell=True, check=True
+        )
 
     # get score shapes for different kl samples
     if args.get_score_shape_diff_kl:
         print('INFO: Getting score shape differences')
-        subprocess.run(f"python3 utils/score_shape_diff_kl.py --folder {out_path}/individual_samples/", shell=True)
+        subprocess.run(
+            "python3 utils/score_shape_diff_kl.py "
+            + f"--folder {out_path}/individual_samples/ ",
+            shell=True, check=True
+        )
+
 
 def perform_categorization(args):
     # Load categorization config yaml file
@@ -131,7 +179,7 @@ def perform_categorization(args):
         )
 
 
-def perform_mjj_sculpting_study(args):
+def perform_mjj_sculpting_study(args: argparse.Namespace):
     out_path = args.out_path
     config_path = args.config_path
 
@@ -141,13 +189,16 @@ def perform_mjj_sculpting_study(args):
     # Load the configuration yaml files
     sculpting_study_config_path = f"{config_path}/sculpting_study_config.yaml"
     try:
-        with open(f"{sculpting_study_config_path}", 'r') as f:
+        with open(f"{sculpting_study_config_path}", 'r', encoding="utf-8") as f:
             sculpting_study_config = yaml.safe_load(f)
     except FileNotFoundError as e:
-        raise FileNotFoundError(f"ERROR: The specified sculpting_study_config.yaml file was not found at {sculpting_study_config_path}. Please ensure the file exists and the path is correct.") from e
+        raise FileNotFoundError(
+            f"ERROR: The specified sculpting_study_config.yaml file was not found at {sculpting_study_config_path}. "
+            + "Please ensure the file exists and the path is correct."
+        ) from e
 
     training_config_path = f"{config_path}/training_config.yaml"
-    with open(f"{training_config_path}", 'r') as f:
+    with open(f"{training_config_path}", 'r', encoding="utf-8") as f:
         training_config = yaml.safe_load(f)
     
 
@@ -164,12 +215,25 @@ def perform_mjj_sculpting_study(args):
     # train the mjj predictor
     if args.train_mjj_predictor:
         print('INFO: Training the Mjj predictor for sculpting study')
-        subprocess.run(f"python3 models/mjj_training_utils.py --input_path {out_path} --training_config_path {training_config_path} --sculpting_study_config_path {sculpting_study_config_path}", shell=True)
+        subprocess.run(
+            "python3 models/mjj_training_utils.py "
+            + f"--input_path {out_path} "
+            + f"--training_config_path {training_config_path} "
+            + f"--sculpting_study_config_path {sculpting_study_config_path} ",
+            shell=True, check=True
+        )
 
     # get permutaion importance
     if args.mjj_predictor_permutation_importance:
         print('INFO: Getting permutation importance')
-        subprocess.run(f"python3 models/permutation_importance.py --input_path {out_path} --y_path sculpting_study/y_val.npy --training_folder sculpting_study --sculpting_study_config_path {sculpting_study_config_path}", shell=True)
+        subprocess.run(
+            "python3 models/permutation_importance.py "
+            + f"--input_path {out_path} "
+            + "--y_path sculpting_study/y_val.npy "
+            + "--training_folder sculpting_study "
+            + f"--sculpting_study_config_path {sculpting_study_config_path} ",
+            shell=True, check=True
+        )
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Perform MLP based classification')
@@ -224,7 +288,7 @@ if __name__ == "__main__":
         args.test_mass_sculpting = True
         args.get_data_mc_plots = True
         args.get_score_shape_diff_kl = True
-    
+
     if args.mjj_sculpting_study:
         args.prepare_sculpting_study_inputs = True
         args.train_mjj_predictor = True

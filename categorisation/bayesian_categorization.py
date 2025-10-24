@@ -659,7 +659,8 @@ class OptunaCategorizer:
         # Adjust spacing
         plt.tight_layout()
         # Save the figure
-        plt.savefig(f"{save_path}/category_summary_new.png")
+        # plt.savefig(f"{save_path}/category_summary_new.png") # breaks like this: Version_20250524_MVAID_forPreApp/optuna_categorization/run_0_/category_summary_new.png
+        plt.savefig(f"{save_path}category_summary_new.png") # original
         plt.close(fig)
 
 
