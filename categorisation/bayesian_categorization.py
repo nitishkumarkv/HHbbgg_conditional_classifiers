@@ -58,7 +58,8 @@ class OptunaCategorizer:
                 side_band_threshold=10,
                 beta=0.1,
                 gamma_strategy="linear",
-                SR_strategy="sequential"
+                SR_strategy="sequential",
+                boosted=False
                 ):
 
 
@@ -77,6 +78,7 @@ class OptunaCategorizer:
         self.beta = beta
         self.gamma_strategy = gamma_strategy
         self.SR_strategy = SR_strategy
+        self.boosted = boosted
 
         if self.cat_folder is None:
             print("INFO: No output directory specified, using default: optuna_categorization")
@@ -141,6 +143,11 @@ class OptunaCategorizer:
         events = events[(mass_bool & dijet_mass_bool & lead_mvaID_bool & sublead_mvaID_bool)]
         scores = scores[(mass_bool & dijet_mass_bool & lead_mvaID_bool & sublead_mvaID_bool)]
 
+        if self.boosted:
+            is_boosted_bool = (events.is_boosted == 0)
+            events = events[(is_boosted_bool)]
+            scores = scores[(is_boosted_bool)]
+
         return events, scores
     
     def load_samples(self):
@@ -153,6 +160,8 @@ class OptunaCategorizer:
             "score", "diphoton_mass", "dijet_mass",
             "weights", "labels", "sample"
         )}
+        if self.boosted:
+            data.update({"is_boosted": []})
 
         eras = ("preEE", "postEE", "preBPix", "postBPix")
         dijet_mass_key = "nonResReg_dijet_mass_DNNreg"
@@ -163,7 +172,7 @@ class OptunaCategorizer:
                     self.base_path, "individual_samples", era, sample
                 )
                 y_file   = os.path.join(samp_dir, "y.npy")
-                evt_file = os.path.join(samp_dir, "events.parquet")
+                evt_file = os.path.join(samp_dir, "events"+("_boostedCat" if self.boosted else "")+".parquet")
 
                 # Skip if either file is missing
                 if not (os.path.exists(y_file) and os.path.exists(evt_file)):
@@ -179,7 +188,7 @@ class OptunaCategorizer:
                             "lead_genPartFlav", "sublead_genPartFlav",
                             "weight_tot",
                             "lead_mvaID", "sublead_mvaID",
-                        ],
+                        ] + (["is_boosted"] if self.boosted else []),
                     )
                     if self.apply_preselection:
                         events, y = self.preselection(events, y)
@@ -205,6 +214,7 @@ class OptunaCategorizer:
                     np.full(len(y), 1 if sample in self.signal_samples else 0, dtype=int)
                 )
                 data["sample"].append(np.repeat(sample, len(y)))
+                data["is_boosted"].append(np.asarray(events["is_boosted"]))
 
         if not data["score"]:
             raise RuntimeError("[load_samples] No events found in any input sample.")
@@ -291,12 +301,12 @@ class OptunaCategorizer:
 
         for sample in sim_samples:
             # Load MC events
-            if not os.path.exists(f"{sim_folder}/preEE/{sample}/events.parquet"):
+            if not os.path.exists(f"{sim_folder}/preEE/{sample}/events"+("_boostedCat" if self.boosted else "")+".parquet"):
                 print(f"samples doesn't exist: {sample}")
-                sample_preEE = ak.from_parquet(f"{sim_folder}/postEE/{sample}/events.parquet", columns=variables + ["weight_tot"])
+                sample_preEE = ak.from_parquet(f"{sim_folder}/postEE/{sample}/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=variables + ["weight_tot"])
                 sample_preEE["weight_tot"] = sample_preEE["weight_tot"] * luminosities["preEE"] / luminosities["postEE"] # Adjust weight for preEE only
             else:
-                sample_preEE = ak.from_parquet(f"{sim_folder}/preEE/{sample}/events.parquet", columns=variables + ["weight_tot"])
+                sample_preEE = ak.from_parquet(f"{sim_folder}/preEE/{sample}/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=variables + ["weight_tot"])
 
 
             luminosities = {
@@ -306,21 +316,21 @@ class OptunaCategorizer:
             "postBPix": 9.451  # Integrated luminosity for postEE in fb^-1
             }
 
-            sample_postEE = ak.from_parquet(f"{sim_folder}/postEE/{sample}/events.parquet", columns=variables + ["weight_tot"])
+            sample_postEE = ak.from_parquet(f"{sim_folder}/postEE/{sample}/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=variables + ["weight_tot"])
             if include_2023:
-                if not os.path.exists(f"{sim_folder}/preBPix/{sample}/events.parquet"):
+                if not os.path.exists(f"{sim_folder}/preBPix/{sample}/events"+("_boostedCat" if self.boosted else "")+".parquet"):
                     print(f"samples doesn't exist: {sample} preBPix")
-                    sample_preBPix = ak.from_parquet(f"{sim_folder}/postEE/{sample}/events.parquet", columns=variables + ["weight_tot"])
+                    sample_preBPix = ak.from_parquet(f"{sim_folder}/postEE/{sample}/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=variables + ["weight_tot"])
                     sample_preBPix["weight_tot"] = sample_preBPix["weight_tot"] * luminosities["preBPix"] / luminosities["postEE"]
                 else:
-                    sample_preBPix = ak.from_parquet(f"{sim_folder}/preBPix/{sample}/events.parquet", columns=variables + ["weight_tot"])
+                    sample_preBPix = ak.from_parquet(f"{sim_folder}/preBPix/{sample}/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=variables + ["weight_tot"])
 
-                if not os.path.exists(f"{sim_folder}/postBPix/{sample}/events.parquet"):
+                if not os.path.exists(f"{sim_folder}/postBPix/{sample}/events"+("_boostedCat" if self.boosted else "")+".parquet"):
                     print(f"samples doesn't exist: {sample} postBPix")
-                    sample_postBPix = ak.from_parquet(f"{sim_folder}/postEE/{sample}/events.parquet", columns=variables + ["weight_tot"])
+                    sample_postBPix = ak.from_parquet(f"{sim_folder}/postEE/{sample}/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=variables + ["weight_tot"])
                     sample_postBPix["weight_tot"] = sample_postBPix["weight_tot"] * luminosities["postBPix"] / luminosities["postEE"]
                 else:
-                    sample_postBPix = ak.from_parquet(f"{sim_folder}/postBPix/{sample}/events.parquet", columns=variables + ["weight_tot"])
+                    sample_postBPix = ak.from_parquet(f"{sim_folder}/postBPix/{sample}/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=variables + ["weight_tot"])
 
             if os.path.exists(f"{sim_folder}/preEE/{sample}/y.npy"):
                 score_preEE = np.load(f"{sim_folder}/preEE/{sample}/y.npy")
@@ -370,7 +380,7 @@ class OptunaCategorizer:
         data_combined = None
 
         for data_sample in data_samples:
-            data_part = ak.from_parquet(f"{data_folder}/{data_sample}/events.parquet", columns=variables)
+            data_part = ak.from_parquet(f"{data_folder}/{data_sample}/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=variables)
             if os.path.exists(f"{data_folder}/{data_sample}/y.npy"):
                 data_score = np.load(f"{data_folder}/{data_sample}/y.npy")
                 for i, class_name in enumerate(class_names):
@@ -719,7 +729,7 @@ class OptunaCategorizer:
             # For each background class, since we want to cut "less than" a threshold, we update the lower bound.
             prev_bg_cut = {b: 0.0 for b in bg_classes}
 
-            # print numner of signal events
+            # print number of signal events
             n_signal_events = samples_remaining[samples_remaining["labels"] == 1].weights.sum()
             print(f"Run {run}: Number of signal events: {n_signal_events}")
 
@@ -905,6 +915,7 @@ class OptunaCategorizer:
         """
 
         nsr = 3
+        n_classes = 4
 
         out_dir = f"{base_path}/{folder_name}/"
         os.makedirs(out_dir, exist_ok=True)
@@ -955,7 +966,8 @@ class OptunaCategorizer:
                 print(f"Processing {inputs_path}")
 
                 # Load events
-                events = ak.from_parquet(f"{inputs_path}/events.parquet", columns=columns)
+                events = ak.from_parquet(f"{inputs_path}/events"+("_boostedCat" if self.boosted else "")+".parquet",
+                        columns=columns + (["is_boosted"] if self.boosted else []))
                 scores = np.load(f"{inputs_path}/y.npy")
                 # Apply selection if needed
                 if self.apply_preselection:
@@ -978,15 +990,16 @@ class OptunaCategorizer:
                 for i in range(nsr):
                     score_cuts = best_cut_values[i]
 
-                    mask = (selected_scores[:, 3] > score_cuts["th_signal"])
-                    for b in [0, 1, 2]:
+                    mask = (selected_scores[:, self.signal_class] > score_cuts["th_signal"])
+                    bg_classes = [j for j in range(n_classes) if j != self.signal_class]
+                    for b in bg_classes:
                         mask &= (selected_scores[:, b] < score_cuts[f"th_bg_{b}"])
 
                     cat_outdir = f"{out_dir}/cat{i+1}/{era}/{sample}"
                     os.makedirs(cat_outdir, exist_ok=True)
 
                     cat_events = selected_events[mask]
-                    ak.to_parquet(cat_events, f"{cat_outdir}/events.parquet")
+                    ak.to_parquet(cat_events, f"{cat_outdir}/events"+("_boostedCat" if self.boosted else "")+".parquet")
                     np.save(f"{cat_outdir}/y.npy", selected_scores[mask])
 
                     # Update yields (combine era)
@@ -1013,7 +1026,8 @@ class OptunaCategorizer:
             inputs_path = f"{base_path}/individual_samples_data/{data_sample}"
             print(f"Processing {inputs_path}")
 
-            events = ak.from_parquet(f"{inputs_path}/events.parquet", columns=columns)
+            events = ak.from_parquet(f"{inputs_path}/events"+("_boostedCat" if self.boosted else "")+".parquet",
+                        columns=columns + (["is_boosted"] if self.boosted else []))
             scores = np.load(f"{inputs_path}/y.npy")
 
             # For data, weight_tot = 1
@@ -1030,15 +1044,16 @@ class OptunaCategorizer:
             # ============= SR (cat1, cat2, cat3) =============
             for i in range(nsr):
                 score_cuts = best_cut_values[i]
-                mask = (selected_scores[:, 3] > score_cuts["th_signal"])
-                for b in [0, 1, 2]:
+                mask = (selected_scores[:, self.signal_class] > score_cuts["th_signal"])
+                bg_classes = [j for j in range(n_classes) if j != self.signal_class]
+                for b in bg_classes:
                     mask &= (selected_scores[:, b] < score_cuts[f"th_bg_{b}"])
 
                 cat_outdir = f"{out_dir}/cat{i+1}/{data_sample}"
                 os.makedirs(cat_outdir, exist_ok=True)
 
                 cat_events = selected_events[mask]
-                ak.to_parquet(cat_events, f"{cat_outdir}/events.parquet")
+                ak.to_parquet(cat_events, f"{cat_outdir}/events"+("_boostedCat" if self.boosted else "")+".parquet")
                 np.save(f"{cat_outdir}/y.npy", selected_scores[mask])
 
                 # Update yields 
@@ -1134,13 +1149,13 @@ class OptunaCategorizer:
 
                 # load both weight and mass
                 ev = ak.concatenate([
-                    ak.from_parquet(f"{path}/preEE/{sample}/events.parquet",
+                    ak.from_parquet(f"{path}/preEE/{sample}/events"+("_boostedCat" if self.boosted else "")+".parquet",
                                     columns=["weight_tot","mass"]),
-                    ak.from_parquet(f"{path}/postEE/{sample}/events.parquet",
+                    ak.from_parquet(f"{path}/postEE/{sample}/events"+("_boostedCat" if self.boosted else "")+".parquet",
                                     columns=["weight_tot","mass"]),
-                    ak.from_parquet(f"{path}/preBPix/{sample}/events.parquet",
+                    ak.from_parquet(f"{path}/preBPix/{sample}/events"+("_boostedCat" if self.boosted else "")+".parquet",
                                     columns=["weight_tot","mass"]),
-                    ak.from_parquet(f"{path}/postBPix/{sample}/events.parquet",
+                    ak.from_parquet(f"{path}/postBPix/{sample}/events"+("_boostedCat" if self.boosted else "")+".parquet",
                                     columns=["weight_tot","mass"])
                 ], axis=0)
 
@@ -1176,7 +1191,7 @@ class OptunaCategorizer:
                     print(f"Skipping {category}/{data} as it does not exist.")
                     continue
 
-                ev = ak.from_parquet(f"{dpath}/events.parquet",
+                ev = ak.from_parquet(f"{dpath}/events"+("_boostedCat" if self.boosted else "")+".parquet",
                                      columns=["weight_tot","mass"])
                 if mass_range is not None:
                     mask = (ev.mass >= m_low) & (ev.mass <= m_high)
@@ -1325,18 +1340,18 @@ class OptunaCategorizer:
 
         columns_to_load = ["mass", "nonResReg_dijet_mass_DNNreg", "weight_tot"]
 
-        preEE = ak.from_parquet(f"{folder}/individual_samples/preEE/GGJets/events.parquet", columns=columns_to_load)
-        postEE = ak.from_parquet(f"{folder}/individual_samples/postEE/GGJets/events.parquet", columns=columns_to_load)
-        preBPix = ak.from_parquet(f"{folder}/individual_samples/preBPix/GGJets/events.parquet", columns=columns_to_load)
-        postBPix = ak.from_parquet(f"{folder}/individual_samples/postBPix/GGJets/events.parquet", columns=columns_to_load)
+        preEE = ak.from_parquet(f"{folder}/individual_samples/preEE/GGJets/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
+        postEE = ak.from_parquet(f"{folder}/individual_samples/postEE/GGJets/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
+        preBPix = ak.from_parquet(f"{folder}/individual_samples/preBPix/GGJets/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
+        postBPix = ak.from_parquet(f"{folder}/individual_samples/postBPix/GGJets/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
         # concatenate the samples
         presel_GGjets = ak.concatenate([preEE, postEE, preBPix, postBPix], axis=0)
 
         # load TTGG
-        preEE = ak.from_parquet(f"{folder}/individual_samples/preEE/TTGG/events.parquet", columns=columns_to_load)
-        postEE = ak.from_parquet(f"{folder}/individual_samples/postEE/TTGG/events.parquet", columns=columns_to_load)
-        preBPix = ak.from_parquet(f"{folder}/individual_samples/preBPix/TTGG/events.parquet", columns=columns_to_load)
-        postBPix = ak.from_parquet(f"{folder}/individual_samples/postBPix/TTGG/events.parquet", columns=columns_to_load)
+        preEE = ak.from_parquet(f"{folder}/individual_samples/preEE/TTGG/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
+        postEE = ak.from_parquet(f"{folder}/individual_samples/postEE/TTGG/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
+        preBPix = ak.from_parquet(f"{folder}/individual_samples/preBPix/TTGG/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
+        postBPix = ak.from_parquet(f"{folder}/individual_samples/postBPix/TTGG/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
         # concatenate the samples
         presel = ak.concatenate([preEE, postEE, preBPix, postBPix, presel_GGjets], axis=0)
 
@@ -1350,16 +1365,16 @@ class OptunaCategorizer:
         cat_events = {}
         # loop over the categories
         for cat in cat_list:
-            preEE = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/preEE/GGJets/events.parquet", columns=columns_to_load)
-            postEE = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/postEE/GGJets/events.parquet", columns=columns_to_load)
-            preBPix = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/preBPix/GGJets/events.parquet", columns=columns_to_load)
-            postBPix = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/postBPix/GGJets/events.parquet", columns=columns_to_load)
+            preEE = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/preEE/GGJets/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
+            postEE = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/postEE/GGJets/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
+            preBPix = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/preBPix/GGJets/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
+            postBPix = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/postBPix/GGJets/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
 
             # load TTGG
-            preEE_ttgg = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/preEE/TTGG/events.parquet", columns=columns_to_load)
-            postEE_ttgg = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/postEE/TTGG/events.parquet", columns=columns_to_load)
-            preBPix_ttgg = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/preBPix/TTGG/events.parquet", columns=columns_to_load)
-            postBPix_ttgg = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/postBPix/TTGG/events.parquet", columns=columns_to_load)
+            preEE_ttgg = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/preEE/TTGG/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
+            postEE_ttgg = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/postEE/TTGG/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
+            preBPix_ttgg = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/preBPix/TTGG/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
+            postBPix_ttgg = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/postBPix/TTGG/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
 
             # concatenate the samples
             events_nonRes = ak.concatenate([preEE, postEE, preBPix, postBPix, preEE_ttgg, postEE_ttgg, preBPix_ttgg, postBPix_ttgg], axis=0)
@@ -1514,6 +1529,7 @@ if __name__ == "__main__":
     parser.add_argument("--n_runs", type=int, default=15, help="Number of complete runs for the categorization")
     parser.add_argument("--gamma_strategy", type=str, choices=["sqrt", "linear"], default="linear", help="Gamma strategy for TPE sampler")
     parser.add_argument("--side_band_threshold", type=int, default=10, help="Threshold for sideband requirements")
+    parser.add_argument("--boosted", action='store_true', default=False, help="Take the boosted category into account")
 
     args = parser.parse_args()
 
@@ -1522,6 +1538,6 @@ if __name__ == "__main__":
                                     n_categories=args.n_categories,
                                     n_trials_optuna=args.n_trials,
                                     n_runs=args.n_runs,
-                                    SR_strategy=args.SR_strategy)
+                                    SR_strategy=args.SR_strategy,
+                                    boosted=args.boosted)
     categoriser.run_categorisation()
-    
