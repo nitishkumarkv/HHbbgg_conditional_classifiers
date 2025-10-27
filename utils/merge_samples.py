@@ -1,14 +1,19 @@
-import numpy as np
 import os
 import sys
+import argparse
+import joblib
+import yaml
+import copy
+import numpy as np
+import warnings
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
-import joblib
 import pandas as pd
 import mplhep
 import awkward as ak
 import pyarrow.parquet as pq
+from typing import Any
 
 ################################################################################
 #                             merge_samples.py                                 #
@@ -22,67 +27,240 @@ import pyarrow.parquet as pq
 #                                                                              #
 ################################################################################
 
-ff_sampledict = {
-    "GGJets": "GGJets", 
-    "DDQCDGJET": "DDQCDGJets",
-    "TTGG": "TTGG",
-    "TT": "TT",
-    "TTG_10_100": "TTG_10_100",
-    "TTG_100_200": "TTG_100_200",
-    "TTG_200": "TTG_200",
-    "ttHtoGG_M_125": "ttHToGG",
-    "BBHto2G_M_125": "BBHToGG",
-    "GluGluHToGG_M_125": "GluGluHToGG",
-    "VBFHToGG_M_125": "VBFHToGG",
-    "VHtoGG_M_125": "VHToGG",
-    "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": "GluGluToHH_kl-1p00_kt-1p00_c2-0p00",
-    "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": "GluGluToHH_kl-0p00_kt-1p00_c2-0p00",
-    "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": "GluGluToHH_kl-2p45_kt-1p00_c2-0p00",
-    "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": "GluGluToHH_kl-5p00_kt-1p00_c2-0p00",
-}
+# ff_sampledict = {
+#     "GGJets": "GGJets", 
+#     "DDQCDGJET": "DDQCDGJets",
+#     "TTGG": "TTGG",
+#     "TT": "TT",
+#     "TTG_10_100": "TTG_10_100",
+#     "TTG_100_200": "TTG_100_200",
+#     "TTG_200": "TTG_200",
+#     "ttHtoGG_M_125": "ttHToGG",
+#     "BBHto2G_M_125": "BBHToGG",
+#     "GluGluHToGG_M_125": "GluGluHToGG",
+#     "VBFHToGG_M_125": "VBFHToGG",
+#     "VHtoGG_M_125": "VHToGG",
+#     "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": "GluGluToHH_kl-1p00_kt-1p00_c2-0p00",
+#     "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": "GluGluToHH_kl-0p00_kt-1p00_c2-0p00",
+#     "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": "GluGluToHH_kl-2p45_kt-1p00_c2-0p00",
+#     "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": "GluGluToHH_kl-5p00_kt-1p00_c2-0p00",
+# }
 
-def load_samples(base_path, samples, data=False, syst=""):
+BOOSTED_CAT = False
+
+
+
+class EventsWrapper():
+    def __init__(self, events: ak.Array, path_for_warnings: str = ""):
+        """Wrapper around awkward array to gracefully handle missing variable errors."""
+        self.events = events
+        self.path_for_warnings = path_for_warnings
+
+    def __getitem__(self, name: str) -> Any:
+        try:
+            return self.events[name]
+        except (KeyError, ak.errors.FieldNotFoundError):
+            if self.path_for_warnings:
+                warnings.warn(f"Attempted to access variable '{name}' that is not found in events at '{self.path_for_warnings}'. Returning None.")
+            else:
+                warnings.warn(f"Attempted to access variable '{name}' that is not found in events. Returning None.")            
+            return None
+
+    def __getattribute__(self, name: str) -> Any:
+        try:
+            return super().__getattribute__(name)
+        except AttributeError:
+            # Try to get the attribute from the wrapped events object
+            try:
+                return getattr(self.events, name)
+            except AttributeError as e:
+                if self.path_for_warnings:
+                    raise AttributeError(f"Attempted to access attribute '{name}' that is not found in EventsWrapper or events at '{self.path_for_warnings}'.") from e
+                else:
+                    raise AttributeError(f"Attempted to access attribute '{name}' that is not found in EventsWrapper or events.") from e
+
+class Samples():
+    def __init__(self, config: dict, columns: list[str], weight_columns: list[str], verbose=False):
+        """Samples dictionary with built-in name handling.
+
+        Steps:
+            1) Fill sample dictionary with lists np.arrays indexed by FinalFit variable names.
+                - Use parquet variable name in add() method; conversion to ff variable name done internally.
+            2) Concatenate lists of arrays into single arrays, each indexed by ff variable names. 
+                - Call concatenate() method once all samples have been added.
+                - Special handling for score: break apa
+
+
+        Args:
+            config (dict): YAML "train config" dictionary.
+
+        """
+        self.samples            = {}
+        self.config             = config
+        self.columns:            list[str]      = columns
+        self.weight_columns:     list[str]      = weight_columns
+        self.all_save_columns:   list[str]      = self.columns + self.weight_columns
+        self.ff_sample_name_map: dict[str, str] = config["merge_samples"].get("ff_sample_name_map", {}) # pq: ff
+        self.ff_syst_name_map:   dict[str, str] = config["merge_samples"].get("finalfit_syst_name_map", {}) # pq: ff
+        self.ff_var_name_map:    dict[str, str] = config["merge_samples"].get("finalfit_var_name_map", {}) # pq: ff
+        self.dijet_mass_key:     str            = config["merge_samples"].get("dijet_mass_key", "nonResReg_dijet_mass_DNNreg")
+        self.score_key:          str            = config["merge_samples"].get("score_key", "score")
+        self.score_idx_name_map: dict[int, str] = config["merge_samples"].get("score_idx_name_map", {}) # index: class name
+        self.verbose:            bool           = verbose
+
+
+    def __pq_sample_to_ff_sample(self, pq_name: str) -> str:
+        """Convert parquet sample name to ff sample name using ff_sampledict."""
+        if pq_name in self.ff_sample_name_map:
+            return self.ff_sample_name_map[pq_name]
+        return pq_name
+
+    def __ff_name_to_pq_name(self, ff_name: str) -> str:
+        """Convert ff sample name to parquet sample name using ff_sampledict."""
+        inv_map = {v: k for k, v in self.ff_sample_name_map.items()}
+        if ff_name in inv_map:
+            return inv_map[ff_name]
+        return ff_name
+
+    def __pq_syst_to_ff_syst(self, pq_syst: str) -> str:
+        """Convert parquet systematic name to ff systematic name using ff_sampledict."""
+        if pq_syst in self.ff_syst_name_map:
+            return self.ff_syst_name_map[pq_syst]
+        return pq_syst
+
+    def __ff_syst_to_pq_syst(self, ff_syst: str) -> str:
+        """Convert ff systematic name to parquet systematic name using ff_sampledict."""
+        inv_map = {v: k for k, v in self.ff_syst_name_map.items()}
+        if ff_syst in inv_map:
+            return inv_map[ff_syst]
+        return ff_syst
+    
+    def __pq_var_to_ff_var(self, pq_var: str) -> str:
+        """Convert parquet variable name to ff variable name using ff_var_name_map."""
+        if pq_var in self.ff_var_name_map:
+            return self.ff_var_name_map[pq_var]
+        return pq_var
+
+    def __ff_var_to_pq_var(self, ff_var: str) -> str:
+        """Convert ff variable name to parquet variable name using ff_var_name_map."""
+        inv_map = {v: k for k, v in self.ff_var_name_map.items()}
+        if ff_var in inv_map:
+            return inv_map[ff_var]
+        return ff_var
+
+    def add(self, var_name: str, var_data: np.ndarray):
+        """var_name is from multiclass parquets
+        ff_var_name is the var name after mapping through ff name map
+        """
+        if var_data is None:
+            # Missing variable, skip adding
+            return
+        if var_name not in self.all_save_columns:
+            return
+        # Sample dict uses ff var names
+        ff_var_name = self.__pq_var_to_ff_var(var_name)
+        # print(f"[DEBUG] Adding variable: {var_name} as {ff_var_name}")
+        # print(f"[DEBUG] self.samples keys before adding: {list(self.samples.keys())}")
+        if ff_var_name not in self.samples:
+            self.samples[ff_var_name] = []
+        self.samples[ff_var_name].append(var_data)
+        # print(f"[DEBUG] self.samples keys after adding: {list(self.samples.keys())}")
+
+    def concatenate(self):
+        """Concatenate samples in self.samples into single arrays."""
+        samples_keys = copy.deepcopy(list(self.samples.keys())) # keep original keys to iterate over
+        for ffvar in samples_keys:
+            if self.verbose:
+                print(f"[DEBUG] Concatenating variable: {ffvar}")
+            data_list = self.samples[ffvar]
+            if ffvar == self.score_key:
+                # Special handling for score: list of arrays of shape (N, num_classes)
+                if self.verbose:
+                    print(f"[DEBUG] Concatenating score variable with special handling.")
+                all_scores = np.concatenate(data_list, axis=0)
+                self.samples[ffvar] = [row for row in all_scores]
+                # Break into separate arrays per class
+                num_classes = all_scores.shape[1]
+                for class_idx in range(num_classes):
+                    class_name = self.score_idx_name_map.get(class_idx, f"class_{class_idx}")
+                    if self.verbose:
+                        print(f"[DEBUG] Extracting class {class_idx} as {class_name}")
+                    if class_name not in self.samples:
+                        self.samples[class_name] = []
+                    self.samples[class_name] = all_scores[:, class_idx] # [row[class_idx] for row in all_scores]
+                continue
+            try:
+                self.samples[ffvar] = np.concatenate(data_list, axis=0)
+            except ValueError as e:
+                print(f"[ERROR] Failed to concatenate variable '{ffvar}': {e}")
+                print(f"[DEBUG] data_list shapes: {[arr.shape if isinstance(arr, np.ndarray) else 'N/A' for arr in data_list]}")
+                raise e
+
+            # for weight in weight_columns:
+            #     if weight in events.fields:
+            #         samples.add(weight, np.array(events[weight])) # samples_input[weight].append(np.array(events[weight]))
+            #     else:
+            #         # Default weight if not provided
+            #         samples.add(weight, np.array(ak.ones_like(events['mass']))) # samples_input[weight].append(np.array(ak.ones_like(events['mass'])))
+
+
+def load_samples(base_path, sample_list, config, data=False, syst="", verbose=False) -> pd.DataFrame:
     """Load predictions and weights, scaling weights by luminosity."""
+
+    # include_is_boosted  = not config["merge_samples"]["exclude_vars"].get("is_boosted", False)
+    # include_y_proba     = not config["merge_samples"]["exclude_vars"].get("y_proba", False)
+
+    events_file_name = 'events_boostedCat.parquet' if BOOSTED_CAT else 'events.parquet'
     # Example MC file to get the weight columns
-    parquet_file = pq.ParquetFile(base_path+"/individual_samples/preEE/ttHtoGG_M_125/"+syst+"/events_boostedCat.parquet")
+    parquet_file = pq.ParquetFile(base_path+"/individual_samples/preEE/ttHtoGG_M_125/"+syst+"/"+events_file_name)
     all_columns = parquet_file.schema.names
     weight_columns = [col for col in all_columns if 'weight' in col]
-    dijet_mass_key = "nonResReg_dijet_mass_DNNreg"
-    columns = ["lumi", "event", "run",
-            #"nonResReg_lead_bjet_hFlav", "nonResReg_sublead_bjet_hFlav",
-            "mass", dijet_mass_key, "is_boosted", "y_proba"]
+    dijet_mass_key = config["merge_samples"].get("dijet_mass_key", "nonResReg_dijet_mass_DNNreg")
+    if dijet_mass_key not in all_columns:
+        raise ValueError(
+            f"dijet_mass_key '{dijet_mass_key}' not found in parquet columns. "
+            + "You requested a mjj variable not present in the parquet files. "
+            + f"Available columns are: {all_columns}"
+        )
+    # dijet_mass_key = "nonResReg_dijet_mass_DNNreg"
+    # columns = ["lumi", "event", "run",
+    #         #"nonResReg_lead_bjet_hFlav", "nonResReg_sublead_bjet_hFlav",
+    #         "mass", dijet_mass_key, "is_boosted", "y_proba"]
 
-    samples_input = {
-            "lumi": [],
-            "event": [],
-            "run": [],
-            #"nonResReg_lead_bjet_hFlav": [],
-            #"nonResReg_sublead_bjet_hFlav": [],
-            "mass": [], 
-            "dijet_mass": [], 
-            "sample": [],
-            "year": [],
-            "score": [],
-            "nonRes_score": [],
-            "ttH_score": [],
-            "singleH_score" :[],
-            "ggHH_score":[],
-            "is_boosted": [],
-            "y_proba":[]
-    }
-    for weight in weight_columns:
-        samples_input.update({weight: []})
+    columns = [col for col in config["merge_samples"]["save_columns"]]
+
+    samples = Samples(config, columns=columns, weight_columns=weight_columns, verbose=verbose)
+
+    # samples_input = {
+    #         "lumi": [],
+    #         "event": [],
+    #         "run": [],
+    #         #"nonResReg_lead_bjet_hFlav": [],
+    #         #"nonResReg_sublead_bjet_hFlav": [],
+    #         "mass": [], 
+    #         "dijet_mass": [], 
+    #         "sample": [],
+    #         "year": [],
+    #         "score": [],
+    #         "nonRes_score": [],
+    #         "ttH_score": [],
+    #         "singleH_score" :[],
+    #         "ggHH_score":[],
+    #         "is_boosted": [],
+    #         "y_proba":[]
+    # }
+    # for weight in weight_columns:
+    #     samples_input.update({weight: []})
 
     eras = ["preEE", "postEE", "preBPix", "postBPix"]
     if data:
         eras = ["2022_EraC","2022_EraD","2022_EraE","2022_EraF","2022_EraG","2023_EraC","2023_EraD"]
 
     for era in eras:
-        print("###########")
+        print("\n###########")
         print(era)
-        print("###########")
-        print()
-        for sample in samples:
+        print("###########\n")
+        for sample in sample_list:
             if (sample in ["GGJets", "DDQCDGJET", "TTGG", "TT", "TTG_10_100", "TTG_100_200", "TTG_200"]) and (syst != ""):
                 continue
             
@@ -92,35 +270,50 @@ def load_samples(base_path, samples, data=False, syst=""):
             if data:
                 path = os.path.join(base_path, "individual_samples_data", era, sample)
             else:
-                path = os.path.join(base_path, "individual_samples"+"/", era, sample, syst)
+                path = os.path.join(base_path, "individual_samples", era, sample, syst)
             y_path = os.path.join(path, 'y.npy')
             w_path = os.path.join(path, 'rel_w.npy')
-            events = ak.from_parquet(os.path.join(path, 'events_boostedCat.parquet'), columns=columns+weight_columns)  # Load events
+            # Print all columns in parquet file
+            # print(f"Columns in {os.path.join(path, events_file_name)}:")
+            parquet_file = pq.ParquetFile(os.path.join(path, events_file_name))
+            # print(parquet_file.schema.names)
+            parquet_path = os.path.join(path, events_file_name)
+            if verbose:
+                print(f"[DEBUG] X path: {parquet_path}")
+                print(f"[DEBUG] y path: {y_path}")
+            events = ak.from_parquet(parquet_path, columns=columns+weight_columns)  # Load events
+            events = EventsWrapper(events)
 
             # Check if files exist
             if not (os.path.exists(y_path)):
                 print(f"Missing y for {path}. Skipping.")
                 continue
             y = np.load(y_path)
-            samples_input["score"].append(y)
-            
-            samples_input["lumi"].append(np.array(events['lumi']))
-            samples_input["event"].append(np.array(events['event']))
-            samples_input["run"].append(np.array(events['run']))
 
+            # Loop over eras, samples
+            # samples_input = { 
+            #       "sample": [ np.array(), np.array(), np.array(), ... ]
+            # }
+        
+            samples.add("score", y) # samples_input["score"].append(y)
+            samples.add("lumi", np.array(events['lumi'])) # samples_input["lumi"].append(np.array(events['lumi']))
+            samples.add("event", np.array(events["event"])) # samples_input["event"].append(np.array(events['event']))
+            samples.add("run", np.array(events['run'])) # samples_input["run"].append(np.array(events['run']))
             #samples_input["nonResReg_lead_bjet_hFlav"].append(np.array(events['nonResReg_lead_bjet_hFlav']))
             #samples_input["nonResReg_sublead_bjet_hFlav"].append(np.array(events['nonResReg_sublead_bjet_hFlav']))
-
-            samples_input["mass"].append(np.array(events['mass']))
-            samples_input["dijet_mass"].append(np.array(events[dijet_mass_key]))
+            samples.add("mass", np.array(events['mass'])) # samples_input["mass"].append(np.array(events['mass']))
+            samples.add("dijet_mass", np.array(events[dijet_mass_key])) # samples_input["dijet_mass"].append(np.array(events[dijet_mass_key]))
 
             if sample == "":
                 sample = "Data"
-            if sample in ff_sampledict.keys():
-                sample = ff_sampledict[sample]
+            # if sample in ff_sampledict.keys():
+            #     sample = ff_sampledict[sample]
             print(sample)
-            print()
-            samples_input["sample"].append(np.full(y.shape[0], sample))
+            # print()
+
+            # sample -> pq sample
+
+            samples.add("sample", np.full(y.shape[0], sample)) # samples_input["sample"].append(np.full(y.shape[0], sample))
 
             if "22" in era or "EE" in era:
                 year = 2022
@@ -128,91 +321,93 @@ def load_samples(base_path, samples, data=False, syst=""):
                 year = 2023
             else:
                 raise ValueError(f"Unknown era: {era}")
-            samples_input["year"].append(np.full(y.shape[0], year))
-
-            samples_input["is_boosted"].append(np.array(events["is_boosted"]))  
-            samples_input["y_proba"].append(np.array(events['y_proba']))
+            samples.add("year", np.full(y.shape[0], year)) # samples_input["year"].append(np.full(y.shape[0], year))
+            samples.add("y_proba", np.array(events["y_proba"])) # samples_input["y_proba"].append(np.array(events['y_proba'])) 
+            samples.add("is_boosted", np.array(events["is_boosted"])) # samples_input["is_boosted"].append(np.array(events["is_boosted"]))
 
             for weight in weight_columns:
                 if weight in events.fields:
-                    samples_input[weight].append(np.array(events[weight]))
+                    samples.add(weight, np.array(events[weight])) # samples_input[weight].append(np.array(events[weight]))
                 else:
-                    samples_input[weight].append(np.array(ak.ones_like(events['mass'])))  # Default weight if not provided
+                    # Default weight if not provided
+                    samples.add(weight, np.array(ak.ones_like(events['mass']))) # samples_input[weight].append(np.array(ak.ones_like(events['mass'])))
+
+    # for var in config["merge_samples"].get("save_columns"):
+
+    #     if var == "score" and config["merge_samples"].get("unpack_score", True):
+    #         sample_input = 
 
     # Concatenate all data
-    samples_input["lumi"] = np.concatenate(samples_input["lumi"], axis=0)
-    samples_input["event"] = np.concatenate(samples_input["event"], axis=0)
-    samples_input["run"] = np.concatenate(samples_input["run"], axis=0)
-    #samples_input["nonResReg_lead_bjet_hFlav"] = np.concatenate(samples_input["nonResReg_lead_bjet_hFlav"], axis=0)
-    #samples_input["nonResReg_sublead_bjet_hFlav"] = np.concatenate(samples_input["nonResReg_sublead_bjet_hFlav"], axis=0)
-    samples_input["mass"] = np.concatenate(samples_input["mass"], axis=0)
-    samples_input["dijet_mass"] = np.concatenate(samples_input["dijet_mass"], axis=0)
-    samples_input["sample"] = np.concatenate(samples_input["sample"], axis=0)
-    samples_input["year"] = np.concatenate(samples_input["year"], axis=0)
-    scores = np.concatenate(samples_input["score"], axis=0)
-    samples_input["score"] = [row for row in scores]
-    samples_input["nonRes_score"] = [row[0] for row in scores]
-    samples_input["ttH_score"] = [row[1] for row in scores]   
-    samples_input["singleH_score"] = [row[2] for row in scores]
-    samples_input["ggHH_score"] = [row[3] for row in scores]
-    samples_input["is_boosted"] = np.concatenate(samples_input["is_boosted"], axis=0)
-    samples_input["y_proba"] = np.concatenate(samples_input["y_proba"], axis=0)
-    for weight in weight_columns:
-        samples_input[weight] = np.concatenate(samples_input[weight], axis=0)
+    samples.concatenate()
+    # samples_input["lumi"] = np.concatenate(samples_input["lumi"], axis=0)
+    # samples_input["event"] = np.concatenate(samples_input["event"], axis=0)
+    # samples_input["run"] = np.concatenate(samples_input["run"], axis=0)
+    # #samples_input["nonResReg_lead_bjet_hFlav"] = np.concatenate(samples_input["nonResReg_lead_bjet_hFlav"], axis=0)
+    # #samples_input["nonResReg_sublead_bjet_hFlav"] = np.concatenate(samples_input["nonResReg_sublead_bjet_hFlav"], axis=0)
+    # samples_input["mass"] = np.concatenate(samples_input["mass"], axis=0)
+    # samples_input["dijet_mass"] = np.concatenate(samples_input["dijet_mass"], axis=0)
+    # samples_input["sample"] = np.concatenate(samples_input["sample"], axis=0)
+    # samples_input["year"] = np.concatenate(samples_input["year"], axis=0)
+    # scores = np.concatenate(samples_input["score"], axis=0)
+    # samples_input["score"] = [row for row in scores]
+    # samples_input["nonRes_score"] = [row[0] for row in scores]
+    # samples_input["ttH_score"] = [row[1] for row in scores]   
+    # samples_input["singleH_score"] = [row[2] for row in scores]
+    # samples_input["ggHH_score"] = [row[3] for row in scores]
+    # samples_input["is_boosted"] = np.concatenate(samples_input["is_boosted"], axis=0)
+    # samples_input["y_proba"] = np.concatenate(samples_input["y_proba"], axis=0)
+    # for weight in weight_columns:
+    #     samples_input[weight] = np.concatenate(samples_input[weight], axis=0)
+
+    # print(f"[DEBUG] type(scores): {type(scores)}")
+    # print(f"[DEBUG] scores.shape: {scores.shape}")
+    # print(f"[DEBUG] len(scores): {len(scores)}")
 
     # convert to pandas dataframe
-    samples_input = pd.DataFrame(samples_input)
+    # samples_input = pd.DataFrame(samples_input)
 
-    return samples_input
+    # return samples_input
+    return pd.DataFrame(samples.samples)
 
 if __name__ == "__main__":
-    base_path = sys.argv[1]
-    print(base_path)
+    parser = argparse.ArgumentParser(description="Merge samples")
+    parser.add_argument("--base_path", type=str, help="Base path to samples")
+    parser.add_argument("--config_path", type=str, help="Path to configuration file")
+    parser.add_argument("--verbose", action='store_true', help="Enable verbose output")
+    args = parser.parse_args()
+    base_path = args.base_path
+    print(f"[INFO] Merging predictions from base path: {base_path}")
 
-    samples = [
-            #"GGJets",
-            #"DDQCDGJET",
-            #"TTGG",
-            #"TT",
-            #"TTG_10_100",
-            #"TTG_100_200",
-            #"TTG_200",
-            "ttHtoGG_M_125",
-            "BBHto2G_M_125",
-            "GluGluHToGG_M_125",
-            "VBFHToGG_M_125",
-            "VHtoGG_M_125",
-            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00",
-            "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00",
-            "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00",
-            "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00",
-    ]
+    with open(args.config_path, 'r', encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+        print(f"[INFO] Loaded configuration from: {args.config_path}")
 
-    systs = [
-            "ScaleEB2G_IJazZ_down",
-            "ScaleEB2G_IJazZ_up",
-            "ScaleEE2G_IJazZ_down",
-            "ScaleEE2G_IJazZ_up",
-            "Smearing2G_IJazZ_down",
-            "Smearing2G_IJazZ_up",
-            "jec_syst_Total_down",
-            "jec_syst_Total_up",
-            "jer_syst_down",
-            "jer_syst_up",
-            "FNUF_down",
-            "FNUF_up",
-            "Material_down",
-            "Material_up",
-    ]
-    
-    merged_samples_MC = load_samples(base_path, samples)
-    merged_samples_data = load_samples(base_path, [""] ,data=True)
+    samples = config["merge_samples"]["samples"]
+    systs = config["merge_samples"].get("systs", [""])
 
+    merged_samples_MC = load_samples(base_path, samples, config, verbose=args.verbose)
+    merged_samples_data = load_samples(base_path, [""] , config, data=True, verbose=args.verbose)
+
+    out_paths = []
+    merged_samples_path = os.path.join(base_path, "merged", "merged_samples.parquet")
+    os.makedirs(os.path.dirname(merged_samples_path), exist_ok=True)
     merged_samples = pd.concat([merged_samples_MC, merged_samples_data], ignore_index=True)
-    merged_samples.to_parquet("merged_samples.parquet", engine='pyarrow')
+    merged_samples.to_parquet(merged_samples_path, engine='pyarrow')
+    out_paths.append(merged_samples_path)
 
-    for syst in systs:
-        print(syst)
-        merged_samples_MC = load_samples(base_path, samples, syst=syst)
-        merged_samples_MC.to_parquet("merged_samples_"+syst+".parquet", engine='pyarrow')
-        print()
+
+    if systs is not None and len(systs) > 1:
+        for syst in systs:
+            print(f"\n-+-+-+-+-+-+- Systematic: {syst} -+-+-+-+-+-+-\n")
+            ffsyst = config["merge_samples"].get("finalfit_syst_name_map", {}).get(syst, syst) # finalfit compatibility
+            if ffsyst != syst:
+                print(f"[INFO] Renaming: '{syst}' -> '{ffsyst}'")
+            merged_samples_path = os.path.join(base_path, "merged", f"merged_samples_{ffsyst}.parquet")
+            merged_samples_MC = load_samples(base_path, samples, config, syst=syst, verbose=args.verbose)
+            merged_samples_MC.to_parquet(merged_samples_path, engine='pyarrow')
+            out_paths.append(merged_samples_path)
+            print()
+
+    print("[INFO] Merged samples saved to the following paths:")
+    for path in out_paths:
+        print(f" - {path}")

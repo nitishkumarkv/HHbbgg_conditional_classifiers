@@ -235,6 +235,24 @@ def perform_mjj_sculpting_study(args: argparse.Namespace):
             shell=True, check=True
         )
 
+
+def merge_samples(args: argparse.Namespace):
+    out_path = args.out_path
+    config_path = args.config_path
+    training_config_path = os.path.join(config_path, "training_config.yaml")
+    verbose_flag = "--verbose " if args.verbose else ""
+
+    # merge samples after predictions to prepare for FinalFit
+    if args.merge_samples:
+        print('INFO: Merging samples after predictions to prepare for FinalFit')
+        subprocess.run(
+            "python3 utils/merge_samples.py "
+            + f"--base_path {out_path} "
+            + f"--config_path {training_config_path} "
+            + verbose_flag,
+            shell=True, check=True
+        ) 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Perform MLP based classification')
     # Main arguments
@@ -255,6 +273,7 @@ if __name__ == "__main__":
     parser.add_argument('--get_data_mc_plots', action='store_true', help='Get data-MC plots')
     parser.add_argument('--perform_categorisation', action='store_true', help='Perform categorisation')
     parser.add_argument('--get_score_shape_diff_kl', action='store_true', help='Get score shape differences using kl samples')
+    parser.add_argument('--merge_samples', action='store_true', help='Merge samples after predictions to prepare for FinalFit')
 
     # Mjj Sculpting Study
     parser.add_argument('--prepare_sculpting_study_inputs', action='store_true', help='Prepare inputs for Mjj sculpting study')
@@ -266,6 +285,9 @@ if __name__ == "__main__":
     parser.add_argument('--prepare_inputs', action='store_true', help='Prepare all inputs')
     parser.add_argument('--mjj_sculpting_study', action='store_true', help='Perform all steps for Mjj sculpting study')
     parser.add_argument('--do_all', action='store_true', help='Perform all steps')
+
+    # Other
+    parser.add_argument('--verbose', action='store_true', help='Enable verbose output for debugging')
     args = parser.parse_args()
 
     if args.do_all:
@@ -306,3 +328,5 @@ if __name__ == "__main__":
     # Mjj sculpting study
     perform_mjj_sculpting_study(args)
     
+    # merge samples
+    merge_samples(args)

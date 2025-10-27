@@ -144,3 +144,90 @@ save_all_columns_sim_systematics : False
 
 # Chunk size for converting akward arrays to pandas dataframes to alleviate memory pressure
 write_chunk : 50000
+
+# Merge samples for FinalFit
+merge_samples:
+    samples: # Comment samples to exclude from merged parquet
+    # - GGJets
+    # - DDQCDGJET
+    # - TTGG
+    # - TT
+    # - TTG_10_100
+    # - TTG_100_200
+    # - TTG_200
+    - ttHtoGG_M_125
+    - BBHto2G_M_125
+    - GluGluHToGG_M_125
+    - VBFHToGG_M_125
+    - VHtoGG_M_125
+    - GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00
+    - GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00
+    - GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00
+    - GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00
+    systs: # Deselect systematics to exclude from merged parquet
+    - ScaleEB2G_IJazZ_down
+    - ScaleEB2G_IJazZ_up
+    - ScaleEE2G_IJazZ_down
+    - ScaleEE2G_IJazZ_up
+    - Smearing2G_IJazZ_down
+    - Smearing2G_IJazZ_up
+    - jec_syst_Total_down
+    - jec_syst_Total_up
+    - jer_syst_down
+    - jer_syst_up
+    - FNUF_down
+    - FNUF_up
+    - Material_down
+    - Material_up
+    finalfit_syst_name_map:
+        ScaleEB2G_IJazZ_down: ScaleEB2GIJazZDown01sigma
+        ScaleEB2G_IJazZ_up: ScaleEB2GIJazZUp01sigma
+        ScaleEE2G_IJazZ_down: ScaleEE2GIJazZDown01sigma
+        ScaleEE2G_IJazZ_up: ScaleEE2GIJazZUp01sigma
+        Smearing2G_IJazZ_down: Smearing2GIJazZDown01sigma
+        Smearing2G_IJazZ_up: Smearing2GIJazZUp01sigma
+        jec_syst_Total_down: jecsystDown01sigma
+        jec_syst_Total_up: jecsystUp01sigma
+        jer_syst_down: jersystDown01sigma
+        jer_syst_up: jersystUp01sigma
+        FNUF_down: FNUFDown01sigma
+        FNUF_up: FNUFUp01sigma
+        Material_down: MaterialDown01sigma
+        Material_up: MaterialUp01sigma
+    finalfit_sample_name_map: # Samples not in name map will keep their original names
+        GGJets: GGJets
+        DDQCDGJET: DDQCDGJets
+        TTGG: TTGG
+        TT: TT
+        TTG_10_100: TTG_10_100
+        TTG_100_200: TTG_100_200
+        TTG_200: TTG_200
+        ttHtoGG_M_125: ttHToGG
+        BBHto2G_M_125: bbHToGG
+        GluGluHToGG_M_125: GluGluHToGG
+        VBFHToGG_M_125: VBFHToGG
+        VHtoGG_M_125: VHToGG
+        GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00: GluGluToHH_kl-1p00_kt-1p00_c2-0p00
+        GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00: GluGluToHH_kl-0p00_kt-1p00_c2-0p00
+        GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00: GluGluToHH_kl-2p45_kt-1p00_c2-0p00
+        GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00: GluGluToHH_kl-5p00_kt-1p00_c2-0p00
+    save_columns: # pq format; automatically adds all *weight* columns, so no need to list them here
+        # - lumi # not in syst pqs
+        # - event # not in syst pqs
+        # - run # not in syst pqs
+        - mass
+        - nonResReg_dijet_mass_DNNreg
+        # - year # not in syst pqs
+        # - is_boosted # not in syst pqs
+        # - y_proba # not in syst pqs
+        # - sample # not in syst pqs
+        - score 
+    finalfit_var_name_map: # old: new (FinalFit compatible)
+        nonResReg_dijet_mass_DNNreg: dijet_mass # rename nonResReg_dijet_mass_DNNreg to dijet_mass
+    dijet_mass_key: nonResReg_dijet_mass_DNNreg # special variable for dijet mass
+    score_key: score # special variable for storing the multi-class scores
+    score_idx_name_map: # mapping from score column index to class name for unpacking the score column
+        0: nonRes_score
+        1: ttH_score
+        2: singleH_score
+        3: HH_score

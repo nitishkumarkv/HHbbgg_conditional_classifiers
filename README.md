@@ -44,6 +44,13 @@ Categorisation is configured by the `categorization_config.yaml` file in the con
 - `gamma_strategy` gamma strategy for TPE sampler (options: `sqrt`, `linear`)
 
 
+# Steps
+
+## Merge Samples
+
+**Dependencies**: `get_predictions`/`get_predictions_sys` must be run first to generate prediction files.
+
+
 # Sculpting Study
 
 ## Example Workflow
