@@ -1,7 +1,7 @@
-import json
-import yaml
 import os
+import json
 import argparse
+import yaml
 import pandas as pd
 
 
@@ -96,9 +96,14 @@ def _load_cat_json(cat_json_path: str, verbose: bool = False) -> pd.DataFrame:
     return cat_df
 
 
-def _write_exclusive_config(config: dict[str, str], output_path: str):
-    with open(output_path, 'w', encoding="utf-8") as f:
-        json.dump(config, f, indent=4)
+def _write_exclusive(excl_dict: dict[str, str], output_path: str, write: bool = True):
+    out = json.dumps(excl_dict, ensure_ascii=True, indent=4, sort_keys=False, separators=None, allow_nan=True)
+    if write:
+        with open(output_path, 'w', encoding="utf-8") as f:
+            f.write(out)
+    # with open(output_path, 'w', encoding="utf-8") as f:
+    #     json.dump(config, f, indent=4)
+    return out
 
 
 def _build_inclusive_criteria(cat_df: pd.DataFrame, config: dict) -> dict[str, str]:
@@ -111,6 +116,9 @@ def _build_inclusive_criteria(cat_df: pd.DataFrame, config: dict) -> dict[str, s
             threshold: float = cat_df.iloc[i][col]
             col_ff: str = _get_ff_name(col, config)
             ineq: str = config["class_criteria_inequality"][col]
+            prec = config.get("json_float_precision", -1)
+            if prec >= 0:
+                threshold = round(threshold, prec)
             phrase = f"{col_ff} {ineq} {threshold}" # like "ggHH_score > 0.91005"
             phrases.append(phrase)
         inclusive_criteria[cat_name] = " & ".join(phrases) # like "ggHH_score > 0.91 & nonRes_score < 0.06 & ttH_score < 0.61 & singleH_score < 0.002" (vals abbreviated)
@@ -147,21 +155,24 @@ def convert(args: argparse.Namespace):
     cat_df = _load_cat_json(in_path, verbose=args.verbose)
 
     # Build inclusive criteria
-    inclusive_criteria = _build_inclusive_criteria(cat_df, config)
+    inclusive_criteria: dict[str, str] = _build_inclusive_criteria(cat_df, config)
     if args.verbose:
         print("Inclusive criteria per category:")
         for cat, crit in inclusive_criteria.items():
             print(f"  {cat}: {crit}")
-        
+    
     # Build exclusive criteria
-    global_phrases = config.get("global_criteria_phrases", [])
-    exclusive_criteria = _build_exclusive_criteria(inclusive_criteria, global_phrases)
+    global_phrases: list[str] = config.get("global_criteria_phrases", [])
+    exclusive_criteria: dict[str, str] = _build_exclusive_criteria(inclusive_criteria, global_phrases)
     if args.verbose:
         print("Exclusive criteria per category:")
         for cat, crit in exclusive_criteria.items():
             print(f"  {cat}: {crit}")
-    out_path = os.path.join(args.input_path, args.out_file_name)
-    _write_exclusive_config(exclusive_criteria, out_path)
+    out_path = os.path.join(args.input_path, "optuna_categorization", args.out_file_name)
+    out = _write_exclusive(exclusive_criteria, out_path)
+    print("Exclusive categories JSON content:")
+    print(out)
+    print()
     print(f"Wrote exclusive categories JSON to: {out_path}")
 
 
@@ -169,9 +180,9 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Convert categorisation JSON to exclusive categories.")
     parser.add_argument("--input_path", type=str, required=True, help="Multiclass base input path (e.g. Version_20250524_MVAID_forPreApp)")
-    parser.add_argument("--config", type=str, required=True, help="Path to configuration JSON file.")
-    parser.add_argument("--training_config", type=str, required=True, help="Path to training config YAML file.")
+    parser.add_argument("--config", type=str, required=True, help="Path to training config JSON file.")
     parser.add_argument("--out_file_name", type=str, default="categories_exclusive.json", help="Output file name for exclusive categories JSON.")
+    parser.add_argument("--dry_run", action="store_true", help="Don't write output file, just print info.")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose output.")
     args = parser.parse_args()
 

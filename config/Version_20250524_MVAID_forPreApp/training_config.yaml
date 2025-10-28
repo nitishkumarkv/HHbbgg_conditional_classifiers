@@ -170,6 +170,7 @@ criteria_global_phases: # add to all category criteria
 - "dijet_mass > 80"
 - "dijet_mass < 190"
 # - "is_boosted == 0"
+json_float_precision: -1 # -1 for no rounding
 
 
 # ========== Merge samples for FinalFit ==========
