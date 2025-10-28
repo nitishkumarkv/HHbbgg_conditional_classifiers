@@ -688,8 +688,7 @@ if __name__ == "__main__":
             print(f"Epoch {epoch} - Train Loss = {train_loss_no_dist_corr:.4f} + {decorr_lambda} * {train_dist_corr:.4f}")
         
         # Save checkpoint every ___ epochs
-        # if epoch % 10 == 0:
-        if epoch % 1 == 0:
+        if epoch % 10 == 0:
             # WARNING: Be mindful of disk space when saving frequent checkpoints
             # that include the full suite of y prediction arrays for ROC plots.
             # 300 epochs x ~100 MB = ~30 GB   <-- That's not insignificant!

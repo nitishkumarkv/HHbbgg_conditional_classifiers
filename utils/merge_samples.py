@@ -18,41 +18,24 @@ from typing import Any
 ################################################################################
 #                             merge_samples.py                                 #
 #                                                                              #
-# I (Benjamin Lawrence-Sanderson) am not the original author of this code.     #
-# The code in this file is sourced from Manos Vourliotis's commit (82c085af)   #
-# to the `postPreAppUpdates` branch of the `HHbbgg_conditional_classifiers`    #
-# repository on July 31, 2025. All credit for the original code goes to the    #
-# original author(s). Subsequent edits to this file after the initial commit   #
-# should be attributed to the respective commit authors, as one would expect.  #
+# This code was originally authored by Manos Vourliotis and later edited by    #
+# Benjamin Lawrence-Sanderson. The code in this file is sourced from           #
+# Manos Vourliotis's commit (82c085af) to the `postPreAppUpdates` branch of    #
+# the `HHbbgg_conditional_classifiers` repository on July 31, 2025. All credit #
+# for the original code goes to the original author(s). Subsequent edits to    #
+# this file after the initial commit should be attributed to the respective    #
+# commit authors, as one would expect.                                         #
 #                                                                              #
 ################################################################################
 
-# ff_sampledict = {
-#     "GGJets": "GGJets", 
-#     "DDQCDGJET": "DDQCDGJets",
-#     "TTGG": "TTGG",
-#     "TT": "TT",
-#     "TTG_10_100": "TTG_10_100",
-#     "TTG_100_200": "TTG_100_200",
-#     "TTG_200": "TTG_200",
-#     "ttHtoGG_M_125": "ttHToGG",
-#     "BBHto2G_M_125": "BBHToGG",
-#     "GluGluHToGG_M_125": "GluGluHToGG",
-#     "VBFHToGG_M_125": "VBFHToGG",
-#     "VHtoGG_M_125": "VHToGG",
-#     "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": "GluGluToHH_kl-1p00_kt-1p00_c2-0p00",
-#     "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": "GluGluToHH_kl-0p00_kt-1p00_c2-0p00",
-#     "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": "GluGluToHH_kl-2p45_kt-1p00_c2-0p00",
-#     "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": "GluGluToHH_kl-5p00_kt-1p00_c2-0p00",
-# }
+# DEBUGGING:
+# - Verify `save_all_columns_sim_systematics: True` if variables not found only in systematics events.py
 
 BOOSTED_CAT = False
 
-
-
 class EventsWrapper():
+    """Wrapper around awkward array to gracefully handle missing variable errors."""
     def __init__(self, events: ak.Array, path_for_warnings: str = ""):
-        """Wrapper around awkward array to gracefully handle missing variable errors."""
         self.events = events
         self.path_for_warnings = path_for_warnings
 
@@ -196,19 +179,9 @@ class Samples():
                 print(f"[DEBUG] data_list shapes: {[arr.shape if isinstance(arr, np.ndarray) else 'N/A' for arr in data_list]}")
                 raise e
 
-            # for weight in weight_columns:
-            #     if weight in events.fields:
-            #         samples.add(weight, np.array(events[weight])) # samples_input[weight].append(np.array(events[weight]))
-            #     else:
-            #         # Default weight if not provided
-            #         samples.add(weight, np.array(ak.ones_like(events['mass']))) # samples_input[weight].append(np.array(ak.ones_like(events['mass'])))
-
 
 def load_samples(base_path, sample_list, config, data=False, syst="", verbose=False) -> pd.DataFrame:
     """Load predictions and weights, scaling weights by luminosity."""
-
-    # include_is_boosted  = not config["merge_samples"]["exclude_vars"].get("is_boosted", False)
-    # include_y_proba     = not config["merge_samples"]["exclude_vars"].get("y_proba", False)
 
     events_file_name = 'events_boostedCat.parquet' if BOOSTED_CAT else 'events.parquet'
     # Example MC file to get the weight columns
@@ -222,35 +195,10 @@ def load_samples(base_path, sample_list, config, data=False, syst="", verbose=Fa
             + "You requested a mjj variable not present in the parquet files. "
             + f"Available columns are: {all_columns}"
         )
-    # dijet_mass_key = "nonResReg_dijet_mass_DNNreg"
-    # columns = ["lumi", "event", "run",
-    #         #"nonResReg_lead_bjet_hFlav", "nonResReg_sublead_bjet_hFlav",
-    #         "mass", dijet_mass_key, "is_boosted", "y_proba"]
 
     columns = [col for col in config["merge_samples"]["save_columns"]]
 
     samples = Samples(config, columns=columns, weight_columns=weight_columns, verbose=verbose)
-
-    # samples_input = {
-    #         "lumi": [],
-    #         "event": [],
-    #         "run": [],
-    #         #"nonResReg_lead_bjet_hFlav": [],
-    #         #"nonResReg_sublead_bjet_hFlav": [],
-    #         "mass": [], 
-    #         "dijet_mass": [], 
-    #         "sample": [],
-    #         "year": [],
-    #         "score": [],
-    #         "nonRes_score": [],
-    #         "ttH_score": [],
-    #         "singleH_score" :[],
-    #         "ggHH_score":[],
-    #         "is_boosted": [],
-    #         "y_proba":[]
-    # }
-    # for weight in weight_columns:
-    #     samples_input.update({weight: []})
 
     eras = ["preEE", "postEE", "preBPix", "postBPix"]
     if data:
@@ -273,8 +221,6 @@ def load_samples(base_path, sample_list, config, data=False, syst="", verbose=Fa
                 path = os.path.join(base_path, "individual_samples", era, sample, syst)
             y_path = os.path.join(path, 'y.npy')
             w_path = os.path.join(path, 'rel_w.npy')
-            # Print all columns in parquet file
-            # print(f"Columns in {os.path.join(path, events_file_name)}:")
             parquet_file = pq.ParquetFile(os.path.join(path, events_file_name))
             # print(parquet_file.schema.names)
             parquet_path = os.path.join(path, events_file_name)
@@ -309,10 +255,7 @@ def load_samples(base_path, sample_list, config, data=False, syst="", verbose=Fa
             # if sample in ff_sampledict.keys():
             #     sample = ff_sampledict[sample]
             print(sample)
-            # print()
-
             # sample -> pq sample
-
             samples.add("sample", np.full(y.shape[0], sample)) # samples_input["sample"].append(np.full(y.shape[0], sample))
 
             if "22" in era or "EE" in era:
@@ -332,41 +275,8 @@ def load_samples(base_path, sample_list, config, data=False, syst="", verbose=Fa
                     # Default weight if not provided
                     samples.add(weight, np.array(ak.ones_like(events['mass']))) # samples_input[weight].append(np.array(ak.ones_like(events['mass'])))
 
-    # for var in config["merge_samples"].get("save_columns"):
-
-    #     if var == "score" and config["merge_samples"].get("unpack_score", True):
-    #         sample_input = 
-
     # Concatenate all data
     samples.concatenate()
-    # samples_input["lumi"] = np.concatenate(samples_input["lumi"], axis=0)
-    # samples_input["event"] = np.concatenate(samples_input["event"], axis=0)
-    # samples_input["run"] = np.concatenate(samples_input["run"], axis=0)
-    # #samples_input["nonResReg_lead_bjet_hFlav"] = np.concatenate(samples_input["nonResReg_lead_bjet_hFlav"], axis=0)
-    # #samples_input["nonResReg_sublead_bjet_hFlav"] = np.concatenate(samples_input["nonResReg_sublead_bjet_hFlav"], axis=0)
-    # samples_input["mass"] = np.concatenate(samples_input["mass"], axis=0)
-    # samples_input["dijet_mass"] = np.concatenate(samples_input["dijet_mass"], axis=0)
-    # samples_input["sample"] = np.concatenate(samples_input["sample"], axis=0)
-    # samples_input["year"] = np.concatenate(samples_input["year"], axis=0)
-    # scores = np.concatenate(samples_input["score"], axis=0)
-    # samples_input["score"] = [row for row in scores]
-    # samples_input["nonRes_score"] = [row[0] for row in scores]
-    # samples_input["ttH_score"] = [row[1] for row in scores]   
-    # samples_input["singleH_score"] = [row[2] for row in scores]
-    # samples_input["ggHH_score"] = [row[3] for row in scores]
-    # samples_input["is_boosted"] = np.concatenate(samples_input["is_boosted"], axis=0)
-    # samples_input["y_proba"] = np.concatenate(samples_input["y_proba"], axis=0)
-    # for weight in weight_columns:
-    #     samples_input[weight] = np.concatenate(samples_input[weight], axis=0)
-
-    # print(f"[DEBUG] type(scores): {type(scores)}")
-    # print(f"[DEBUG] scores.shape: {scores.shape}")
-    # print(f"[DEBUG] len(scores): {len(scores)}")
-
-    # convert to pandas dataframe
-    # samples_input = pd.DataFrame(samples_input)
-
-    # return samples_input
     return pd.DataFrame(samples.samples)
 
 if __name__ == "__main__":
@@ -381,6 +291,20 @@ if __name__ == "__main__":
     with open(args.config_path, 'r', encoding="utf-8") as f:
         config = yaml.safe_load(f)
         print(f"[INFO] Loaded configuration from: {args.config_path}")
+
+    if config["merge_samples"]["dijet_mass_key"] not in config["merge_samples"]["finalfit_var_name_map"].keys():
+        warnings.warn(
+            f"dijet_mass_key '{config['merge_samples']['dijet_mass_key']}' not found in finalfit_var_name_map. "
+            + "Make sure this is intentional. The 'dijet_mass_key' selects the correct variable to pull from every events.parquet file. "
+            + "The 'finalfit_var_name_map' is used to rename variables for FinalFit compatibility. "
+            + "The dijet_mass_key must be a key in finalfit_var_name_map to ensure proper renaming, if you intend to rename it (typically to 'dijet_mass')."
+        )
+    if config["merge_samples"]["dijet_mass_key"] not in config["merge_samples"]["save_columns"]:
+        warnings.warn(
+            f"dijet_mass_key '{config['merge_samples']['dijet_mass_key']}' not found in save_columns. "
+            + "Make sure this is intentional. The 'dijet_mass_key' selects the correct variable to pull from every events.parquet file. "
+            + "If it is not included in 'save_columns', it will not be saved in the merged samples output."
+        )
 
     samples = config["merge_samples"]["samples"]
     systs = config["merge_samples"].get("systs", [""])

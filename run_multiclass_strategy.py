@@ -327,6 +327,6 @@ if __name__ == "__main__":
 
     # Mjj sculpting study
     perform_mjj_sculpting_study(args)
-    
+
     # merge samples
     merge_samples(args)

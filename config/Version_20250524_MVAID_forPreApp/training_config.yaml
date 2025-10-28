@@ -252,7 +252,7 @@ merge_samples:
         - score 
     finalfit_var_name_map: # old: new (FinalFit compatible)
         nonResReg_dijet_mass_DNNreg: dijet_mass # rename nonResReg_dijet_mass_DNNreg to dijet_mass
-    dijet_mass_key: nonResReg_dijet_mass_DNNreg # special variable for dijet mass
+    dijet_mass_key: nonResReg_dijet_mass_DNNreg # special variable; true name in events.parquet; renamed to dijet_mass for FF; must be a KEY in finalfit_var_name_map
     score_key: score # special variable for storing the multi-class scores
     score_idx_name_map: # mapping from score column index to class name for unpacking the score column
         0: nonRes_score

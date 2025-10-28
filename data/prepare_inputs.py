@@ -56,7 +56,19 @@ class PrepareInputs:
             "lead_isScEtaEB",                   "lead_isScEtaEE",                       "sublead_isScEtaEB", 
             "sublead_isScEtaEE",                "lead_mvaID",                           "sublead_mvaID", 
             "lead_eta",                         "lead_phi",                             "sublead_eta", 
-            "sublead_phi",                      "lead_genPartFlav",                     "sublead_genPartFlav"
+            "sublead_phi",                      "lead_genPartFlav",                     "sublead_genPartFlav",
+            "lumi",                             "event",                                "run",
+            "genWeight",                        "bTagWeight",                           "weight_central",
+            "weight_interference",              "weight_bTagSF_sys_hfUp",               "weight_bTagSF_sys_lfstats2Down",
+            "weight_bTagSF_sys_lfDown",         "weight_bTagSF_sys_lfUp",               "weight_PileupDown", 
+            "weight_bTagSF_sys_hfstats1Down",   "weight_bTagSF_sys_cferr2Up",           "weight_bTagSF_sys_cferr1Down", 
+            "weight_bTagSF_sys_cferr2Down",     "weight_bTagSF_sys_lfstats1Up",         "weight_TriggerSFDown",
+            "weight_PreselSFDown",              "weight_bTagSF_sys_jesDown",            "weight_bTagSF_sys_cferr1Up",
+            "weight_PileupUp",                  "weight_ElectronVetoSFDown",            "weight_bTagSF_sys_lfstats2Up", 
+            "weight_bTagSF_sys_hfstats2Down",   "weight_ElectronVetoSFUp",              "weight_TriggerSFUp", 
+            "weight_bTagSF_sys_hfstats1Up",     "weight_bTagSF_sys_hfstats2Up",         "weight_PreselSFUp", 
+            "weight_bTagSF_sys_lfstats1Down",   "weight_bTagSF_sys_jesUp",              "weight_bTagSF_sys_hfDown", 
+            "rel_xsec_weight",                  "weight_tot"
         ]
         
         # prepare process numbers for proccesses in each class
@@ -659,7 +671,7 @@ class PrepareInputs:
         # Y = Y.values
         # relative_weights = relative_weights.values
         process_number = comb_inputs["process_number"].values
-        
+
         # mask -999.0 to nan
         mask = (X < -998.0)
         X[mask] = np.nan
@@ -738,7 +750,7 @@ class PrepareInputs:
             z_val = self.standardize(z_val, z_mean, z_std)
             if z_test is not None:
                 z_test = self.standardize(z_test, z_mean, z_std)
-            
+
             # save the z mean and std_dev. This will be used for standardizing data
             z_mean_std_dict = {
                 "mean": z_mean,
@@ -746,16 +758,16 @@ class PrepareInputs:
             }
             with open(f"{out_path}/z_mean_std_dict.pkl", 'wb') as f:
                 pickle.dump(z_mean_std_dict, f)
-        
+
         # save all the numpy arrays
         print("\n INFO: saving inputs for mlp")
         # save str of input variables
-        with open(f"{out_path}/input_vars.txt", 'w') as f:
+        with open(f"{out_path}/input_vars.txt", 'w', encoding='utf-8') as f:
             json.dump(vars_for_training, f)
-        
+
         np.save(f"{out_path}/X_train", X_train)
         np.save(f"{out_path}/X_val", X_val)
-        
+
         np.save(f"{out_path}/y_train", y_train)
         np.save(f"{out_path}/y_val", y_val)
 
@@ -771,7 +783,7 @@ class PrepareInputs:
         np.save(f"{out_path}/class_weights_for_training_abs", class_weights_for_training_abs)
         np.save(f"{out_path}/class_weights_only_positive", class_weights_only_positive)
         np.save(f"{out_path}/class_weights_for_val", class_weights_for_val)
-        
+
         if X_test is not None:
             np.save(f"{out_path}/X_test", X_test)
             np.save(f"{out_path}/rel_w_test", rel_w_test)
@@ -787,7 +799,7 @@ class PrepareInputs:
             pickle.dump(mean_std_dict, f)
 
         return 0
-    
+
     def prep_inputs_for_prediction_sim(self):
         """
 
