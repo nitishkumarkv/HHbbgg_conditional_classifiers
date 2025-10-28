@@ -1,4 +1,4 @@
-n_categories: 4
+n_categories: 3
 n_runs: 15
 optuna_folder: optuna_categorization
 n_trials: 150

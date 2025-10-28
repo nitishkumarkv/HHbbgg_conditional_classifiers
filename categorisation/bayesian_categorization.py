@@ -214,7 +214,8 @@ class OptunaCategorizer:
                     np.full(len(y), 1 if sample in self.signal_samples else 0, dtype=int)
                 )
                 data["sample"].append(np.repeat(sample, len(y)))
-                data["is_boosted"].append(np.asarray(events["is_boosted"]))
+                if self.boosted:
+                    data["is_boosted"].append(np.asarray(events["is_boosted"]))
 
         if not data["score"]:
             raise RuntimeError("[load_samples] No events found in any input sample.")

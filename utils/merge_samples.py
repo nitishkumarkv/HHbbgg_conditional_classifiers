@@ -159,7 +159,7 @@ class Samples():
             if ffvar == self.score_key:
                 # Special handling for score: list of arrays of shape (N, num_classes)
                 if self.verbose:
-                    print(f"[DEBUG] Concatenating score variable with special handling.")
+                    print("[DEBUG] Concatenating score variable with special handling.")
                 all_scores = np.concatenate(data_list, axis=0)
                 self.samples[ffvar] = [row for row in all_scores]
                 # Break into separate arrays per class
@@ -200,9 +200,19 @@ def load_samples(base_path, sample_list, config, data=False, syst="", verbose=Fa
 
     samples = Samples(config, columns=columns, weight_columns=weight_columns, verbose=verbose)
 
-    eras = ["preEE", "postEE", "preBPix", "postBPix"]
+    # eras = ["preEE", "postEE", "preBPix", "postBPix"]
+    eras: list[str] = config["samples_info"].get("eras", None)
+    if eras is None:
+        warnings.warn("No eras specified in config['samples_info']['eras']. Using default eras.")
+        eras = ["preEE", "postEE", "preBPix", "postBPix"]
     if data:
-        eras = ["2022_EraC","2022_EraD","2022_EraE","2022_EraF","2022_EraG","2023_EraC","2023_EraD"]
+        eras_dict: dict[str, str] | None = config["samples_info"].get("data", None)
+        if eras_dict is None:
+            warnings.warn("No data eras specified in config['samples_info']['data']. Using default eras.")
+            eras = ["2022_EraC","2022_EraD","2022_EraE","2022_EraF","2022_EraG","2023_EraC","2023_EraD"]
+        else:
+            eras = list(eras_dict.keys())
+
 
     for era in eras:
         print("\n###########")
