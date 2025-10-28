@@ -145,7 +145,34 @@ save_all_columns_sim_systematics : False
 # Chunk size for converting akward arrays to pandas dataframes to alleviate memory pressure
 write_chunk : 50000
 
-# Merge samples for FinalFit
+# ========== Categorization ==========
+class_name_map: # for mapping multiclass class names to other formats
+    th_name_to_class_name: # bayesian_categorization.py format
+        th_signal: th_ggFHH
+        th_bg_0: th_nonRes
+        th_bg_1: th_ttH
+        th_bg_2: th_singleH
+        th_bg_4: th_VBFHH
+
+    th_name_to_ff_name:
+        th_signal: "ggHH_score" # "HH_score"
+        th_bg_0: "nonRes_score"
+        th_bg_1: "ttH_score"
+        th_bg_2: "singleH_score"
+        th_bg_4: "VBFHH_score"
+class_criteria_inequality: # inequality for each class criteria: >, >=, <, <=
+    th_signal: ">" # e.g. ggHH_score > 0.91005
+    th_bg_0: "<" # e.g. nonRes_score < 0.061683
+    th_bg_1: "<" # e.g. ttH_score < 0.045553
+    th_bg_2: "<" # e.g. singleH_score < 0.054659
+    th_bg_4: "<" # n.b. assuming this is correct -- it probably is
+criteria_global_phases: # add to all category criteria
+- "dijet_mass > 80"
+- "dijet_mass < 190"
+# - "is_boosted == 0"
+
+
+# ========== Merge samples for FinalFit ==========
 merge_samples:
     samples: # Comment samples to exclude from merged parquet
     # - GGJets
@@ -164,7 +191,7 @@ merge_samples:
     - GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00
     - GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00
     - GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00
-    systs: # Deselect systematics to exclude from merged parquet
+    systs: # Comment systematics to exclude from merged parquet
     - ScaleEB2G_IJazZ_down
     - ScaleEB2G_IJazZ_up
     - ScaleEE2G_IJazZ_down
