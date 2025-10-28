@@ -146,17 +146,17 @@ def _build_exclusive_criteria(inclusive_criteria: dict[str, str], global_phrases
     return exclusive_criteria
 
 
-def convert(args: argparse.Namespace):
+def convert(input_path: str, config_path: str, out_file_name: str, dry_run: bool = False, verbose: bool = False):
     # Main function
-    config = _load_config(args.config)
-    in_path = os.path.join(args.input_path, "optuna_categorization/best_cut_params.json")
+    config = _load_config(config_path)
+    in_path = os.path.join(input_path, "optuna_categorization/best_cut_params.json")
     if not os.path.exists(in_path):
         raise FileNotFoundError(f"Categorization JSON file not found at {in_path}")
-    cat_df = _load_cat_json(in_path, verbose=args.verbose)
+    cat_df = _load_cat_json(in_path, verbose=verbose)
 
     # Build inclusive criteria
     inclusive_criteria: dict[str, str] = _build_inclusive_criteria(cat_df, config)
-    if args.verbose:
+    if verbose:
         print("Inclusive criteria per category:")
         for cat, crit in inclusive_criteria.items():
             print(f"  {cat}: {crit}")
@@ -164,12 +164,12 @@ def convert(args: argparse.Namespace):
     # Build exclusive criteria
     global_phrases: list[str] = config.get("global_criteria_phrases", [])
     exclusive_criteria: dict[str, str] = _build_exclusive_criteria(inclusive_criteria, global_phrases)
-    if args.verbose:
+    if verbose:
         print("Exclusive criteria per category:")
         for cat, crit in exclusive_criteria.items():
             print(f"  {cat}: {crit}")
-    out_path = os.path.join(args.input_path, "optuna_categorization", args.out_file_name)
-    out = _write_exclusive(exclusive_criteria, out_path)
+    out_path = os.path.join(input_path, "optuna_categorization", out_file_name)
+    out = _write_exclusive(exclusive_criteria, out_path, write=(not dry_run))
     print("Exclusive categories JSON content:")
     print(out)
     print()
@@ -186,4 +186,10 @@ if __name__ == "__main__":
     parser.add_argument("--verbose", action="store_true", help="Enable verbose output.")
     args = parser.parse_args()
 
-    convert(args)
+    convert(
+        input_path=args.input_path,
+        config_path=args.config,
+        out_file_name=args.out_file_name,
+        dry_run=args.dry_run,
+        verbose=args.verbose
+    )
