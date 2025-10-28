@@ -166,7 +166,7 @@ class_criteria_inequality: # inequality for each class criteria: >, >=, <, <=
     th_bg_1: "<" # e.g. ttH_score < 0.045553
     th_bg_2: "<" # e.g. singleH_score < 0.054659
     th_bg_4: "<" # n.b. assuming this is correct -- it probably is
-criteria_global_phases: # add to all category criteria
+global_criteria_phrases: # add to all category criteria
 - "dijet_mass > 80"
 - "dijet_mass < 190"
 # - "is_boosted == 0"
