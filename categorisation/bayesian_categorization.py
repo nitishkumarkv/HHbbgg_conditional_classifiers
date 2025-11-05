@@ -62,6 +62,8 @@ class OptunaCategorizer:
         if self.signal_samples is None:
             self.signal_samples = ["GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00"]
 
+        print("Using signal samples: ", self.signal_samples)
+
         self.apply_preselection = True
     
     def gamma_fn(self):
@@ -1666,11 +1668,19 @@ if __name__ == "__main__":
     parser.add_argument("--gamma_strategy", type=str, choices=["sqrt", "linear"], default="linear", help="Gamma strategy for TPE sampler")
     parser.add_argument("--side_band_threshold", type=int, default=10, help="Threshold for sideband requirements")
     parser.add_argument("--mHH_cats", type=int, nargs="+", default=[], help="Inner boundaries of mHH categories, if using. No lower or upper bound assumed.")
+    parser.add_argument("--use_kl", action="store_true", help="Use all kl samples to compute significance.")
 
     args = parser.parse_args()
 
+    if args.use_kl:
+        signals = ["GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00"]
+    else:
+        signals = None
+
+
     categoriser = OptunaCategorizer(base_path=args.base_path,
                                     cat_folder=args.optuna_folder,
+                                    signal_samples = signals,
                                     n_categories=args.n_categories,
                                     n_trials_optuna=args.n_trials,
                                     n_runs=args.n_runs,
