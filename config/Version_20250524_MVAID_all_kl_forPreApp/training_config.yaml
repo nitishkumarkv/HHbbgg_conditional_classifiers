@@ -136,5 +136,7 @@ systematics:
 # info to save in the parquets
 save_all_columns_sim_nominal : True
 save_all_columns_data : True
-save_all_columns_sim_systematics : False
+save_all_columns_sim_systematics : True
 
+# Chunk size for converting akward arrays to pandas dataframes to alleviate memory pressure
+write_chunk : 50000
