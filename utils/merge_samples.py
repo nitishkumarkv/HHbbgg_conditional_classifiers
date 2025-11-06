@@ -13,7 +13,7 @@ import pandas as pd
 import mplhep
 import awkward as ak
 import pyarrow.parquet as pq
-from typing import Any
+from typing import Any, Dict, List
 
 ################################################################################
 #                             merge_samples.py                                 #
@@ -32,6 +32,71 @@ from typing import Any
 # - Verify `save_all_columns_sim_systematics: True` if variables not found only in systematics events.py
 
 BOOSTED_CAT = False
+
+def sample_pq_to_ff(sample_name: str, config: dict) -> str:
+    """Convert parquet sample name to finalfit sample name using config mapping.
+    Example: ttHtoGG_M_125 -> ttHToGG
+    """
+    ff_sample_name_map: dict[str, str] = config["merge_samples"].get("finalfit_sample_name_map", {}) # pq: ff
+    if len(ff_sample_name_map) == 0:
+        warnings.warn("ff_sample_name_map is empty in config['merge_samples']. No sample name conversion will be applied.", UserWarning)
+    if sample_name in ff_sample_name_map:
+        return ff_sample_name_map[sample_name]
+    return sample_name
+
+
+def sample_ff_to_pq(sample_name: str, config: dict) -> str:
+    """Convert finalfit sample name to parquet sample name using config mapping.
+    Example: ttHToGG -> ttHtoGG_M_125
+    """
+    ff_sample_name_map: dict[str, str] = config["merge_samples"].get("finalfit_sample_name_map", {}) # pq: ff
+    inv_map = {v: k for k, v in ff_sample_name_map.items()}
+    if sample_name in inv_map:
+        return inv_map[sample_name]
+    return sample_name
+
+
+def syst_pq_to_ff(syst_name: str, config: dict) -> str:
+    """Convert parquet systematic name to finalfit systematic name using config mapping.
+    Example: ScaleEB2G_IJazZ_up -> ScaleEB2GIJazZUp01sigma
+    """
+    ff_syst_name_map: dict[str, str] = config["merge_samples"].get("finalfit_syst_name_map", {}) # pq: ff
+    if syst_name in ff_syst_name_map:
+        return ff_syst_name_map[syst_name]
+    return syst_name
+
+
+def syst_ff_to_pq(syst_name: str, config: dict) -> str:
+    """Convert finalfit systematic name to parquet systematic name using config mapping.
+    Example: ScaleEB2GIJazZUp01sigma -> ScaleEB2G_IJazZ_up
+    """
+    ff_syst_name_map: dict[str, str] = config["merge_samples"].get("finalfit_syst_name_map", {}) # pq: ff
+    inv_map = {v: k for k, v in ff_syst_name_map.items()}
+    if syst_name in inv_map:
+        return inv_map[syst_name]
+    return syst_name
+
+
+# def var_pq_to_ff(var_name: str, config: dict) -> str:
+#     """Convert parquet variable name to finalfit variable name using config mapping.
+#     Example: nonResReg_dijet_mass_DNNreg -> dijet_mass
+#     """
+#     ff_var_name_map: dict[str, str] = config["merge_samples"].get("finalfit_var_name_map", {}) # pq: ff
+#     if var_name in ff_var_name_map:
+#         return ff_var_name_map[var_name]
+#     return var_name
+
+
+# def var_ff_to_pq(var_name: str, config: dict) -> str:
+#     """Convert finalfit variable name to parquet variable name using config mapping.
+#     Example: dijet_mass -> nonResReg_dijet_mass_DNNreg
+#     """
+#     ff_var_name_map: dict[str, str] = config["merge_samples"].get("finalfit_var_name_map", {}) # pq: ff
+#     inv_map = {v: k for k, v in ff_var_name_map.items()}
+#     if var_name in inv_map:
+#         return inv_map[var_name]
+#     return var_name
+
 
 class EventsWrapper():
     """Wrapper around awkward array to gracefully handle missing variable errors."""
@@ -63,7 +128,7 @@ class EventsWrapper():
                     raise AttributeError(f"Attempted to access attribute '{name}' that is not found in EventsWrapper or events.") from e
 
 class Samples():
-    def __init__(self, config: dict, columns: list[str], weight_columns: list[str], verbose=False):
+    def __init__(self, config: dict, columns: dict[str, str] | None, weight_columns: dict[str, str], verbose=False):
         """Samples dictionary with built-in name handling.
 
         Steps:
@@ -73,80 +138,47 @@ class Samples():
                 - Call concatenate() method once all samples have been added.
                 - Special handling for score: break apa
 
-
         Args:
             config (dict): YAML "train config" dictionary.
 
         """
+        if columns is None or len(columns) == 0:
+            raise ValueError("Could not load columns to save from config['merge_samples']['columns_to_save']. Please check your configuration file.")
+
         self.samples            = {}
         self.config             = config
-        self.columns:            list[str]      = columns
-        self.weight_columns:     list[str]      = weight_columns
-        self.all_save_columns:   list[str]      = self.columns + self.weight_columns
-        self.ff_sample_name_map: dict[str, str] = config["merge_samples"].get("ff_sample_name_map", {}) # pq: ff
-        self.ff_syst_name_map:   dict[str, str] = config["merge_samples"].get("finalfit_syst_name_map", {}) # pq: ff
-        self.ff_var_name_map:    dict[str, str] = config["merge_samples"].get("finalfit_var_name_map", {}) # pq: ff
+        self.columns:            dict[str, str] = columns
+        self.weight_columns:     dict[str, str] = weight_columns
+        self.all_save_columns:   dict[str, str] = {**self.columns, **self.weight_columns}
+        # self.ff_sample_name_map: dict[str, str] = config["merge_samples"].get("ff_sample_name_map", {}) # pq: ff
+        # self.ff_syst_name_map:   dict[str, str] = config["merge_samples"].get("finalfit_syst_name_map", {}) # pq: ff
+        # self.ff_var_name_map:    dict[str, str] = config["merge_samples"].get("finalfit_var_name_map", {}) # pq: ff
         self.dijet_mass_key:     str            = config["merge_samples"].get("dijet_mass_key", "nonResReg_dijet_mass_DNNreg")
         self.score_key:          str            = config["merge_samples"].get("score_key", "score")
         self.score_idx_name_map: dict[int, str] = config["merge_samples"].get("score_idx_name_map", {}) # index: class name
         self.verbose:            bool           = verbose
 
 
-    def __pq_sample_to_ff_sample(self, pq_name: str) -> str:
-        """Convert parquet sample name to ff sample name using ff_sampledict."""
-        if pq_name in self.ff_sample_name_map:
-            return self.ff_sample_name_map[pq_name]
-        return pq_name
-
-    def __ff_name_to_pq_name(self, ff_name: str) -> str:
-        """Convert ff sample name to parquet sample name using ff_sampledict."""
-        inv_map = {v: k for k, v in self.ff_sample_name_map.items()}
-        if ff_name in inv_map:
-            return inv_map[ff_name]
-        return ff_name
-
-    def __pq_syst_to_ff_syst(self, pq_syst: str) -> str:
-        """Convert parquet systematic name to ff systematic name using ff_sampledict."""
-        if pq_syst in self.ff_syst_name_map:
-            return self.ff_syst_name_map[pq_syst]
-        return pq_syst
-
-    def __ff_syst_to_pq_syst(self, ff_syst: str) -> str:
-        """Convert ff systematic name to parquet systematic name using ff_sampledict."""
-        inv_map = {v: k for k, v in self.ff_syst_name_map.items()}
-        if ff_syst in inv_map:
-            return inv_map[ff_syst]
-        return ff_syst
-    
-    def __pq_var_to_ff_var(self, pq_var: str) -> str:
-        """Convert parquet variable name to ff variable name using ff_var_name_map."""
-        if pq_var in self.ff_var_name_map:
-            return self.ff_var_name_map[pq_var]
-        return pq_var
-
-    def __ff_var_to_pq_var(self, ff_var: str) -> str:
-        """Convert ff variable name to parquet variable name using ff_var_name_map."""
-        inv_map = {v: k for k, v in self.ff_var_name_map.items()}
-        if ff_var in inv_map:
-            return inv_map[ff_var]
-        return ff_var
-
     def add(self, var_name: str, var_data: np.ndarray):
-        """var_name is from multiclass parquets
+        """var_name is from multiclass parquets (ff name)
+        
+        OLD:
         ff_var_name is the var name after mapping through ff name map
         """
         if var_data is None:
             # Missing variable, skip adding
             return
-        if var_name not in self.all_save_columns:
+        if var_name not in self.all_save_columns.values(): # and self.config["merge_samples"]["finalfit_var_name_map"].get(var_name, var_name) not in self.all_save_columns:
+            # Failure mode: FF name is name of different variable not in columns pq names
             return
         # Sample dict uses ff var names
-        ff_var_name = self.__pq_var_to_ff_var(var_name)
-        # print(f"[DEBUG] Adding variable: {var_name} as {ff_var_name}")
+        inv_map = {v: k for k, v in self.all_save_columns.items()} # ff: pq
+        pq_var_name = inv_map.get(var_name, var_name) # get pq name
+        # print(f"[DEBUG] Adding variable: {pq_var_name} as {var_name}")
         # print(f"[DEBUG] self.samples keys before adding: {list(self.samples.keys())}")
-        if ff_var_name not in self.samples:
-            self.samples[ff_var_name] = []
-        self.samples[ff_var_name].append(var_data)
+        if var_name not in self.samples:
+            self.samples[var_name] = []
+        self.samples[var_name].append(var_data)
         # print(f"[DEBUG] self.samples keys after adding: {list(self.samples.keys())}")
 
     def concatenate(self):
@@ -180,6 +212,16 @@ class Samples():
                 raise e
 
 
+def load_weight_columns(all_columns: List[str], config: dict) -> Dict[str, str]:
+    """Identify weight columns from parquet columns and apply mapping {parquet_name: finalfit_name}."""
+    weight_columns = {col: col for col in all_columns if 'weight' in col}
+    columns_to_save: Dict[str, str] = config["merge_samples"].get("columns_to_save", {})
+    for col in list(weight_columns.keys()):
+        if col in columns_to_save:
+            weight_columns[col] = columns_to_save[col] # pq: ff
+    return weight_columns
+
+
 def load_samples(base_path, sample_list, config, data=False, syst="", verbose=False) -> pd.DataFrame:
     """Load predictions and weights, scaling weights by luminosity."""
 
@@ -187,7 +229,6 @@ def load_samples(base_path, sample_list, config, data=False, syst="", verbose=Fa
     # Example MC file to get the weight columns
     parquet_file = pq.ParquetFile(base_path+"/individual_samples/preEE/ttHtoGG_M_125/"+syst+"/"+events_file_name)
     all_columns = parquet_file.schema.names
-    weight_columns = [col for col in all_columns if 'weight' in col]
     dijet_mass_key = config["merge_samples"].get("dijet_mass_key", "nonResReg_dijet_mass_DNNreg")
     if dijet_mass_key not in all_columns:
         raise ValueError(
@@ -196,9 +237,11 @@ def load_samples(base_path, sample_list, config, data=False, syst="", verbose=Fa
             + f"Available columns are: {all_columns}"
         )
 
-    columns = [col for col in config["merge_samples"]["save_columns"]]
+    # columns = [col for col in config["merge_samples"]["save_columns"]]
+    weight_columns_dict: dict[str, str] = load_weight_columns(all_columns, config) # pq: ff
+    columns_dict: dict[str, str] = config["merge_samples"].get("columns_to_save", {}) # pq: ff
 
-    samples = Samples(config, columns=columns, weight_columns=weight_columns, verbose=verbose)
+    samples = Samples(config, columns=columns_dict, weight_columns=weight_columns_dict, verbose=verbose)
 
     # eras = ["preEE", "postEE", "preBPix", "postBPix"]
     eras: list[str] = config["samples_info"].get("eras", None)
@@ -213,6 +256,7 @@ def load_samples(base_path, sample_list, config, data=False, syst="", verbose=Fa
         else:
             eras = list(eras_dict.keys())
 
+    max_pq_sample_chars = max([len(sample) for sample in sample_list])
 
     for era in eras:
         print("\n###########")
@@ -237,7 +281,7 @@ def load_samples(base_path, sample_list, config, data=False, syst="", verbose=Fa
             if verbose:
                 print(f"[DEBUG] X path: {parquet_path}")
                 print(f"[DEBUG] y path: {y_path}")
-            events = ak.from_parquet(parquet_path, columns=columns+weight_columns)  # Load events
+            events = ak.from_parquet(parquet_path, columns=list(columns_dict.keys())+list(weight_columns_dict.keys()))  # Load events
             events = EventsWrapper(events)
 
             # Check if files exist
@@ -264,9 +308,9 @@ def load_samples(base_path, sample_list, config, data=False, syst="", verbose=Fa
                 sample = "Data"
             # if sample in ff_sampledict.keys():
             #     sample = ff_sampledict[sample]
-            print(sample)
+            print(f"{sample:<{max_pq_sample_chars}} -> {sample_pq_to_ff(sample, config)}")
             # sample -> pq sample
-            samples.add("sample", np.full(y.shape[0], sample)) # samples_input["sample"].append(np.full(y.shape[0], sample))
+            samples.add("sample", np.full(y.shape[0], sample_pq_to_ff(sample, config))) # samples_input["sample"].append(np.full(y.shape[0], sample))
 
             if "22" in era or "EE" in era:
                 year = 2022
@@ -278,7 +322,7 @@ def load_samples(base_path, sample_list, config, data=False, syst="", verbose=Fa
             samples.add("y_proba", np.array(events["y_proba"])) # samples_input["y_proba"].append(np.array(events['y_proba'])) 
             samples.add("is_boosted", np.array(events["is_boosted"])) # samples_input["is_boosted"].append(np.array(events["is_boosted"]))
 
-            for weight in weight_columns:
+            for weight in weight_columns_dict.keys():
                 if weight in events.fields:
                     samples.add(weight, np.array(events[weight])) # samples_input[weight].append(np.array(events[weight]))
                 else:
@@ -302,18 +346,18 @@ if __name__ == "__main__":
         config = yaml.safe_load(f)
         print(f"[INFO] Loaded configuration from: {args.config_path}")
 
-    if config["merge_samples"]["dijet_mass_key"] not in config["merge_samples"]["finalfit_var_name_map"].keys():
+    # if config["merge_samples"]["dijet_mass_key"] not in config["merge_samples"]["finalfit_var_name_map"].keys():
+    #     warnings.warn(
+    #         f"dijet_mass_key '{config['merge_samples']['dijet_mass_key']}' not found in finalfit_var_name_map. "
+    #         + "Make sure this is intentional. The 'dijet_mass_key' selects the correct variable to pull from every events.parquet file. "
+    #         + "The 'finalfit_var_name_map' is used to rename variables for FinalFit compatibility. "
+    #         + "The dijet_mass_key must be a key in finalfit_var_name_map to ensure proper renaming, if you intend to rename it (typically to 'dijet_mass')."
+    #     )
+    if config["merge_samples"]["dijet_mass_key"] not in config["merge_samples"]["columns_to_save"].keys():
         warnings.warn(
-            f"dijet_mass_key '{config['merge_samples']['dijet_mass_key']}' not found in finalfit_var_name_map. "
+            f"dijet_mass_key '{config['merge_samples']['dijet_mass_key']}' not found in columns_to_save. "
             + "Make sure this is intentional. The 'dijet_mass_key' selects the correct variable to pull from every events.parquet file. "
-            + "The 'finalfit_var_name_map' is used to rename variables for FinalFit compatibility. "
-            + "The dijet_mass_key must be a key in finalfit_var_name_map to ensure proper renaming, if you intend to rename it (typically to 'dijet_mass')."
-        )
-    if config["merge_samples"]["dijet_mass_key"] not in config["merge_samples"]["save_columns"]:
-        warnings.warn(
-            f"dijet_mass_key '{config['merge_samples']['dijet_mass_key']}' not found in save_columns. "
-            + "Make sure this is intentional. The 'dijet_mass_key' selects the correct variable to pull from every events.parquet file. "
-            + "If it is not included in 'save_columns', it will not be saved in the merged samples output."
+            + "If it is not included in 'columns_to_save', it will not be saved in the merged samples output."
         )
 
     samples = config["merge_samples"]["samples"]

@@ -156,8 +156,8 @@ class_name_map: # for mapping multiclass class names to other formats
         th_bg_2: th_singleH
         th_bg_4: th_VBFHH
 
-    th_name_to_ff_name:
-        th_signal: "ggHH_score" # "HH_score"
+    th_name_to_ff_name: # score names that appear in FinalFit cat json file
+        th_signal: "HH_score" # "ggHH_score" # "HH_score"
         th_bg_0: "nonRes_score"
         th_bg_1: "ttH_score"
         th_bg_2: "singleH_score"
@@ -209,7 +209,7 @@ merge_samples:
     - FNUF_up
     - Material_down
     - Material_up
-    finalfit_syst_name_map:
+    finalfit_syst_name_map: # pq: ff
         ScaleEB2G_IJazZ_down: ScaleEB2GIJazZDown01sigma
         ScaleEB2G_IJazZ_up: ScaleEB2GIJazZUp01sigma
         ScaleEE2G_IJazZ_down: ScaleEE2GIJazZDown01sigma
@@ -224,7 +224,7 @@ merge_samples:
         FNUF_up: FNUFUp01sigma
         Material_down: MaterialDown01sigma
         Material_up: MaterialUp01sigma
-    finalfit_sample_name_map: # Samples not in name map will keep their original names
+    finalfit_sample_name_map: # pq: ff; Samples not in name map will keep their original names
         GGJets: GGJets
         DDQCDGJET: DDQCDGJets
         TTGG: TTGG
@@ -241,19 +241,38 @@ merge_samples:
         GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00: GluGluToHH_kl-0p00_kt-1p00_c2-0p00
         GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00: GluGluToHH_kl-2p45_kt-1p00_c2-0p00
         GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00: GluGluToHH_kl-5p00_kt-1p00_c2-0p00
-    save_columns: # pq format; automatically adds all *weight* columns, so no need to list them here
-        - lumi # not in syst pqs
-        - event # not in syst pqs
-        - run # not in syst pqs
-        - mass
-        - nonResReg_dijet_mass_DNNreg
-        - year # not in syst pqs
-        # - is_boosted # not in syst pqs
-        # - y_proba # not in syst pqs
-        - sample # not in syst pqs
-        - score 
-    finalfit_var_name_map: # old: new (FinalFit compatible)
-        nonResReg_dijet_mass_DNNreg: dijet_mass # rename nonResReg_dijet_mass_DNNreg to dijet_mass
+    # === Columns to Save ===
+    # - Columns from the parquet file you want to save to the merged parquet file, ready for FinalFit.
+    # - If desired, apply mapping parquet_name -> finalfit_name here for each column.
+    # - Note that all *weight* columns are added automatically, so no need to list them here.
+    # - Also, all components of the score column are unpacked automatically, so no need to list them here. 
+    #   - Their names are defined in score_idx_name_map below.
+    # - If you need to rename specific weight columns, you can do so by manually specifying them in columns_to_save as `newname: oldname`.
+    columns_to_save: # name map pq: ff; automatically adds all *weight* and unpacks *score* columns, so no need to list them here
+        # old: new
+        lumi: lumi
+        event: event
+        run: run
+        mass: mass
+        nonResReg_dijet_mass_DNNreg: dijet_mass
+        year: year
+        # is_boosted: is_boosted
+        # y_proba: y_proba
+        sample: sample
+        score: score
+    # save_columns: # ff format; automatically adds all *weight* columns, so no need to list them here
+    #     - lumi # not in syst pqs
+    #     - event # not in syst pqs
+    #     - run # not in syst pqs
+    #     - mass
+    #     - dijet_mass # nonResReg_dijet_mass_DNNreg in pq
+    #     - year # not in syst pqs
+    #     # - is_boosted # not in syst pqs
+    #     # - y_proba # not in syst pqs
+    #     - sample # not in syst pqs
+    #     - score 
+    # finalfit_var_name_map: # old: new (FinalFit compatible)
+    #     nonResReg_dijet_mass_DNNreg: dijet_mass # rename nonResReg_dijet_mass_DNNreg to dijet_mass
     dijet_mass_key: nonResReg_dijet_mass_DNNreg # special variable; true name in events.parquet; renamed to dijet_mass for FF; must be a KEY in finalfit_var_name_map
     score_key: score # special variable for storing the multi-class scores
     score_idx_name_map: # mapping from score column index to class name for unpacking the score column
