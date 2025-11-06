@@ -13,6 +13,7 @@ import torch.optim as optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
+from torch.cuda.amp import autocast, GradScaler
 
 from models.mlp import MLP
 from utils.decorr_utils import distance_corr, distance_corr_multi
@@ -104,7 +105,8 @@ def train_one_epoch(
         use_disco=False,
         decorr_lambda=0.1,
         disco_signal_class_idx: Union[int, list[int], None]=0,
-        disco_reduce: str='mean'
+    disco_reduce: str='mean',
+    progress_update_interval: int = 50,
 ) -> tuple[float, float, float, float, float, Union[float, None], Union[float, None]]:
     """
     Train the model for one epoch.
@@ -144,7 +146,10 @@ def train_one_epoch(
     batch_losses_no_abs_no_dist_corr = []
 
     progress_bar = tqdm(data_loader, desc=f"Epoch {epoch} [Training]", leave=False)
-    for batch in progress_bar:
+    # Enable mixed precision on CUDA for speed; safe no-op on CPU
+    use_cuda = (device.type == 'cuda')
+    scaler = GradScaler(enabled=use_cuda)
+    for batch_idx, batch in enumerate(progress_bar):
         # Unpack depending on options
         if use_disco:
             # Expect dataset to include disco_var in batch
@@ -162,37 +167,42 @@ def train_one_epoch(
                 weights_batch_no = weights_batch # dummy assignment to avoid errors
 
         # Print first parts
-        X_batch = X_batch.to(device)
-        y_batch = y_batch.to(device)
-        weights_batch = weights_batch.to(device)
-        weights_batch_no = weights_batch_no.to(device)
+        # Use non_blocking transfers to overlap HtoD when pin_memory=True
+        X_batch = X_batch.to(device, non_blocking=True)
+        y_batch = y_batch.to(device, non_blocking=True)
+        weights_batch = weights_batch.to(device, non_blocking=True)
+        weights_batch_no = weights_batch_no.to(device, non_blocking=True)
         if use_disco:
-            disco_var_batch = disco_var_batch.to(device)
+            disco_var_batch = disco_var_batch.to(device, non_blocking=True)
+        # print(f"[DEBUG] weights_batch sum (inside train loop): {weights_batch.sum().item()}")
 
-        optimizer.zero_grad()
-        y_pred = model(X_batch)
-        loss = loss_fn(y_pred, y_batch) # [N]
-        wsum = weights_batch.sum()
-        weighted_loss = (loss * weights_batch).sum() / wsum
+        optimizer.zero_grad(set_to_none=True)
+        with autocast(enabled=use_cuda):
+            y_pred = model(X_batch)
+            loss = loss_fn(y_pred, y_batch) # [N]
+            wsum = weights_batch.sum() # weights_batch is absolute-valued
+            weighted_loss = (loss * weights_batch).sum() / wsum
 
-        # Add DisCo term
-        if use_disco:
-            total_loss, d_corr = apply_disco(
-                weighted_loss,
-                y_pred,
-                weights_batch,
-                disco_var_batch,
-                decorr_lambda,
-                disco_signal_class_idx,
-                disco_reduce
-            )
-            assert d_corr is not None, "d_corr should not be None when using DisCo. Something is wrong inside the apply_disco function."
-        else:
-            total_loss = weighted_loss
-            d_corr = None # Dummy
-        
-        total_loss.backward()
-        optimizer.step()
+            # Add DisCo term
+            if use_disco:
+                total_weighted_loss, d_corr = apply_disco(
+                    weighted_loss,
+                    y_pred,
+                    weights_batch,
+                    disco_var_batch,
+                    decorr_lambda,
+                    disco_signal_class_idx,
+                    disco_reduce
+                )
+                assert d_corr is not None, "d_corr should not be None when using DisCo. Something is wrong inside the apply_disco function."
+            else:
+                total_weighted_loss = weighted_loss
+                d_corr = None # Dummy
+
+        # Backward with gradient scaling (no-op on CPU)
+        scaler.scale(total_weighted_loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
 
         weighted_loss_no_abs = (loss * weights_batch_no).sum() / weights_batch_no.sum()
 
@@ -200,26 +210,35 @@ def train_one_epoch(
         correct = (torch.argmax(y_pred, dim=1) == y_batch).float()
         weighted_acc = (correct * weights_batch).sum() / weights_batch.sum()
 
-        batch_losses.append(            weighted_loss.item())
-        batch_accs.append(              weighted_acc.item())
-        batch_losses_no_abs.append(     weighted_loss_no_abs.item())
-        batch_losses_no_dist_corr.append(weighted_loss.item() if not use_disco else (weighted_loss.item() - decorr_lambda * d_corr.item()))
-        batch_dist_corr.append(         d_corr.item() if d_corr is not None else None)
-        batch_losses_no_abs_no_dist_corr.append(weighted_loss_no_abs.item() if not use_disco else (weighted_loss_no_abs.item() - decorr_lambda * d_corr.item()))
+        # Convert once to Python floats to avoid repeated device syncs
+        total_weighted_loss_f = float(total_weighted_loss.detach().item())
+        weighted_acc_f = float(weighted_acc.detach().item())
+        weighted_loss_no_abs_f = float(weighted_loss_no_abs.detach().item())
+        weighted_loss_f = float(weighted_loss.detach().item())
+        d_corr_f = float(d_corr.detach().item()) if d_corr is not None else None
+
+        batch_losses.append(            total_weighted_loss_f)
+        batch_accs.append(              weighted_acc_f)
+        batch_losses_no_abs.append(     weighted_loss_no_abs_f)
+        # Avoid recomputation: "no dist corr" is just the nominal weighted loss
+        batch_losses_no_dist_corr.append(weighted_loss_f)
+        batch_dist_corr.append(         d_corr_f)
+        batch_losses_no_abs_no_dist_corr.append(weighted_loss_no_abs_f)
 
         # Update progress bar
-        if use_disco:
-            progress_bar.set_postfix({
-                'Loss': f'{weighted_loss.item() - decorr_lambda * d_corr.item():.4f}+{decorr_lambda}*{d_corr.item():.4f}',
-                'Acc': f'{weighted_acc.item():.4f}',
-                'Loss_no_abs': f'{weighted_loss_no_abs.item():.4f}'
-            })
-        else:
-            progress_bar.set_postfix({
-                'Loss': f'{weighted_loss.item():.4f}',
-                'Acc': f'{weighted_acc.item():.4f}',
-                'Loss_no_abs': f'{weighted_loss_no_abs.item():.4f}'
-            })
+        if progress_update_interval and (batch_idx % progress_update_interval == 0 or batch_idx == len(progress_bar) - 1):
+            if use_disco:
+                progress_bar.set_postfix({
+                    'Loss': f'{weighted_loss_f:.4f}+{decorr_lambda}*{(d_corr_f if d_corr_f is not None else 0.0):.4f}',
+                    'Acc': f'{weighted_acc_f:.4f}',
+                    'Loss_no_abs': f'{weighted_loss_no_abs_f:.4f}'
+                })
+            else:
+                progress_bar.set_postfix({
+                    'Loss': f'{total_weighted_loss_f:.4f}',
+                    'Acc': f'{weighted_acc_f:.4f}',
+                    'Loss_no_abs': f'{weighted_loss_no_abs_f:.4f}'
+                })
 
     mean_batch_losses                       = float(np.mean(batch_losses))
     mean_accs                               = float(np.mean(batch_accs))
@@ -248,9 +267,9 @@ def evaluate(
         epoch,
         use_disco=False,
         decorr_lambda=0.1,
-        disco_signal_class_idx:
-        Union[int, list[int], None]=0, 
-        disco_reduce: str='mean'
+        disco_signal_class_idx: Union[int, list[int], None]=0,
+    disco_reduce: str='mean',
+    progress_update_interval: int = 50,
     ) -> tuple[float, float, float, Union[float, None], Union[float, None]]:
     model.eval()
     val_losses = []
@@ -259,12 +278,14 @@ def evaluate(
     val_dist_corr = []
     val_dist_corr_times_lambda = []
     progress_bar = tqdm(data_loader, desc=f"Epoch {epoch} [Validation]", leave=False)
-    with torch.no_grad():
-        for batch in progress_bar:
+    use_cuda = (device.type == 'cuda')
+    # inference_mode is slightly faster than no_grad for eval
+    with torch.inference_mode():
+        for batch_idx, batch in enumerate(progress_bar):
             if use_disco:
                 # Expect dataset to include disco_var in batch
                 if len(batch) == 5:
-                    X_batch, y_batch, weights_batch, weights_batch_no, disco_var_batch = batch
+                    X_batch, y_batch, weights_batch, weights_batch_no_abs, disco_var_batch = batch
                 elif len(batch) == 4:
                     X_batch, y_batch, weights_batch, disco_var_batch = batch
                 else:
@@ -272,22 +293,24 @@ def evaluate(
             else:
                 # Not using DisCo
                 if len(batch) == 4:
-                    X_batch, y_batch, weights_batch, weights_batch_no = batch
+                    X_batch, y_batch, weights_batch, weights_batch_no_abs = batch
                 else:
                     # Not using weights without absolute value (not using no_absolute_weights)
                     X_batch, y_batch, weights_batch = batch
-            X_batch = X_batch.to(device)
-            y_batch = y_batch.to(device)
-            weights_batch = weights_batch.to(device)
+            X_batch = X_batch.to(device, non_blocking=True)
+            y_batch = y_batch.to(device, non_blocking=True)
+            weights_batch = weights_batch.to(device, non_blocking=True)
+            # print(f"[DEBUG] weights_batch sum (inside val loop): {weights_batch.sum().item()}") 
 
-            y_pred = model(X_batch)
-            loss = loss_fn(y_pred, y_batch)
-            weighted_loss = (loss * weights_batch).sum() / weights_batch.sum()
+            with autocast(enabled=use_cuda):
+                y_pred = model(X_batch)
+                loss = loss_fn(y_pred, y_batch)
+                weighted_loss = (loss * weights_batch).sum() / weights_batch.sum()
 
             # Add DisCo term
             if use_disco:
-                disco_var_batch = disco_var_batch.to(device)
-                total_loss, d_corr = apply_disco(
+                disco_var_batch = disco_var_batch.to(device, non_blocking=True)
+                total_weighted_loss, d_corr = apply_disco(
                     weighted_loss,
                     y_pred,
                     weights_batch,
@@ -297,31 +320,37 @@ def evaluate(
                     disco_reduce
                 )
             else:
-                total_loss = weighted_loss
+                total_weighted_loss = weighted_loss
                 d_corr = None # Dummy
 
             # compute weighted accuracy
             correct = (torch.argmax(y_pred, dim=1) == y_batch).float()
             weighted_acc = (correct * weights_batch).sum() / weights_batch.sum()
 
+            total_weighted_loss_f = float(total_weighted_loss.detach().item())
+            weighted_acc_f = float(weighted_acc.detach().item())
+            weighted_loss_f = float(weighted_loss.detach().item())
+            d_corr_f = float(d_corr.detach().item()) if d_corr is not None else None
 
-            val_losses.append(                  total_loss.item())
-            val_accs.append(                    weighted_acc.item())
-            val_losses_no_dist_corr.append(     weighted_loss.item() if not use_disco else (weighted_loss.item() - decorr_lambda * d_corr.item()))
-            val_dist_corr.append(               d_corr.item() if d_corr is not None else None)
-            val_dist_corr_times_lambda.append(  d_corr.item() * decorr_lambda if d_corr is not None else None)
+            val_losses.append(                  total_weighted_loss_f)
+            val_accs.append(                    weighted_acc_f)
+            # For display we separate the dist-corr part, but for storage reuse weighted_loss directly
+            val_losses_no_dist_corr.append(     weighted_loss_f)
+            val_dist_corr.append(               d_corr_f)
+            val_dist_corr_times_lambda.append(  (d_corr_f * decorr_lambda) if d_corr_f is not None else None)
 
             # Update progress bar
-            if use_disco:
-                progress_bar.set_postfix({
-                    'Loss': f'{weighted_loss.item() - decorr_lambda * d_corr.item():.4f}+{decorr_lambda}*{d_corr.item():.4f}',
-                    'Acc': f'{weighted_acc.item():.4f}',
-                })
-            else:
-                progress_bar.set_postfix({
-                    'Loss': f'{weighted_loss.item():.4f}',
-                    'Acc': f'{weighted_acc.item():.4f}',
-                })
+            if progress_update_interval and (batch_idx % progress_update_interval == 0 or batch_idx == len(progress_bar) - 1):
+                if use_disco:
+                    progress_bar.set_postfix({
+                        'Loss': f'{weighted_loss_f:.4f}+{decorr_lambda}*{(d_corr_f if d_corr_f is not None else 0.0):.4f}',
+                        'Acc': f'{weighted_acc_f:.4f}',
+                    })
+                else:
+                    progress_bar.set_postfix({
+                        'Loss': f'{weighted_loss_f:.4f}',
+                        'Acc': f'{weighted_acc_f:.4f}',
+                    })
 
         mean_losses                 = float(np.mean(val_losses))
         mean_accs                   = float(np.mean(val_accs))
