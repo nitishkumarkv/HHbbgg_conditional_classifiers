@@ -73,7 +73,8 @@ def perform_training(args: argparse.Namespace):
             "python3 -m models.training_utils "
             + f"--input_path {out_path} "
             + f"--training_config_path {training_config_path} "
-            + f"--job_config_path {job_config_path} ",
+            + f"--job_config_path {job_config_path} "
+            + f"--model_folder {args.model_folder} ", # e.g. after_random_search_best1, where to save best model, params.json, and y predictions
             shell=True, check=True
         )
 
@@ -82,7 +83,8 @@ def perform_training(args: argparse.Namespace):
         print('INFO: Getting the results plots')
         subprocess.run(
             "python3 -m models.mlp_plotter "
-            + f"--input_path {out_path} ",
+            + f"--input_path {out_path} "
+            + f"--model_folder {args.model_folder} ", # e.g. after_random_search_best1, where to save best model, params.json, and y predictions
             shell=True, check=True
         )
 
@@ -91,7 +93,8 @@ def perform_training(args: argparse.Namespace):
         print('INFO: Getting permutation importance')
         subprocess.run(
             "python3 models/permutation_importance.py "
-            + f"--input_path {out_path} ",
+            + f"--input_path {out_path} "
+            + f"--training_folder {args.model_folder} ",
             shell=True, check=True
         )
 
@@ -100,7 +103,7 @@ def perform_training(args: argparse.Namespace):
         print('INFO: Getting the predictions nominal')
         subprocess.run(
             "python3 models/get_prediction.py "
-            + f"--model_folder {out_path}/after_random_search_best1/ "
+            + f"--model_folder {out_path}/{args.model_folder}/ "
             + f"--samples_path {out_path} "
             + f"--config_path {config_path} "
             + "--get_pred_nominal ",
@@ -112,7 +115,7 @@ def perform_training(args: argparse.Namespace):
         print('INFO: Getting the predictions systematics')
         subprocess.run(
             "python3 models/get_prediction.py "
-            + f"--model_folder {out_path}/after_random_search_best1/ "
+            + f"--model_folder {out_path}/{args.model_folder}/ "
             + f"--samples_path {out_path} "
             + f"--config_path {config_path} "
             + "--get_pred_sys ",
@@ -258,6 +261,7 @@ if __name__ == "__main__":
     # Main arguments
     parser.add_argument('--config_path', type=str, help='Path to the configuration files')
     parser.add_argument('--out_path', type=str, help='Path to save the inputs')
+    parser.add_argument('--model_folder', type=str, default='after_random_search_best1', help='Folder containing the trained model')
 
     # Steps
     parser.add_argument('--prep_inputs_for_training', action='store_true', help='Prepare inputs for training')

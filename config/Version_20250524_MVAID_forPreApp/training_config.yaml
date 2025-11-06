@@ -33,7 +33,9 @@ max_epoch: 300
 
 # Decorrelation settings
 use_DisCo: True
-decorr_lambda: 0.1
+decorr_lambda: 5.0
+disco_reduce_method: mean # mean, max, sum, quadrature
+disco_decorr_class_idx: [0,1,2,3] # index of the class to decorrel, e.g. 0 for signal-only
 z_variables: # "Z dataset" variables to decorrelate against, e.g. mjj
 - nonResReg_dijet_mass_DNNreg 
 

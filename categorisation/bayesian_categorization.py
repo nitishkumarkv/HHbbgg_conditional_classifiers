@@ -6,7 +6,6 @@ import os
 import argparse
 import optuna
 import math
-import matplotlib.pyplot as plt
 import mplhep as hep
 import pandas as pd
 import json
@@ -670,8 +669,8 @@ class OptunaCategorizer:
         # Adjust spacing
         plt.tight_layout()
         # Save the figure
-        # plt.savefig(f"{save_path}/category_summary_new.png") # breaks like this: Version_20250524_MVAID_forPreApp/optuna_categorization/run_0_/category_summary_new.png
-        plt.savefig(f"{save_path}category_summary_new.png") # original
+        # plt.savefig(f"{save_path}category_summary_new.png") # original
+        plt.savefig(os.path.join(save_path, "category_summary_new.png"))
         plt.close(fig)
 
 
@@ -763,17 +762,20 @@ class OptunaCategorizer:
                         mask = mask & (scores[:, b] < th_bg)
 
                     if np.sum(mask) == 0:
+                        # No events selected, return negative significance.
                         return -1.0
 
                     # Enforce sideband requirement: background outside 120-130 GeV must have at least 10 (weighted).
-                    side_mask = (((dipho_mass[mask] < 120) | (dipho_mass[mask] > 130)) & (labels[mask] == 0))
-                    bkg_side_val = weights[mask][side_mask].sum()
+                    side_mask = (((dipho_mass[mask] < 120) | (dipho_mass[mask] > 130)) & (labels[mask] == 0)) # mgg in sidebands and background only
+                    bkg_side_val = weights[mask][side_mask].sum() # bkg sideband weighted sum
                     if bkg_side_val < self.side_band_threshold:
+                        # Not enough background in sidebands, return negative significance.
                         return -1.0
 
                     # Select events in the diphoton mass window (120 < m_γγ < 130).
                     mass_mask = (dipho_mass[mask] > 120) & (dipho_mass[mask] < 130)
                     if np.sum(mass_mask) == 0:
+                        # No events in the mgg window, return negative significance.
                         return -1.0
 
                     selected_samples = samples[mask][mass_mask]
@@ -1117,7 +1119,6 @@ class OptunaCategorizer:
         import awkward as ak
         import pandas as pd
         import matplotlib.pyplot as plt
-        from matplotlib.backends.backend_pdf import PdfPages
 
         samples = [
             "GGJets", "DDQCDGJET", "TTGG", "ttHtoGG_M_125", "BBHto2G_M_125",

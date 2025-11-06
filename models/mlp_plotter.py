@@ -24,7 +24,7 @@ try:
 except ImportError:
     try:
         from mlp import MLP
-    except ImportError as e:
+    except ImportError:
         raise ImportError("Could not import MLP class from models")
 
 plt.style.use(mplhep.style.CMS)
@@ -107,7 +107,7 @@ def _get_python_env_base(job_config: dict) -> str:
     return sys.prefix
 
 
-def write_sub_file(condor_dir: str, plot_dir: str, checkpoint_path: str, input_path: str, script_path: str, **kwargs) -> str:
+def write_sub_file(condor_dir: str, plot_dir: str, checkpoint_path: str, input_path: str, script_path: str, model_folder: str, **kwargs) -> str:
     """
     Writes a condor submission file with the given output path and keyword arguments.
 
@@ -131,7 +131,7 @@ def write_sub_file(condor_dir: str, plot_dir: str, checkpoint_path: str, input_p
 
     # For condor, we need to escape the arguments differently
     # Condor expects arguments to be space-separated, with quotes escaped
-    plotter_args = f'--input_path {input_path} --checkpoint_file {checkpoint_path} --path_for_plots {plot_dir}'
+    plotter_args = f'--input_path {input_path} --checkpoint_file {checkpoint_path} --path_for_plots {plot_dir} --model_folder {model_folder}'
     out_dest = os.path.join(CWD, condor_dir)
     if SUBMITTED_ON_EOS:
         out_dest = f"root://eosuser.cern.ch/{out_dest}"
@@ -286,6 +286,7 @@ def run_condor_job(
         plot_dir: str = "",                         # required
         checkpoint_file: str = "",                  # required
         job_config: dict = {},                      # required
+        model_folder: str = "after_random_search_best1",  # optional
         clargs: argparse.Namespace | None = None,   # optional
         **kwargs
     ) -> None:
@@ -337,7 +338,7 @@ def run_condor_job(
         )
 
     script_path = write_condor_script(condor_dir, job_config)
-    sub_path = write_sub_file(condor_dir, plot_dir, checkpoint_file, input_path, script_path, epoch=kwargs.get('epoch', None))
+    sub_path = write_sub_file(condor_dir, plot_dir, checkpoint_file, input_path, script_path, model_folder, epoch=kwargs.get('epoch', None))
     if kwargs.get('dry_run', False):
         print(f"mlp_plotter condor job dry run. Condor submission file written to: {sub_path}, script written to: {script_path}")
     else:
@@ -356,6 +357,7 @@ if __name__ == "__main__":
     # Optional arguments
     parser.add_argument('--checkpoint_file', default=None, type=str, help='Path to the model checkpoint. If not provided, will use default path in <input_path>/after_random_search_best1/mlp.pth')
     parser.add_argument('--path_for_plots', default=None, type=str, help='Path to save the plots. If not provided, will use default path in <input_path>/after_random_search_best1/plots/')
+    parser.add_argument('--model_folder', default='after_random_search_best1', type=str, help='Folder name inside input_path where the model and plots are stored. Default: after_random_search_best1')
     parser.add_argument('--verbose', action='store_true', help='Print verbose output for debugging')
 
     # Batch-only arguments
@@ -365,10 +367,8 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
 
-    #inputs_for_MLP = "../data/inputs_for_MLP_202411226/"
-    #input_path="train_inputs_for_MLP_202411226/after_random_search_best1/"
     inputs_for_MLP = args.input_path
-    input_path = f"{inputs_for_MLP}/after_random_search_best1/"
+    input_path = f"{inputs_for_MLP}/{args.model_folder}/"
 
     if args.path_for_plots is None:
         path_for_plots = f"{input_path}/plots/"
@@ -415,6 +415,7 @@ if __name__ == "__main__":
             job_config=job_config,
             dry_run=args.dry_run,
             epoch=epoch_num,
+            model_folder=args.model_folder,
             clargs=args,
         )
         print(f"Saving plots to: {path_for_plots}")

@@ -493,6 +493,7 @@ if __name__ == "__main__":
     parser.add_argument('--input_path', type=str, help='Path to the input files')
     parser.add_argument('--training_config_path', type=str, default=10, help='Training configuration path')
     parser.add_argument('--job_config_path', type=str, default="", help='Job configuration path')
+    parser.add_argument('--model_folder', type=str, default="after_random_search_best1", help='Folder to save the trained model')
     #parser.add_argument('', type=str, help='Path to the best parameters')
     args = parser.parse_args()
 
@@ -536,12 +537,21 @@ if __name__ == "__main__":
 
         os.makedirs(f'{input_path}/random_search_1', exist_ok=True)
         # best_params = {"num_layers": 3, "num_nodes": 100, "act_fn_name": "ELU", "lr": 2.027496582741043e-05, "weight_decay": 5.159904717896079e-05, "dropout_prob": 0.05, "n_trials": 0}
-        best_params = {"num_layers": 5, "num_nodes": 1024, "act_fn_name": "ELU", "lr": 2.027496582741043e-05, "weight_decay": 5.159904717896079e-05, "dropout_prob": 0.25, "n_trials": 0}
+        # best_params = {"num_layers": 5, "num_nodes": 1024, "act_fn_name": "ELU", "lr": 2.027496582741043e-05, "weight_decay": 5.159904717896079e-05, "dropout_prob": 0.25, "n_trials": 0}
+        best_params = {
+            "num_layers": 5,
+            "num_nodes": 1024,
+            "act_fn_name": "ELU",
+            "lr": 2.027496582741043e-05,
+            "weight_decay": 5.159904717896079e-05,
+            "dropout_prob": 0.25,
+            "n_trials": 0
+        }
         with open(f'{input_path}/random_search_1/best_params.json', 'w', encoding='utf-8') as f:
             json.dump(best_params, f)
 
     best_params_path = f'{input_path}/random_search_1/best_params.json'
-    path_to_checkpoint = f'{input_path}/after_random_search_best1'
+    path_to_checkpoint = f'{input_path}/{args.model_folder}'
     os.makedirs(path_to_checkpoint, exist_ok=True)
 
     # Load data
@@ -861,6 +871,7 @@ if __name__ == "__main__":
                 plot_dir=f"{path_to_checkpoint}/checkpoints/epoch{epoch}/plots/",         # output directory for plots
                 checkpoint_file=f"{path_to_checkpoint}/checkpoints/epoch{epoch}/mlp.pth", # checkpoint path
                 job_config=job_config,
+                model_folder=args.model_folder,
                 dry_run=False,
                 epoch=epoch,
             )
