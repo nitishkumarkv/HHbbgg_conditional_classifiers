@@ -3,7 +3,7 @@ import json
 import yaml
 import glob
 import pickle
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import awkward as ak
 import numpy as np
 import pyarrow as pa
@@ -266,7 +266,20 @@ class PrepareInputs:
 
         return events
 
-    def get_weights_for_training(self, y_train, rel_w_train, proc_num_train):
+    def get_weights_for_training(self, y_train, rel_w_train, proc_num_train) -> Tuple[ak.Array, ak.Array, ak.Array]:
+        """Get weights for training.
+
+        Args:
+            y_train (ak.Array): The ground truth labels.
+            rel_w_train (ak.Array): The relative weights.
+            proc_num_train (ak.Array): The process numbers.
+
+        Returns:
+            Tuple[ak.Array, ak.Array, ak.Array]: The true class weights, absolute-valued class weights, and positive class weights.
+                - true_class_weights
+                - class_weights_for_training_abs
+                - class_weights_only_positive
+        """
 
         true_class_weights = ak.zeros_like(rel_w_train)
         class_weights_for_training_abs = ak.zeros_like(rel_w_train)
@@ -322,6 +335,7 @@ class PrepareInputs:
                 print("\n")
 
         return true_class_weights, class_weights_for_training_abs, class_weights_only_positive
+
 
     def get_weights_for_val_test(self, y_val, rel_w_val, proc_num_val):
 
@@ -734,12 +748,14 @@ class PrepareInputs:
         X_val = np.nan_to_num(X_val, nan=fill_nan)
 
         true_class_weights, class_weights_for_training_abs, class_weights_only_positive = self.get_weights_for_training(y_train, rel_w_train, proc_num_train)
-        class_weights_for_val = self.get_weights_for_val_test(y_val, rel_w_val, proc_num_val)
+        class_weights_for_val, class_weights_for_val_abs, class_weights_for_val_only_positive = self.get_weights_for_training(y_val, rel_w_val, proc_num_val)
+        # class_weights_for_val = self.get_weights_for_val_test(y_val, rel_w_val, proc_num_val)
 
         if X_test is not None:
             X_test = self.standardize(X_test, mean, std)
             X_test = np.nan_to_num(X_test, nan=fill_nan)
-            class_weights_for_test = self.get_weights_for_val_test(y_test, rel_w_test, proc_num_test)
+            # class_weights_for_test = self.get_weights_for_val_test(y_test, rel_w_test, proc_num_test)
+            class_weights_for_test, class_weights_for_test_abs, class_weights_for_test_only_positive = self.get_weights_for_training(y_test, rel_w_test, proc_num_test)
 
         if z_train is not None:
             z_mean = np.nanmean(z_train, axis=0)
@@ -782,13 +798,18 @@ class PrepareInputs:
         np.save(f"{out_path}/true_class_weights", true_class_weights)
         np.save(f"{out_path}/class_weights_for_training_abs", class_weights_for_training_abs)
         np.save(f"{out_path}/class_weights_only_positive", class_weights_only_positive)
-        np.save(f"{out_path}/class_weights_for_val", class_weights_for_val)
+
+        np.save(f"{out_path}/class_weights_for_val", class_weights_for_val) # no absolute value
+        np.save(f"{out_path}/class_weights_for_val_abs", class_weights_for_val_abs) # new
+        np.save(f"{out_path}/class_weights_for_val_only_positive", class_weights_for_val_only_positive) # new
 
         if X_test is not None:
             np.save(f"{out_path}/X_test", X_test)
             np.save(f"{out_path}/rel_w_test", rel_w_test)
             np.save(f"{out_path}/y_test", y_test)
             np.save(f"{out_path}/class_weights_for_test", class_weights_for_test)
+            np.save(f"{out_path}/class_weights_for_test_abs", class_weights_for_test_abs) # new
+            np.save(f"{out_path}/class_weights_for_test_only_positive", class_weights_for_test_only_positive) # new
 
         # save the training mean ans std_dev. This will be used for standardizing data
         mean_std_dict = {

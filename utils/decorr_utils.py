@@ -1,4 +1,5 @@
 import torch
+import matplotlib.pyplot as plt
 
 
 # From DisCo github: https://github.com/gkasieczka/DisCo/blob/efdcda00ecdafffba61dd86b9404c6100eeb56f1/Disco.py
@@ -96,12 +97,12 @@ def distance_corr_multi(var_1, var_2_2d, normedweight, power=1, reduce='mean', c
 
     num = (ABavg * w.view(N,1)).mean(dim=0)                  # [C]
     den = torch.sqrt((AAavg * w).mean() * (BBavg * w.view(N,1)).mean(dim=0) + 1e-12)  # [C]
-    dCorr = num / (den + 1e-12)                              # [C]
+    dCorr: torch.Tensor = num / (den + 1e-12)                              # [C]
 
     if power == 2:
-        dCorr = dCorr * dCorr
+        dCorr: torch.Tensor = dCorr * dCorr
     elif power != 1:
-        dCorr = torch.pow(dCorr, power)
+        dCorr: torch.Tensor = torch.pow(dCorr, power)
 
     if reduce == 'mean':
         return dCorr.mean()
@@ -111,5 +112,88 @@ def distance_corr_multi(var_1, var_2_2d, normedweight, power=1, reduce='mean', c
         return dCorr.max()
     elif reduce == 'quadrature':
         return torch.sqrt((dCorr * dCorr).sum())
+    elif reduce == 'none':
+        return dCorr
     else:
         return dCorr
+
+
+if __name__ == "__main__":
+    # Test code
+    print("Testing distance correlation functions...")
+
+    N = 1000
+    x = torch.randn(N)
+    # y with 3 dims:
+    #  - first dim strongly correlated with x
+    #  - second dim weakly correlated with x
+    #  - third dim independent noise
+    y0 = x + 0.3 * torch.randn(N)        # strong correlation
+    y1 = 0.4 * x + 0.8 * torch.randn(N)  # weaker correlation
+    y2 = torch.randn(N)                  # independent
+    y = torch.stack([y0, y1, y2], dim=1)
+    # w = torch.ones(N)
+    w = 0.01 * torch.randn(N)
+    print(f"1/sum(w) before: {1.0/w.sum()}")
+    print(f"N/sum(w) before: {N/w.sum()}")
+    print(f"1/w.mean() before: {1.0/w.mean()}")
+    # w = w / w.mean()
+    # w = w * (N / w.sum())  # normalize weights
+
+    # print(f"w: {w}")
+    plt.hist(w.numpy(), bins=30)
+    plt.title("Weight Distribution")
+    plt.xlabel("Weight")
+    plt.ylabel("Frequency")
+    plt.savefig("weight_distribution.png")
+    plt.close()
+
+    print(f"x.shape = {x.shape}")
+    print(f"y.shape = {y.shape}")
+    print(f"w.shape = {w.shape}")
+
+    print(f"sum w = {w.sum()}")
+    print(f"mean w = {w.mean()}")
+    print(f"std w = {w.std()}")
+    print(f"min w = {w.min()}")
+    print(f"max w = {w.max()}")
+
+    # print(f"x = {x}")
+    # print(f"y = {y}")
+    # print(f"w = {w}")
+
+    dcor_1d = distance_corr(x, y[:,0], w, power=1)
+    print("-----")
+    dcor_multi_noreduce = distance_corr_multi(x, y, w, power=1, reduce='none')
+    # dcor_multi_mean = distance_corr_multi(x, y, w, power=1, reduce='mean')
+    # dcor_multi_sum = distance_corr_multi(x, y, w, power=1, reduce='sum')
+    # dcor_multi_max = distance_corr_multi(x, y, w, power=1, reduce='max')
+    # dcor_multi_quadrature = distance_corr_multi(x, y, w, power=1, reduce='quadrature')
+    print("===== Random arrays =====")
+    print(f"Distance correlation (1D): {dcor_1d}")
+    print(f"Distance correlation (multi-class, no reduce): {[d.item() for d in dcor_multi_noreduce]}")
+    # print(f"Distance correlation (multi-class, mean): {dcor_multi_mean}")
+    # print(f"Distance correlation (multi-class, sum): {dcor_multi_sum}")
+    # print(f"Distance correlation (multi-class, max): {dcor_multi_max}")
+    # print(f"Distance correlation (multi-class, quadrature): {dcor_multi_quadrature}")
+
+    # tests = []
+    # N_runs = 100
+    # for i in range(N_runs):
+    #     x = torch.randn(N, 3)
+    #     y = torch.randn(N, 3)
+    #     w = torch.ones(N)
+    #     w = w * (N / w.sum())  # normalize weights
+
+    #     # dcor_multi_noreduce = distance_corr_multi(x, y, w, power=1, reduce='none')
+    #     dcor_multi_noreduce = distance_corr(x, y, w, power=1)
+
+    #     tests.append(dcor_multi_noreduce)
+
+    # print(f"===== Average over {N_runs} runs =====")
+    # for i in range(3):
+    #     avg_dcor = sum(t[i] for t in tests) / len(tests)
+    #     print(f"Class {i}: Average distance correlation: {avg_dcor}")
+
+
+    print("-----")

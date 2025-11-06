@@ -1,9 +1,11 @@
 import os
+import sys
 import json
 import yaml
 import copy
 from typing import Union
 import numpy as np
+import matplotlib.pyplot as plt
 from tqdm.auto import tqdm
 import torch
 import torch.nn as nn
@@ -52,15 +54,27 @@ def apply_disco(
     """
     Apply the DisCo (Decorrelation) loss to the nominal loss.
     """
-    USE_MULTIDIM_DISCO = False # Experimental. Baseline only supports 1-dim decorrelation.
+    USE_MULTIDIM_DISCO = True # Experimental. Baseline only supports 1-dim decorrelation.
 
-    norm_w = weights_batch / weights_batch.mean()
+    norm_w = weights_batch / weights_batch.mean() # Normalize weights to mean 1
+    # print(f"[DEBUG] weights_batch shape: {weights_batch.shape}")
+    # print(f"[DEBUG] norm_w shape: {norm_w.shape}")
+    # print(f"[DEBUG] weights_batch sum: {weights_batch.sum().item()}") # BUG: ~0.0014 for train, ~0.003 for val
+    # print(f"[DEBUG] sum of norm_w: {norm_w.sum().item()}") # ~1024 for both train and val
+    # print(f"[DEBUG] norm_w mean: {norm_w.mean().item()}, std: {norm_w.std().item()}")
+    # print(f"[DEBUG] weights_batch mean: {weights_batch.mean().item()}, std: {weights_batch.std().item()}")
     if y_pred.ndim == 2 and y_pred.shape[1] > 1:
-        probs = F.softmax(y_pred, dim=1) # [N,C]
+        probs = F.softmax(y_pred, dim=1) # [N,C] # QUESTION: Can we get more effective DisCo without softmax?
         if USE_MULTIDIM_DISCO:
             if disco_signal_class_idx is None:
                 raise ValueError("disco_signal_class_idx must be provided when use_disco=True.")
-            d_corr = distance_corr_multi(disco_var_batch.reshape(-1), probs, norm_w, reduce=disco_reduce)
+            if isinstance(disco_signal_class_idx, int):
+                class_indices = [disco_signal_class_idx]
+            elif isinstance(disco_signal_class_idx, list):
+                class_indices = disco_signal_class_idx
+            else:
+                raise ValueError("disco_signal_class_idx must be int or list of int when y_pred is multi-dimensional.")
+            d_corr = distance_corr_multi(disco_var_batch.reshape(-1), probs[:, class_indices], norm_w, reduce=disco_reduce)
         else:
             if isinstance(disco_signal_class_idx, int):
                 class_indices = [disco_signal_class_idx]
@@ -73,9 +87,9 @@ def apply_disco(
         # Single output (binary classification)
         probs = torch.sigmoid(y_pred).reshape(-1) # [N]
         d_corr = distance_corr(disco_var_batch.reshape(-1), probs, norm_w.reshape(-1))
-    total_loss = loss_nominal + decorr_lambda * d_corr
+    total_weighted_loss = loss_nominal + decorr_lambda * d_corr
 
-    return total_loss, d_corr
+    return total_weighted_loss, d_corr
 
 
 # Training and evaluation functions
@@ -206,13 +220,13 @@ def train_one_epoch(
                 'Loss_no_abs': f'{weighted_loss_no_abs.item():.4f}'
             })
 
-        mean_batch_losses                       = float(np.mean(batch_losses))
-        mean_accs                               = float(np.mean(batch_accs))
-        mean_batch_losses_no_abs                = float(np.mean(batch_losses_no_abs))
-        mean_batch_losses_no_dist_corr          = float(np.mean(batch_losses_no_dist_corr))
-        mean_batch_losses_no_abs_no_dist_corr   = float(np.mean(batch_losses_no_abs_no_dist_corr))
-        mean_batch_dist_corr                    = float(np.mean([dc for dc in batch_dist_corr if dc is not None])) if use_disco else None
-        mean_batch_dist_corr_times_lambda       = float(np.mean([dc * decorr_lambda for dc in batch_dist_corr if dc is not None])) if use_disco else None
+    mean_batch_losses                       = float(np.mean(batch_losses))
+    mean_accs                               = float(np.mean(batch_accs))
+    mean_batch_losses_no_abs                = float(np.mean(batch_losses_no_abs))
+    mean_batch_losses_no_dist_corr          = float(np.mean(batch_losses_no_dist_corr))
+    mean_batch_losses_no_abs_no_dist_corr   = float(np.mean(batch_losses_no_abs_no_dist_corr))
+    mean_batch_dist_corr                    = float(np.mean([dc for dc in batch_dist_corr if dc is not None])) if use_disco else None
+    mean_batch_dist_corr_times_lambda       = float(np.mean([dc * decorr_lambda for dc in batch_dist_corr if dc is not None])) if use_disco else None
 
     return (
         mean_batch_losses, 
@@ -221,7 +235,7 @@ def train_one_epoch(
         mean_batch_losses_no_dist_corr,
         mean_batch_losses_no_abs_no_dist_corr,
         mean_batch_dist_corr,
-        mean_batch_dist_corr_times_lambda
+        mean_batch_dist_corr_times_lambda,
     )
 
 
@@ -237,8 +251,6 @@ def evaluate(
         Union[int, list[int], None]=0, 
         disco_reduce: str='mean'
     ) -> tuple[float, float, float, Union[float, None], Union[float, None]]:
-    USE_MULTIDIM_DISCO = False # Experimental. Baseline only supports 1-dim decorrelation.
-
     model.eval()
     val_losses = []
     val_accs = []
@@ -310,14 +322,14 @@ def evaluate(
                     'Acc': f'{weighted_acc.item():.4f}',
                 })
 
-            mean_losses                 = float(np.mean(val_losses))
-            mean_accs                   = float(np.mean(val_accs))
-            mean_losses_no_dist_corr    = float(np.mean(val_losses_no_dist_corr))
-            mean_dist_corr              = float(np.mean(val_dist_corr)) if d_corr is not None else None
-            mean_dist_corr_times_lambda = float(np.mean(val_dist_corr_times_lambda)) if d_corr is not None else None
+        mean_losses                 = float(np.mean(val_losses))
+        mean_accs                   = float(np.mean(val_accs))
+        mean_losses_no_dist_corr    = float(np.mean(val_losses_no_dist_corr))
+        mean_dist_corr              = float(np.mean(val_dist_corr)) if d_corr is not None else None
+        mean_dist_corr_times_lambda = float(np.mean(val_dist_corr_times_lambda)) if d_corr is not None else None
 
     return (
-        mean_losses,
+        mean_losses, # Includes distance correlation if use_disco=True
         mean_accs,
         mean_losses_no_dist_corr,
         mean_dist_corr,
@@ -453,6 +465,26 @@ def save_checkpoint(**kwargs):
     print(f'Checkpoint saved to {_file_path}')
 
 
+def _validate_training_config(training_config: dict):
+    required_keys = [
+        "random_seed",
+        "weight_scheme",
+        "cuda_device"
+    ]
+    for key in required_keys:
+        if key not in training_config:
+            raise ValueError(f"Missing required key '{key}' in training configuration.")
+    
+    # Multi-dependent checks
+    if training_config.get("use_DisCo", False):
+        if training_config.get("decorr_lambda") is None:
+            raise ValueError("Missing key in training_config.yaml. decorr_lambda must be specified when use_DisCo is True.")
+        if training_config.get("disco_reduce_method") is None:
+            raise ValueError("Missing key in training_config.yaml. disco_reduce_method must be specified when use_DisCo is True.")
+        if training_config.get("disco_decorr_class_idx") is None:
+            raise ValueError("Missing key in training_config.yaml. disco_decorr_class_idx must be specified when use_DisCo is True.")
+
+
 if __name__ == "__main__":
 
     import argparse
@@ -469,14 +501,22 @@ if __name__ == "__main__":
     with open(f"{args.job_config_path}", 'r') as f:
         job_config = yaml.safe_load(f)
 
-    seed = training_config["random_seed"]
-    weight_scheme = training_config["weight_scheme"]
-    max_epoch = training_config.get("max_epoch", 500)
-    use_disco = training_config.get("use_DisCo", False)
-    decorr_lambda = training_config.get("decorr_lambda", 0.1)
+    _validate_training_config(training_config)
+
+    # TODO: Add config file archiver
+
+    seed:                   int             = training_config["random_seed"]
+    weight_scheme:          str             = training_config["weight_scheme"]
+    max_epoch:              int             = training_config.get("max_epoch", 500)
+    use_disco:              bool            = training_config.get("use_DisCo", False)
+    decorr_lambda:          float           = training_config.get("decorr_lambda", 0.1)
+    disco_reduce_method:    str             = training_config.get("decorr_reduce_method", "mean")
+    disco_decorr_class_idx: list[int] | int = training_config.get("disco_decorr_class_idx", 0) # 0 for signal, [0,1,2,3] for all classes, etc.
 
     # --- REPROD SETUP ---
-    import random, numpy as np, torch
+    import random
+    import numpy as np
+    import torch
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -512,9 +552,11 @@ if __name__ == "__main__":
     # set weight scheme for training
     if weight_scheme == "weighted_abs":
         class_weights_for_training = np.load(f'{input_path}/class_weights_for_training_abs.npy')
+        class_weights_for_val = np.load(f'{input_path}/class_weights_for_val_abs.npy') # WITH absolute value
 
     elif weight_scheme == "weighted_only_positive":
         class_weights_for_training = np.load(f'{input_path}/class_weights_only_positive.npy')
+        class_weights_for_val = np.load(f'{input_path}/class_weights_for_val_only_positive.npy')
 
     elif weight_scheme == "weighted_CRUW_abs":
         # to be completed
@@ -524,8 +566,10 @@ if __name__ == "__main__":
         # to be completed
         pass
 
-    class_weights_for_train_no_aboslute = np.load(f'{input_path}/true_class_weights.npy')
-    class_weights_for_val = np.load(f'{input_path}/class_weights_for_val.npy')
+    # class_weights_for_{training,val} should be directly comparable
+
+    class_weights_for_train_no_absolute = np.load(f'{input_path}/true_class_weights.npy')
+    class_weights_for_val_no_absolute = np.load(f'{input_path}/class_weights_for_val.npy') # WITHOUT absolute value
 
     # Convert targets to class indices (if one-hot encoded)
     y_train = np.argmax(y_train, axis=1)
@@ -537,8 +581,9 @@ if __name__ == "__main__":
     y_train = torch.tensor(y_train, dtype=torch.long)
     y_val = torch.tensor(y_val, dtype=torch.long)
     class_weights_for_training = torch.tensor(class_weights_for_training, dtype=torch.float32)
-    class_weights_for_train_no_aboslute = torch.tensor(class_weights_for_train_no_aboslute, dtype=torch.float32)
+    class_weights_for_train_no_absolute = torch.tensor(class_weights_for_train_no_absolute, dtype=torch.float32)
     class_weights_for_val = torch.tensor(class_weights_for_val, dtype=torch.float32)
+    class_weights_for_val_no_absolute = torch.tensor(class_weights_for_val_no_absolute, dtype=torch.float32)
 
     # Load input features (optional)
     with open(f'{input_path}/input_vars.txt', 'r') as f:
@@ -576,14 +621,102 @@ if __name__ == "__main__":
         disco_var_train, disco_var_val = None, None
 
     # Create datasets
-    train_dataset = CustomDataset(X_train, y_train, class_weights_for_training, class_weights_for_train_no_aboslute, disco_var=disco_var_train)
-    val_dataset = CustomDataset(X_val, y_val, class_weights_for_val, disco_var=disco_var_val)
+    train_dataset = CustomDataset(X_train, y_train, class_weights_for_training, class_weights_for_train_no_absolute, disco_var=disco_var_train)
+    val_dataset = CustomDataset(X_val, y_val, class_weights_for_val, class_weights_for_val_no_absolute, disco_var=disco_var_val)
 
     # Create data loaders
     g = torch.Generator().manual_seed(seed)
     batch_size = 1024 #16384 # 8192 # 32768 # 1024 #16384
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, generator=g)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+
+
+    # Debugging sum of weights per batch issue
+    all_weights_batch_train = np.array([])
+    all_weights_batch_train_no_abs = np.array([])
+    all_weights_batch_val = np.array([])
+    all_weights_batch_val_no_abs = np.array([])
+    for idx, (X_batch, y_batch, weights_batch, weights_batch_no_abs, disco_var_batch) in enumerate(train_loader):
+        # print(idx)
+        # print(f"[DEBUG] weights_batch sum (from dataset): {weights_batch.sum().item()}")
+        # print(f"type(weights_batch): {type(weights_batch)}")
+        # print(f"type(weights_batch.numpy()): {type(weights_batch.numpy())}")
+        # print(f"weights_batch.shape: {weights_batch.shape}")
+        # print(f"weights_batch.numpy().shape: {weights_batch.numpy().shape}")
+        # print(f"weights_batch.numpy(): {weights_batch.numpy()}")
+        # print(f"weights_batch.sum().item(): {weights_batch.sum().item()}")
+        all_weights_batch_train = np.append(all_weights_batch_train, weights_batch.numpy())
+        all_weights_batch_train_no_abs = np.append(all_weights_batch_train_no_abs, weights_batch_no_abs.numpy())
+        if idx >= 1000:
+            print("break after 1000 batches")
+            break
+    for idx, (X_batch, y_batch, weights_batch, weights_batch_no_abs, disco_var_batch) in enumerate(val_loader):
+        # print(idx)
+        # print(f"[DEBUG] weights_batch sum (from dataset - val): {weights_batch.sum().item()}")
+        all_weights_batch_val = np.append(all_weights_batch_val, weights_batch.numpy())
+        all_weights_batch_val_no_abs = np.append(all_weights_batch_val_no_abs, weights_batch_no_abs.numpy())
+        if idx >= 1000:
+            print("break after 1000 batches")
+            break
+
+    # delta = 0.0005
+    # for item in all_weights_batch_train:
+    #     if item 
+
+    print(f"Total number of weights in train batches (first 10 batches): {len(all_weights_batch_train)}")
+
+    # Manually bin
+    nbins = 100
+    min_weight = -0.000100
+    max_weight =  0.000100
+    edges = np.linspace(min_weight, max_weight, nbins + 1)
+    hist_train, _ = np.histogram(all_weights_batch_train, bins=edges)
+    hist_val, _ = np.histogram(all_weights_batch_val, bins=edges)
+    hist_train_no_abs, _ = np.histogram(all_weights_batch_train_no_abs, bins=edges)
+    hist_val_no_abs, _ = np.histogram(all_weights_batch_val_no_abs, bins=edges)
+
+    centers = (edges[:-1] + edges[1:]) / 2.0
+
+    # Statistical (Poisson) uncertainty: sigma = sqrt(N)
+    eps = 1e-1  # small floor to allow plotting on log scale
+    y_train = hist_train.astype(float) + eps
+    y_val = hist_val.astype(float) + eps
+    y_train_no_abs = hist_train_no_abs.astype(float) + eps
+    y_val_no_abs = hist_val_no_abs.astype(float) + eps
+
+    err_train = np.sqrt(hist_train).astype(float)
+    err_val = np.sqrt(hist_val).astype(float)
+    err_train_no_abs = np.sqrt(hist_train_no_abs).astype(float)
+    err_val_no_abs = np.sqrt(hist_val_no_abs).astype(float)
+
+    # Ensure a minimum error for zero-count bins so they are visible on log scale
+    err_train[err_train == 0] = eps
+    err_val[err_val == 0] = eps
+    err_train_no_abs[err_train_no_abs == 0] = eps
+    err_val_no_abs[err_val_no_abs == 0] = eps
+
+    plt.figure(figsize=(10,6))
+    plt.step(centers, y_train, where='mid', label='Train', color='blue', alpha=0.7)
+    plt.errorbar(centers, y_train, yerr=err_train, fmt='none', ecolor='blue', alpha=0.6, capsize=2)
+
+    plt.step(centers, y_val, where='mid', label='Validation', color='orange', alpha=0.7)
+    plt.errorbar(centers, y_val, yerr=err_val, fmt='none', ecolor='orange', alpha=0.6, capsize=2)
+
+    plt.step(centers, y_train_no_abs, where='mid', label='Train (No Abs)', color='green', alpha=0.7)
+    plt.errorbar(centers, y_train_no_abs, yerr=err_train_no_abs, fmt='none', ecolor='green', alpha=0.6, capsize=2)
+
+    plt.step(centers, y_val_no_abs, where='mid', label='Validation (No Abs)', color='red', alpha=0.7)
+    plt.errorbar(centers, y_val_no_abs, yerr=err_val_no_abs, fmt='none', ecolor='red', alpha=0.6, capsize=2)
+
+    plt.xlabel('Weight value', loc="center")
+    plt.ylabel('Frequency')
+    plt.title('Distribution of Weights per Sample')
+    plt.legend()
+    plt.yscale('log')
+    plt.tight_layout()
+    plt.savefig(f'{path_to_checkpoint}/weights_per_sample_distribution.png')
+    plt.close()
+
 
     # Define model, loss function, optimizer, and scheduler
     best_model = MLP(input_size, best_num_layers, best_num_nodes, output_size, best_act_fn, best_dropout_prob).to(device)
@@ -619,8 +752,8 @@ if __name__ == "__main__":
             epoch,
             use_disco=use_disco,
             decorr_lambda=decorr_lambda,
-            disco_signal_class_idx=0,
-            disco_reduce='mean'
+            disco_signal_class_idx=disco_decorr_class_idx,
+            disco_reduce=disco_reduce_method
         )
 
         train_loss, train_acc, train_loss_no_absolute, train_loss_no_dist_corr, train_loss_no_abs_no_dist_corr, train_dist_corr, train_dist_corr_times_lambda = packed_metrics
@@ -646,8 +779,8 @@ if __name__ == "__main__":
             epoch,
             use_disco=use_disco,
             decorr_lambda=decorr_lambda,
-            disco_signal_class_idx=0,
-            disco_reduce='mean'
+            disco_signal_class_idx=disco_decorr_class_idx,
+            disco_reduce=disco_reduce_method
         )
         val_loss_hist.append(val_loss)
         val_acc_hist.append(val_acc)
@@ -662,6 +795,7 @@ if __name__ == "__main__":
         best_scheduler.step(val_loss)
         current_lr = best_optimizer.param_groups[0]['lr']
         lr_hist.append(current_lr)
+        print('-'*80)
         print(f"Epoch {epoch}: Current learning rate = {current_lr}")
 
         if val_dist_corr is not None and val_dist_corr < best_dist_corr:
@@ -680,8 +814,8 @@ if __name__ == "__main__":
             break
 
         print(f"Epoch {epoch} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
-        print(f"Epoch {epoch} - Train Acc: {train_acc:.4f}, Val Acc: {val_acc:.4f}", '\n')
-        print(f"Epoch {epoch} - Train Loss no abs: {train_loss_no_absolute:.4f}", '\n')
+        print(f"Epoch {epoch} - Train Acc: {train_acc:.4f}, Val Acc: {val_acc:.4f}")
+        print(f"Epoch {epoch} - Train Loss no abs: {train_loss_no_absolute:.4f}")
         if use_disco:
             print(f"Epoch {epoch} - Train Dist Corr: {train_dist_corr:.4f}, Val Dist Corr: {val_dist_corr:.4f}")
             print(f"Epoch {epoch} - (no dist corr) Train Loss: {train_loss_no_dist_corr:.4f}, Val Loss: {val_loss_no_dist_corr:.4f}")
@@ -729,6 +863,7 @@ if __name__ == "__main__":
                 dry_run=False,
                 epoch=epoch,
             )
+        print()
 
 
 

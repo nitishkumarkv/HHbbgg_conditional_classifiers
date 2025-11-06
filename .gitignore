@@ -7,9 +7,11 @@ Version_20250524_MVAID_forPreApp/*
 .pylintrc
 .vscode/
 HHbbgg_classifier.yaml
+condor/
 
 # Notebooks
 merge_multiclass.ipynb
 sculpting.ipynb
 notebooks/gifs.ipynb
 notebooks/nolumi.ipynb
+categorisation/bayesian_categorization.py
