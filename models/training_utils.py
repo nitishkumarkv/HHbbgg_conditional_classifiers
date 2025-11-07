@@ -16,7 +16,7 @@ import torch.nn.functional as F
 from torch.cuda.amp import autocast, GradScaler
 
 from models.mlp import MLP
-from utils.decorr_utils import distance_corr, distance_corr_multi
+from utils.decorr_utils import distance_corr, distance_corr_multi, reduce_disco_scores
 from models import mlp_plotter
 from utils.predictions import save_predictions
 
@@ -44,6 +44,34 @@ class CustomDataset(Dataset):
             return self.X[idx], self.y[idx], self.sample_weights[idx]
 
 
+def _plot_norm_weights_for_disco(weights: torch.Tensor):
+    """This is a diagnostic plot. Do not call it every batch during training apart from debugging efforts."""
+    fname = "norm_weights_disco_0.png"
+    n = 0
+    while os.path.exists(fname):
+        n += 1
+        fname = f"norm_weights_disco_{n}.png"
+
+    plt.figure(figsize=(8,6))
+    plt.hist(weights.cpu().numpy(), bins=100, histtype='stepfilled', alpha=0.7)
+    plt.xlabel("Normalized Weights for DisCo", fontsize=14)
+    plt.ylabel("Counts", fontsize=14)
+    plt.yscale('log')
+    plt.title("Distribution of Normalized Weights used in DisCo Calculation", fontsize=16)
+    plt.savefig(fname)
+    plt.close()
+
+
+def _get_bkg_mask(y_true: torch.Tensor) -> torch.Tensor:
+    """Get boolean mask for background events only, assuming y_true is class indices.
+    0 -> nonRes_score   (bkg)
+    1 -> ttH_score      (bkg)
+    2 -> singleH_score  (bkg)
+    3 -> HH_score       (sig)
+    """
+    return (y_true == 0) | (y_true == 1) | (y_true == 2)
+
+
 def apply_disco(
         loss_nominal: torch.Tensor,
         y_pred: torch.Tensor,
@@ -51,14 +79,30 @@ def apply_disco(
         disco_var_batch: torch.Tensor,
         decorr_lambda: float,
         disco_signal_class_idx: Union[int, list[int], None],
+        y_true: Union[torch.Tensor, None]=None,
         disco_reduce: str='mean'
     ) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Apply the DisCo (Decorrelation) loss to the nominal loss.
     """
-    USE_MULTIDIM_DISCO = True # Experimental. Baseline only supports 1-dim decorrelation.
+    # Experimental flags
+    USE_MULTIDIM_DISCO = True # DisCo score uses multiple target classes instead of just one
+    USE_BKG_MASK = True # Only bkg MC events contribute to DisCo score
+    USE_PRED_WITHOUT_SOFTMAX = True # Use raw model outputs instead of softmax probabilities for DisCo calculation
+
+    if USE_BKG_MASK and y_true is None:
+        raise ValueError(
+            "Must provide target truths (y_true) when using DisCo background-only mask (USE_BKG_MASK = True). "
+            + "DisCo loss component only counts background MC events when background-only mask is enabled."
+        )
+
+    if USE_BKG_MASK and y_true is not None:
+        bkg_mask = _get_bkg_mask(y_true)
+    else:
+        bkg_mask = torch.ones_like(disco_var_batch, dtype=torch.bool)
 
     norm_w = weights_batch / weights_batch.mean() # Normalize weights to mean 1
+    # _plot_norm_weights_for_disco(norm_w) # COMMENT OUT WHEN TRAINING NORMALLY
     # print(f"[DEBUG] weights_batch shape: {weights_batch.shape}")
     # print(f"[DEBUG] norm_w shape: {norm_w.shape}")
     # print(f"[DEBUG] weights_batch sum: {weights_batch.sum().item()}") # BUG: ~0.0014 for train, ~0.003 for val
@@ -66,7 +110,20 @@ def apply_disco(
     # print(f"[DEBUG] norm_w mean: {norm_w.mean().item()}, std: {norm_w.std().item()}")
     # print(f"[DEBUG] weights_batch mean: {weights_batch.mean().item()}, std: {weights_batch.std().item()}")
     if y_pred.ndim == 2 and y_pred.shape[1] > 1:
-        probs = F.softmax(y_pred, dim=1) # [N,C] # QUESTION: Can we get more effective DisCo without softmax?
+
+        if USE_PRED_WITHOUT_SOFTMAX:
+            probs = y_pred
+        else:
+            probs = F.softmax(y_pred, dim=1) # [N,C] # QUESTION: Can we get more effective DisCo without softmax?
+
+        # if USE_BKG_MASK:
+        #     disco_var_batch = disco_var_batch[bkg_mask]
+        #     probs = probs[bkg_mask]
+        #     norm_w = norm_w[bkg_mask]
+        disco_var_batch = disco_var_batch[bkg_mask]
+        probs = probs[bkg_mask]
+        norm_w = norm_w[bkg_mask]
+
         if USE_MULTIDIM_DISCO:
             if disco_signal_class_idx is None:
                 raise ValueError("disco_signal_class_idx must be provided when use_disco=True.")
@@ -76,7 +133,8 @@ def apply_disco(
                 class_indices = disco_signal_class_idx
             else:
                 raise ValueError("disco_signal_class_idx must be int or list of int when y_pred is multi-dimensional.")
-            d_corr = distance_corr_multi(disco_var_batch.reshape(-1), probs[:, class_indices], norm_w, reduce=disco_reduce)
+            d_corr_vec = distance_corr_multi(disco_var_batch.reshape(-1), probs[:, class_indices], norm_w, reduce="none") #, reduce=disco_reduce)
+            d_corr = reduce_disco_scores(d_corr_vec, disco_reduce)
         else:
             if isinstance(disco_signal_class_idx, int):
                 class_indices = [disco_signal_class_idx]
@@ -84,12 +142,28 @@ def apply_disco(
                 raise NotImplementedError("Multi-class DisCo with list of indices not implemented without USE_MULTIDIM_DISCO=True.")
             else:
                 raise ValueError("disco_signal_class_idx must be int or list of int when y_pred is multi-dimensional.")
-            d_corr = distance_corr_multi(disco_var_batch.reshape(-1), probs[:, class_indices], norm_w, reduce=disco_reduce)
+            d_corr_vec = distance_corr_multi(disco_var_batch.reshape(-1), probs[:, class_indices], norm_w) #, reduce=disco_reduce)
+            d_corr = reduce_disco_scores(d_corr_vec, disco_reduce)
+
     else:
         # Single output (binary classification)
-        probs = torch.sigmoid(y_pred).reshape(-1) # [N]
+        if USE_PRED_WITHOUT_SOFTMAX:
+            probs = y_pred
+        else:
+            probs = torch.sigmoid(y_pred).reshape(-1) # [N]
+
+        # if USE_BKG_MASK:
+        #     disco_var_batch = disco_var_batch[bkg_mask]
+        #     probs = probs[bkg_mask]
+        #     norm_w = norm_w[bkg_mask]
+        disco_var_batch = disco_var_batch[bkg_mask]
+        probs = probs[bkg_mask]
+        norm_w = norm_w[bkg_mask]
+
         d_corr = distance_corr(disco_var_batch.reshape(-1), probs, norm_w.reshape(-1))
     total_weighted_loss = loss_nominal + decorr_lambda * d_corr
+
+    # print(f"[DEBUG] Multidim DisCo scores: {d_corr_vec.item()}") # COMMENT OUT WHEN TRAINING NORMALLY
 
     return total_weighted_loss, d_corr
 
@@ -192,7 +266,8 @@ def train_one_epoch(
                     disco_var_batch,
                     decorr_lambda,
                     disco_signal_class_idx,
-                    disco_reduce
+                    y_true=y_batch,
+                    disco_reduce=disco_reduce
                 )
                 assert d_corr is not None, "d_corr should not be None when using DisCo. Something is wrong inside the apply_disco function."
             else:
@@ -317,7 +392,8 @@ def evaluate(
                     disco_var_batch,
                     decorr_lambda,
                     disco_signal_class_idx,
-                    disco_reduce
+                    y_true=y_batch,
+                    disco_reduce=disco_reduce
                 )
             else:
                 total_weighted_loss = weighted_loss
@@ -674,90 +750,82 @@ if __name__ == "__main__":
 
 
     # Debugging sum of weights per batch issue
-    all_weights_batch_train = np.array([])
-    all_weights_batch_train_no_abs = np.array([])
-    all_weights_batch_val = np.array([])
-    all_weights_batch_val_no_abs = np.array([])
-    for idx, (X_batch, y_batch, weights_batch, weights_batch_no_abs, disco_var_batch) in enumerate(train_loader):
-        # print(idx)
-        # print(f"[DEBUG] weights_batch sum (from dataset): {weights_batch.sum().item()}")
-        # print(f"type(weights_batch): {type(weights_batch)}")
-        # print(f"type(weights_batch.numpy()): {type(weights_batch.numpy())}")
-        # print(f"weights_batch.shape: {weights_batch.shape}")
-        # print(f"weights_batch.numpy().shape: {weights_batch.numpy().shape}")
-        # print(f"weights_batch.numpy(): {weights_batch.numpy()}")
-        # print(f"weights_batch.sum().item(): {weights_batch.sum().item()}")
-        all_weights_batch_train = np.append(all_weights_batch_train, weights_batch.numpy())
-        all_weights_batch_train_no_abs = np.append(all_weights_batch_train_no_abs, weights_batch_no_abs.numpy())
-        if idx >= 1000:
-            print("break after 1000 batches")
-            break
-    for idx, (X_batch, y_batch, weights_batch, weights_batch_no_abs, disco_var_batch) in enumerate(val_loader):
-        # print(idx)
-        # print(f"[DEBUG] weights_batch sum (from dataset - val): {weights_batch.sum().item()}")
-        all_weights_batch_val = np.append(all_weights_batch_val, weights_batch.numpy())
-        all_weights_batch_val_no_abs = np.append(all_weights_batch_val_no_abs, weights_batch_no_abs.numpy())
-        if idx >= 1000:
-            print("break after 1000 batches")
-            break
+    PLOT_WEIGHT_COMPARISON = False
+    if PLOT_WEIGHT_COMPARISON:
+        all_weights_batch_train = np.array([])
+        all_weights_batch_train_no_abs = np.array([])
+        all_weights_batch_val = np.array([])
+        all_weights_batch_val_no_abs = np.array([])
+        for idx, (X_batch, y_batch, weights_batch, weights_batch_no_abs, disco_var_batch) in enumerate(train_loader):
+            all_weights_batch_train = np.append(all_weights_batch_train, weights_batch.numpy())
+            all_weights_batch_train_no_abs = np.append(all_weights_batch_train_no_abs, weights_batch_no_abs.numpy())
+            if idx >= 1000:
+                print("break after 1000 batches")
+                break
+        for idx, (X_batch, y_batch, weights_batch, weights_batch_no_abs, disco_var_batch) in enumerate(val_loader):
+            all_weights_batch_val = np.append(all_weights_batch_val, weights_batch.numpy())
+            all_weights_batch_val_no_abs = np.append(all_weights_batch_val_no_abs, weights_batch_no_abs.numpy())
+            if idx >= 1000:
+                print("break after 1000 batches")
+                break
 
-    # delta = 0.0005
-    # for item in all_weights_batch_train:
-    #     if item 
+        # delta = 0.0005
+        # for item in all_weights_batch_train:
+        #     if item 
 
-    print(f"Total number of weights in train batches (first 10 batches): {len(all_weights_batch_train)}")
+        print(f"Total number of weights in train batches (first 10 batches): {len(all_weights_batch_train)}")
 
-    # Manually bin
-    nbins = 100
-    min_weight = -0.000100
-    max_weight =  0.000100
-    edges = np.linspace(min_weight, max_weight, nbins + 1)
-    hist_train, _ = np.histogram(all_weights_batch_train, bins=edges)
-    hist_val, _ = np.histogram(all_weights_batch_val, bins=edges)
-    hist_train_no_abs, _ = np.histogram(all_weights_batch_train_no_abs, bins=edges)
-    hist_val_no_abs, _ = np.histogram(all_weights_batch_val_no_abs, bins=edges)
+        # Manually bin
+        nbins = 100
+        min_weight = -0.000100
+        max_weight =  0.000100
+        edges = np.linspace(min_weight, max_weight, nbins + 1)
+        hist_train, _ = np.histogram(all_weights_batch_train, bins=edges)
+        hist_val, _ = np.histogram(all_weights_batch_val, bins=edges)
+        hist_train_no_abs, _ = np.histogram(all_weights_batch_train_no_abs, bins=edges)
+        hist_val_no_abs, _ = np.histogram(all_weights_batch_val_no_abs, bins=edges)
 
-    centers = (edges[:-1] + edges[1:]) / 2.0
+        centers = (edges[:-1] + edges[1:]) / 2.0
 
-    # Statistical (Poisson) uncertainty: sigma = sqrt(N)
-    eps = 1e-1  # small floor to allow plotting on log scale
-    y_train = hist_train.astype(float) + eps
-    y_val = hist_val.astype(float) + eps
-    y_train_no_abs = hist_train_no_abs.astype(float) + eps
-    y_val_no_abs = hist_val_no_abs.astype(float) + eps
+        # Statistical (Poisson) uncertainty: sigma = sqrt(N)
+        eps = 1e-1  # small floor to allow plotting on log scale
+        y_train = hist_train.astype(float) + eps
+        y_val = hist_val.astype(float) + eps
+        y_train_no_abs = hist_train_no_abs.astype(float) + eps
+        y_val_no_abs = hist_val_no_abs.astype(float) + eps
 
-    err_train = np.sqrt(hist_train).astype(float)
-    err_val = np.sqrt(hist_val).astype(float)
-    err_train_no_abs = np.sqrt(hist_train_no_abs).astype(float)
-    err_val_no_abs = np.sqrt(hist_val_no_abs).astype(float)
+        err_train = np.sqrt(hist_train).astype(float)
+        err_val = np.sqrt(hist_val).astype(float)
+        err_train_no_abs = np.sqrt(hist_train_no_abs).astype(float)
+        err_val_no_abs = np.sqrt(hist_val_no_abs).astype(float)
 
-    # Ensure a minimum error for zero-count bins so they are visible on log scale
-    err_train[err_train == 0] = eps
-    err_val[err_val == 0] = eps
-    err_train_no_abs[err_train_no_abs == 0] = eps
-    err_val_no_abs[err_val_no_abs == 0] = eps
+        # Ensure a minimum error for zero-count bins so they are visible on log scale
+        err_train[err_train == 0] = eps
+        err_val[err_val == 0] = eps
+        err_train_no_abs[err_train_no_abs == 0] = eps
+        err_val_no_abs[err_val_no_abs == 0] = eps
 
-    plt.figure(figsize=(10,6))
-    plt.step(centers, y_train, where='mid', label='Train', color='blue', alpha=0.7)
-    plt.errorbar(centers, y_train, yerr=err_train, fmt='none', ecolor='blue', alpha=0.6, capsize=2)
+        plt.figure(figsize=(10,6))
+        plt.step(centers, y_train, where='mid', label='Train', color='blue', alpha=0.7)
+        plt.errorbar(centers, y_train, yerr=err_train, fmt='none', ecolor='blue', alpha=0.6, capsize=2)
 
-    plt.step(centers, y_val, where='mid', label='Validation', color='orange', alpha=0.7)
-    plt.errorbar(centers, y_val, yerr=err_val, fmt='none', ecolor='orange', alpha=0.6, capsize=2)
+        plt.step(centers, y_val, where='mid', label='Validation', color='orange', alpha=0.7)
+        plt.errorbar(centers, y_val, yerr=err_val, fmt='none', ecolor='orange', alpha=0.6, capsize=2)
 
-    plt.step(centers, y_train_no_abs, where='mid', label='Train (No Abs)', color='green', alpha=0.7)
-    plt.errorbar(centers, y_train_no_abs, yerr=err_train_no_abs, fmt='none', ecolor='green', alpha=0.6, capsize=2)
+        plt.step(centers, y_train_no_abs, where='mid', label='Train (No Abs)', color='green', alpha=0.7)
+        plt.errorbar(centers, y_train_no_abs, yerr=err_train_no_abs, fmt='none', ecolor='green', alpha=0.6, capsize=2)
 
-    plt.step(centers, y_val_no_abs, where='mid', label='Validation (No Abs)', color='red', alpha=0.7)
-    plt.errorbar(centers, y_val_no_abs, yerr=err_val_no_abs, fmt='none', ecolor='red', alpha=0.6, capsize=2)
+        plt.step(centers, y_val_no_abs, where='mid', label='Validation (No Abs)', color='red', alpha=0.7)
+        plt.errorbar(centers, y_val_no_abs, yerr=err_val_no_abs, fmt='none', ecolor='red', alpha=0.6, capsize=2)
 
-    plt.xlabel('Weight value', loc="center")
-    plt.ylabel('Frequency')
-    plt.title('Distribution of Weights per Sample')
-    plt.legend()
-    plt.yscale('log')
-    plt.tight_layout()
-    plt.savefig(f'{path_to_checkpoint}/weights_per_sample_distribution.png')
-    plt.close()
+        plt.xlabel('Weight value', loc="center")
+        plt.ylabel('Frequency')
+        plt.title('Distribution of Weights per Sample')
+        plt.legend()
+        plt.yscale('log')
+        plt.tight_layout()
+        plt.savefig(f'{path_to_checkpoint}/weights_per_sample_distribution.png')
+        plt.close()
 
 
     # Define model, loss function, optimizer, and scheduler

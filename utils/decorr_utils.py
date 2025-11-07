@@ -46,6 +46,20 @@ def distance_corr(var_1,var_2,normedweight,power=1):
     return dCorr
 
 
+def reduce_disco_scores(tensor: torch.Tensor, mode: str):
+    if mode == 'mean':
+        return tensor.mean()
+    elif mode == 'sum':
+        return tensor.sum()
+    elif mode == 'max':
+        return tensor.max()
+    elif mode == 'quadrature':
+        return torch.sqrt((tensor * tensor).sum())
+    elif mode == 'none':
+        return tensor
+    else:
+        raise ValueError(f"Invalid reduce mode: {mode}")
+
 
 def distance_corr_multi(var_1, var_2_2d, normedweight, power=1, reduce='mean', class_indices=None):
     """
@@ -104,18 +118,7 @@ def distance_corr_multi(var_1, var_2_2d, normedweight, power=1, reduce='mean', c
     elif power != 1:
         dCorr: torch.Tensor = torch.pow(dCorr, power)
 
-    if reduce == 'mean':
-        return dCorr.mean()
-    elif reduce == 'sum':
-        return dCorr.sum()
-    elif reduce == 'max':
-        return dCorr.max()
-    elif reduce == 'quadrature':
-        return torch.sqrt((dCorr * dCorr).sum())
-    elif reduce == 'none':
-        return dCorr
-    else:
-        return dCorr
+    return reduce_disco_scores(dCorr, reduce)
 
 
 if __name__ == "__main__":
