@@ -669,8 +669,8 @@ class OptunaCategorizer:
         # Adjust spacing
         plt.tight_layout()
         # Save the figure
-        # plt.savefig(f"{save_path}category_summary_new.png") # original
-        plt.savefig(os.path.join(save_path, "category_summary_new.png"))
+        plt.savefig(f"{save_path}category_summary_new.png") # original
+        # plt.savefig(os.path.join(save_path, "category_summary_new.png"))
         plt.close(fig)
 
 
@@ -836,7 +836,8 @@ class OptunaCategorizer:
                 sig_peak_list,
                 bkg_side_list,
                 best_cut_params_list,
-                f"{cat_path}/run_{run}_")
+                f"{cat_path}/run_{run}_"
+            )
 
             run_significance_list.append(best_sig_values)
             run_best_params_list.append(best_cut_params_list)
@@ -859,10 +860,11 @@ class OptunaCategorizer:
         #plot_category_summary(best_sig_values, sig_peak_list, bkg_side_list, cat_path)
         # Plot summary with thresholds annotated on the significance plot.
         self.plot_category_summary_with_thresholds(best_sig_values,
-        sig_peak_list,
-        bkg_side_list,
-        best_cut_params_list,
-        cat_path)
+            sig_peak_list,
+            bkg_side_list,
+            best_cut_params_list,
+            f"{cat_path}/"
+        )
 
         # save the best cut parameters
         best_params_path = os.path.join(cat_path, "best_cut_params.txt")
