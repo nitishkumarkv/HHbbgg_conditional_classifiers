@@ -406,6 +406,7 @@ def save_checkpoint(**kwargs):
     _lr_hist: list[float] | None                = kwargs.get('lr_hist', None)
     _disco_in_loss: bool | None                 = kwargs.get('disco_in_loss', None)
     _file_path: str | None                      = kwargs.get('file_path', None)
+    _training_config: dict | None               = kwargs.get('training_config', None)
 
     assert _epoch is not None, "Epoch number must be provided"
     assert _model is not None, "Model must be provided"
@@ -414,6 +415,7 @@ def save_checkpoint(**kwargs):
     assert _lr_hist is not None, "Learning rate history must be provided"
     assert _disco_in_loss is not None, "Whether DisCo was used in loss must be provided as bool, not None"
     assert _file_path is not None, "File path for saving checkpoint must be provided"
+    assert _training_config is not None, "Training configuration must be provided"
 
     os.makedirs(os.path.dirname(_file_path), exist_ok=True)
 
@@ -490,6 +492,8 @@ def save_checkpoint(**kwargs):
 
         'train_acc_hist':               _train_acc_hist,
         'val_acc_hist':                 _val_acc_hist,
+
+        'training_config':              _training_config
     }
     torch.save(checkpoint, _file_path)
     print(f'Checkpoint saved to {_file_path}')
@@ -533,8 +537,6 @@ if __name__ == "__main__":
         job_config = yaml.safe_load(f)
 
     _validate_training_config(training_config)
-
-    # TODO: Add config file archiver
 
     seed:                   int             = training_config["random_seed"]
     weight_scheme:          str             = training_config["weight_scheme"]
@@ -892,6 +894,8 @@ if __name__ == "__main__":
                 best_weights=best_weights,
                 best_loss=best_loss,
                 best_dist_corr=best_dist_corr,
+
+                training_config=training_config
             )
             # TODO: Numpy save y_pred_train.npy, y_train.npy, y_pred_val.npy, and y_val.npy for checkpoint ROC plots
             mlp_plotter.run_condor_job(
@@ -933,6 +937,8 @@ if __name__ == "__main__":
         best_weights=best_weights,
         best_loss=best_loss,
         best_dist_corr=best_dist_corr,
+
+        training_config=training_config
         )
 
     save_predictions(best_model.state_dict(), path_to_checkpoint, training_config, input_path, batch_size=1024)
