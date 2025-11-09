@@ -1,3 +1,4 @@
+import os
 import torch
 from mlp import MLP
 import numpy as np
@@ -22,6 +23,12 @@ import yaml
 
 
 def get_prediction(model_dict_path, model_path, X):
+    """Generate multi-class predictions.
+
+    Supports passing either a torch.Tensor already on device or a numpy array / memmap.
+    If a numpy array is provided, it will be sliced and transferred to the GPU in
+    mini-batches, avoiding loading the entire feature matrix onto the device.
+    """
 
     if isinstance(model_dict_path, str):
         with open(model_dict_path, 'r') as f:
@@ -38,16 +45,28 @@ def get_prediction(model_dict_path, model_path, X):
     input_size = X.shape[1]
     output_size = 4
 
-    model = MLP(input_size, best_num_layers, best_num_nodes, output_size, best_act_fn, best_dropout_prob).to(device)
-    model.to(device)
+    # Resolve device (use global if defined, else default heuristic)
+    try:
+        dev = device  # type: ignore[name-defined]
+    except NameError:
+        dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = MLP(input_size, best_num_layers, best_num_nodes, output_size, best_act_fn, best_dropout_prob).to(dev)
+    model.to(dev)
     model_state = torch.load(model_path, weights_only=False)
     model.load_state_dict(model_state['model_state_dict'])
 
     model.eval()
-    batch_size = 1024
+    batch_size = int(os.getenv('PRED_BATCH_SIZE', '1024'))
     y_preds = []
-    for i in range(0, len(X), batch_size):
-        X_batch = X[i:i + batch_size].to(device)
+    is_torch = isinstance(X, torch.Tensor)
+    nrows = X.shape[0]
+    for i in range(0, nrows, batch_size):
+        if is_torch:
+            X_batch = X[i:i + batch_size].to(dev)
+        else:
+            # numpy / memmap path: create tensor per chunk
+            X_np = X[i:i + batch_size]
+            X_batch = torch.from_numpy(np.asarray(X_np, dtype=np.float32)).to(dev)
         with torch.no_grad():
             y_batch = model(X_batch)
             y_batch = F.softmax(y_batch, dim=1)
@@ -59,6 +78,10 @@ def get_prediction(model_dict_path, model_path, X):
     return y
 
 def get_prediction_binary(model_dict_path, model_path, X):
+    """Generate binary predictions.
+
+    Accepts torch.Tensor or numpy array / memmap and processes in mini-batches.
+    """
 
     if isinstance(model_dict_path, str):
         with open(model_dict_path, 'r') as f:
@@ -75,16 +98,26 @@ def get_prediction_binary(model_dict_path, model_path, X):
     input_size = X.shape[1]
     output_size = 1
 
-    model = MLP(input_size, best_num_layers, best_num_nodes, output_size, best_act_fn, best_dropout_prob).to(device)
-    model.to(device)
+    try:
+        dev = device  # type: ignore[name-defined]
+    except NameError:
+        dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = MLP(input_size, best_num_layers, best_num_nodes, output_size, best_act_fn, best_dropout_prob).to(dev)
+    model.to(dev)
     model_state = torch.load(model_path)
     model.load_state_dict(model_state['model_state_dict'])
 
     model.eval()
-    batch_size = 1024
+    batch_size = int(os.getenv('PRED_BATCH_SIZE', '1024'))
     y_preds = []
-    for i in range(0, len(X), batch_size):
-        X_batch = X[i:i + batch_size].to(device)
+    is_torch = isinstance(X, torch.Tensor)
+    nrows = X.shape[0]
+    for i in range(0, nrows, batch_size):
+        if is_torch:
+            X_batch = X[i:i + batch_size].to(dev)
+        else:
+            X_np = X[i:i + batch_size]
+            X_batch = torch.from_numpy(np.asarray(X_np, dtype=np.float32)).to(dev)
         with torch.no_grad():
             y_batch = model(X_batch)
             y_batch = torch.sigmoid(y_batch)
@@ -97,8 +130,8 @@ def get_prediction_binary(model_dict_path, model_path, X):
 
 def get_prediction_parquet(model_dict_path, model_path, X_path):
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    X = torch.tensor(np.load(X_path), dtype=torch.float32).to(device)
+    # No need to stage full tensor on GPU; pass memmap to get_prediction
+    X = np.load(X_path, mmap_mode='r')
     print(f"Getting prediction for {X_path}")
     pred = get_prediction(model_dict_path, model_path, X)
     print(np.sum(pred, axis=1))
@@ -142,7 +175,8 @@ if __name__ == "__main__":
                 device = torch.device('cuda:'+training_config["cuda_device"] if torch.cuda.is_available() else 'cpu')
                 #device = 'cpu'
                 print("Device: ", device)
-                X = torch.tensor(np.load(f'{inputs_path}/X.npy'), dtype=torch.float32).to(device)
+                # Memmap large feature matrix to avoid full GPU allocation
+                X = np.load(f'{inputs_path}/X.npy', mmap_mode='r')
 
                 print(f"Getting prediction for {sample} in {era} era")
                 #pred = get_prediction(model_dict_path, model_path, X)
@@ -156,7 +190,7 @@ if __name__ == "__main__":
         for data_sample in data_samples:
             inputs_path = f"{samples_path}/individual_samples_data/{data_sample}"
             device = torch.device('cuda:'+training_config["cuda_device"] if torch.cuda.is_available() else 'cpu')
-            X = torch.tensor(np.load(f'{inputs_path}/X.npy'), dtype=torch.float32).to(device)
+            X = np.load(f'{inputs_path}/X.npy', mmap_mode='r')
 
             print(f"Getting prediction for {data_sample}")
             #pred = get_prediction(model_dict_path, model_path, X)
@@ -178,7 +212,7 @@ if __name__ == "__main__":
                     device = torch.device('cuda:'+training_config["cuda_device"] if torch.cuda.is_available() else 'cpu')
                     #device = 'cpu'
                     print("Device: ", device)
-                    X = torch.tensor(np.load(f'{inputs_path}/X.npy'), dtype=torch.float32).to(device)
+                    X = np.load(f'{inputs_path}/X.npy', mmap_mode='r')
 
                     print(f"Getting prediction for {sample} in {era} era")
                     #pred = get_prediction(model_dict_path, model_path, X)

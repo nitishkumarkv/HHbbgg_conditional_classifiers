@@ -21,20 +21,21 @@ import numpy as np
 
 from models.mlp import MLP
 
-def _load_X_train_val(input_dir: str) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Load X_train and X_val, return as Tensors.
+def _load_X_train_val(input_dir: str) -> Tuple[np.ndarray, np.ndarray]:
+    """Load X_train and X_val using memory mapping for chunked access.
+
+    This avoids loading the full arrays into RAM; downstream code should slice
+    these arrays in batches and convert each slice to a torch.Tensor on the fly.
 
     Args:
         input_dir (str): Directory containing the input data.
 
     Returns:
-        Tuple[torch.Tensor, torch.Tensor]: X_train, X_val tensors.
+        Tuple[np.ndarray, np.ndarray]: Memory-mapped numpy arrays for X_train and X_val.
     """
-    X_train = np.load(os.path.join(input_dir, 'X_train.npy'))
-    X_val = np.load(os.path.join(input_dir, 'X_val.npy'))
+    X_train = np.load(os.path.join(input_dir, 'X_train.npy'), mmap_mode='r')
+    X_val = np.load(os.path.join(input_dir, 'X_val.npy'), mmap_mode='r')
 
-    X_train = torch.tensor(X_train, dtype=torch.float32)
-    X_val = torch.tensor(X_val, dtype=torch.float32)
     return X_train, X_val
 
 
@@ -53,8 +54,8 @@ def _load_y_train_val(input_dir: str) -> Tuple[torch.Tensor, torch.Tensor]:
     y_train = np.argmax(y_train, axis=1)
     y_val = np.argmax(y_val, axis=1)
 
-    y_train = torch.tensor(y_train, dtype=torch.long)
-    y_val = torch.tensor(y_val, dtype=torch.long)
+    y_train = torch.from_numpy(y_train.astype(np.int64))
+    y_val = torch.from_numpy(y_val.astype(np.int64))
     return y_train, y_val
 
 
@@ -67,7 +68,8 @@ def save_predictions_from_checkpoint(
     """
     Load a model from a checkpoint and save its predictions on the training data.
     """
-    checkpoint = torch.load(checkpoint_path)
+    # Load checkpoint to the appropriate device (safe on CPU as well)
+    checkpoint = torch.load(checkpoint_path, map_location='cpu')
     model = checkpoint['model_state_dict']
     checkpoint_dir = os.path.dirname(checkpoint_path)
 
@@ -113,16 +115,15 @@ def save_predictions(
     num_nodes = model_params['num_nodes']
     output_size = len(np.unique(y_train.numpy()))
     act_fn = getattr(nn, model_params['act_fn_name'])
-    lr = model_params['lr']
     dropout_prob = model_params['dropout_prob']
-    weight_decay = model_params['weight_decay']
     model = MLP(input_size, num_layers, num_nodes, output_size, act_fn, dropout_prob).to(device)
     model.load_state_dict(model_state_dict)
 
     model.eval()
     y_pred_train_probs = []
-    for i in range(0, len(X_train), batch_size):
-        X_batch = X_train[i:i + batch_size].to(device)
+    for i in range(0, X_train.shape[0], batch_size):
+        X_np = X_train[i:i + batch_size]
+        X_batch = torch.from_numpy(np.asarray(X_np, dtype=np.float32)).to(device)
         with torch.no_grad():
             y_batch = model(X_batch)
             y_batch = F.softmax(y_batch, dim=1)
@@ -130,8 +131,9 @@ def save_predictions(
     y_pred_train_probs = np.concatenate(y_pred_train_probs, axis=0)
 
     y_pred_val_probs = []
-    for i in range(0, len(X_val), batch_size):
-        X_batch = X_val[i:i + batch_size].to(device)
+    for i in range(0, X_val.shape[0], batch_size):
+        X_np = X_val[i:i + batch_size]
+        X_batch = torch.from_numpy(np.asarray(X_np, dtype=np.float32)).to(device)
         with torch.no_grad():
             y_batch = model(X_batch)
             y_batch = F.softmax(y_batch, dim=1)
