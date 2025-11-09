@@ -38,6 +38,21 @@ disco_reduce_method: mean # mean, max, sum, quadrature
 disco_decorr_class_idx: [0,1,2,3] # index of the class to decorrel, e.g. 0 for signal-only
 z_variables: # "Z dataset" variables to decorrelate against, e.g. mjj
 - nonResReg_dijet_mass_DNNreg 
+upweight_params: # conservative SR upweighting parameters
+    max_upweight: 10.0
+    min_upweight: 1.0 # values less than 1 will DECREASE the weight of events far from SR, so be careful
+    score_midpoint: # score value at which upweight reaches 50% of max_upweight
+        th_ggFHH: 0.85
+        th_nonRes: 0.15
+        th_ttH: 0.15
+        th_singleH: 0.15
+    score_90_percent: # score value at which upweight reaches 90% of max_upweight
+        th_ggFHH: 0.90
+        th_nonRes: 0.10
+        th_ttH: 0.10
+        th_singleH: 0.10
+
+
 
 samples_info: 
     samples_path: /eos/cms/store/group/phys_b2g/HHbbgg/HiggsDNA_parquet/v3/ # samples path
@@ -260,19 +275,6 @@ merge_samples:
         # y_proba: y_proba
         sample: sample
         score: score
-    # save_columns: # ff format; automatically adds all *weight* columns, so no need to list them here
-    #     - lumi # not in syst pqs
-    #     - event # not in syst pqs
-    #     - run # not in syst pqs
-    #     - mass
-    #     - dijet_mass # nonResReg_dijet_mass_DNNreg in pq
-    #     - year # not in syst pqs
-    #     # - is_boosted # not in syst pqs
-    #     # - y_proba # not in syst pqs
-    #     - sample # not in syst pqs
-    #     - score 
-    # finalfit_var_name_map: # old: new (FinalFit compatible)
-    #     nonResReg_dijet_mass_DNNreg: dijet_mass # rename nonResReg_dijet_mass_DNNreg to dijet_mass
     dijet_mass_key: nonResReg_dijet_mass_DNNreg # special variable; true name in events.parquet; renamed to dijet_mass for FF; must be a KEY in finalfit_var_name_map
     score_key: score # special variable for storing the multi-class scores
     score_idx_name_map: # mapping from score column index to class name for unpacking the score column
