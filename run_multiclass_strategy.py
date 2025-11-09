@@ -3,9 +3,9 @@ import argparse
 import subprocess
 import yaml
 
-from data.prepare_inputs import PrepareInputs
 
 def prepare_inputs(args: argparse.Namespace):
+    from data.prepare_inputs import PrepareInputs # pytorch heavy, import here to avoid unnecessary imports, pylint: disable=import-outside-toplevel
 
     config_path = args.config_path
     out_path = args.out_path
@@ -183,6 +183,7 @@ def perform_categorization(args):
 
 
 def perform_mjj_sculpting_study(args: argparse.Namespace):
+    from data.prepare_inputs import PrepareInputs # pytorch heavy, import here to avoid unnecessary imports, pylint: disable=import-outside-toplevel
     out_path = args.out_path
     config_path = args.config_path
 
