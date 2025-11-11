@@ -3,11 +3,12 @@ import os
 import argparse
 import subprocess
 import yaml
+import math
 
-def prepare_inputs(args):
+def prepare_inputs(args, out_path_override=None, mhh_var=None, mhh_range=None):
 
     config_path = args.config_path
-    out_path = args.out_path
+    out_path = out_path_override or args.out_path
 
     # create the output directory
     os.makedirs(out_path, exist_ok=True)
@@ -20,7 +21,9 @@ def prepare_inputs(args):
 
     prep_inputs = PrepareInputs(input_var_json=input_vars_path,
                                 training_info = training_config,
-                                outpath=out_path,)
+                                outpath=out_path,
+                                mhh_var=mhh_var,
+                                mhh_range=mhh_range)
     
     # prepare the inputs for training
     if args.prep_inputs_for_training:
@@ -146,11 +149,46 @@ if __name__ == "__main__":
         args.get_data_mc_plots = True
         args.get_score_shape_diff_kl = True
 
-    # prepare inputs
-    prepare_inputs(args)
+    # load training config to check for mHH binning
+    training_config_path = f"{args.config_path}/training_config.yaml"
+    with open(training_config_path, 'r') as f:
+        training_config = yaml.safe_load(f)
 
-    # perform training
-    perform_training(args)
+    mhh_binning = training_config.get('mHH_binning', None)
 
-    # perform categorisation
-    perform_categorisation(args)
+    if mhh_binning is None:
+        # normal single-run behavior
+        prepare_inputs(args)
+        perform_training(args)
+        perform_categorisation(args)
+    else:
+        # build bin edges: assume edges list defines internal edges, with implicit 0 and inf
+        variable = mhh_binning.get('variable', None)
+        edges = mhh_binning.get('edges', [])
+
+        # validate edges
+        if not isinstance(edges, list):
+            raise ValueError('mHH_binning.edges must be a list of numbers')
+
+        # construct boundaries [0, *edges, inf]
+        boundaries = [0.0] + [float(x) for x in edges] + [math.inf]
+
+        for i in range(len(boundaries)-1):
+            lo = boundaries[i]
+            hi = boundaries[i+1]
+            hi_name = 'inf' if not math.isfinite(hi) else str(int(hi))
+            bin_name = f"mHH_{int(lo)}_{hi_name}"
+            per_bin_out = os.path.join(args.out_path, bin_name)
+
+            print(f"INFO: Running pipeline for bin {bin_name}: {lo} <= {variable} < {hi}")
+
+            # Prepare inputs for this bin (pass mhh var/range into PrepareInputs via prepare_inputs wrapper)
+            prepare_inputs(args, out_path_override=per_bin_out, mhh_var=variable, mhh_range=(lo, hi))
+
+            # Run training and post-processing using this per-bin output directory
+            # Temporarily override args.out_path for training steps
+            old_out = args.out_path
+            args.out_path = per_bin_out
+            perform_training(args)
+            perform_categorisation(args)
+            args.out_path = old_out
