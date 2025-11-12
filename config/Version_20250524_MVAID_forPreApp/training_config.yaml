@@ -33,24 +33,27 @@ max_epoch: 300
 
 # Decorrelation settings
 use_DisCo: True
-decorr_lambda: 5.0
+decorr_lambda: 100.0
 disco_reduce_method: mean # mean, max, sum, quadrature
 disco_decorr_class_idx: [0,1,2,3] # index of the class to decorrel, e.g. 0 for signal-only
 z_variables: # "Z dataset" variables to decorrelate against, e.g. mjj
 - nonResReg_dijet_mass_DNNreg 
+- mass
 upweight_params: # conservative SR upweighting parameters
-    max_upweight: 10.0
+    do_upweight: True
+    max_upweight: 100.0
     min_upweight: 1.0 # values less than 1 will DECREASE the weight of events far from SR, so be careful
-    score_midpoint: # score value at which upweight reaches 50% of max_upweight
-        th_ggFHH: 0.85
-        th_nonRes: 0.15
-        th_ttH: 0.15
-        th_singleH: 0.15
-    score_90_percent: # score value at which upweight reaches 90% of max_upweight
-        th_ggFHH: 0.90
-        th_nonRes: 0.10
-        th_ttH: 0.10
-        th_singleH: 0.10
+    sr_definition:
+        score_midpoint: # score value at which upweight reaches 50% of max_upweight (ORDER SENSITIVE)
+            th_nonRes: 0.45
+            th_ttH: 0.65
+            th_singleH: 0.45
+            th_ggFHH: 0.85
+        score_90_percent: # score value at which upweight reaches 90% of max_upweight (ORDER SENSITIVE)
+            th_nonRes: 0.10
+            th_ttH: 0.50
+            th_singleH: 0.20
+            th_ggFHH: 0.90
 
 
 

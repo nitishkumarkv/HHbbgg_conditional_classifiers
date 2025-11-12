@@ -1,52 +1,190 @@
+import copy
+import json
 import os
 import sys
-import json
-import yaml
-import copy
-from typing import Union
-import numpy as np
+from typing import Union, Optional, Literal
+from dataclasses import dataclass, field
+
 import matplotlib.pyplot as plt
-from tqdm.auto import tqdm
+import numpy as np
 import torch
 import torch.nn as nn
-import torch.optim as optim
-from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
-from torch.cuda.amp import autocast, GradScaler
+import torch.optim as optim
+import yaml
+from torch.cuda.amp import GradScaler, autocast
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.utils.data import DataLoader, Dataset
+from tqdm.auto import tqdm
 
+from models import mlp_plotter
 from models.mlp import MLP
 from utils.decorr_utils import distance_corr, distance_corr_multi, reduce_disco_scores
-from models import mlp_plotter
 from utils.predictions import save_predictions
+
+
+def sigmoid(x: torch.Tensor, x0: torch.Tensor, k: torch.Tensor) -> torch.Tensor:
+    """x [N,C] -> [N,]  C classes
+    
+    x0 [C,] midpoints
+    k  [C,] steepness
+
+    exp [N,] = exp(-k [C,] * (x [N,C] - x0 [C,]))
+    """
+
+    xx0: torch.Tensor = x - x0 # xt [N,C] = x [N,C] - x0 [C,] broadcasted along first dim
+    kxx0: torch.Tensor = k * xx0 # kxx0 [N,C] = k [C,] * xx0 [N,C]
+    sumexp = torch.sum(torch.exp(-kxx0), dim=1) # sumexp [N,] = sum over C of exp(-kxx0 [N,C])
+    sig: torch.Tensor = 1 / (1 + sumexp) # sigmoid batch vector [N,]
+
+    return sig
+
+
+def generalized_sigmoid(x: torch.Tensor, x0: torch.Tensor, k: torch.Tensor, y_min: float, y_max: float) -> torch.Tensor:
+    """Generalized sigmoid function mapping to [y_min, y_max].
+    C number of classes
+
+    x [N,C] batch predictions
+    x0 [C,] midpoints
+    k [C,] steepness
+    y_min float minimum output value (<1 will downweight events far from SR)
+    y_max float maximum output value in SR
+    """
+    return y_min + (y_max - y_min) * sigmoid(x, x0, k)
+
+def generalized_5090_sigmoid(
+        x: torch.Tensor, 
+        x0: torch.Tensor, # midpoint
+        x90: torch.Tensor, # 90% maximum point
+        y_min: float,
+        y_max: float,
+    ) -> torch.Tensor:
+    """Generalized sigmoid function mapping to [y_min, y_max] with specified 50% and 90% points.
+    
+    Args:
+        x (torch.Tensor): [N,C] batch predictions
+        x0 (torch.Tensor): [C,] midpoints
+        x90 (torch.Tensor): [C,] 90% points
+        y_min (float): Minimum upweight value (<1 will downweight events far from SR)
+        y_max (float): Maximum upweight multiplier in SR
+
+    Returns:
+        torch.Tensor: Upweighting factors [N,]
+    """
+    k: torch.Tensor = np.log((9*y_max - 10*y_min)/y_max) / (x90 - x0) # [C,] steepness
+    return generalized_sigmoid(x, x0, k, y_min, y_max) # [N,]
+
+
+def sigmoid_upweight(
+        y_pred: torch.Tensor, 
+        weights: torch.Tensor, 
+        x0: torch.Tensor, 
+        x90: torch.Tensor, 
+        y_min: float, 
+        y_max: float,
+    )-> torch.Tensor:
+    """[N,C]-dim logisitc upweighting function based on model predictions.
+    N -> number of events (per batch)
+    C -> number of classes (nominally 4)
+    
+    Args:
+        y_pred (torch.Tensor): Model predictions [N,C]
+        weights (torch.Tensor): Original event weights [N,]
+        x0 (torch.Tensor): Midpoint(s) [C,]
+        x90 (torch.Tensor): 90% point(s) [C,]
+        y_min (float): Minimum upweight value (<1 will downweight events far from SR)
+        y_max (float): Maximum upweight multiplier in SR
+    
+    Returns:
+        torch.Tensor: New event weights after upweighting [N,]"""
+
+    upweights = generalized_5090_sigmoid(
+        y_pred,
+        x0=torch.tensor(x0, device=y_pred.device),
+        x90=torch.tensor(x90, device=y_pred.device),
+        y_min=y_min,
+        y_max=y_max,
+    ) # [N,]
+    # new_weights = weights * upweights # [N,]
+    # return new_weights
+    return upweights
+
+
+
+
+@dataclass
+class Weights():
+    """Highly efficient, flexible weight storage class to wrap around different weight types
+    while minimizing memory usage and data transfers. This class allows convenient storage and access
+    of various modifications to event weights used during training and evaluation, like upweight factors.
+
+    weights = Weights(weights_for_training)
+
+    """
+    base: torch.Tensor
+    modifiers: dict[str, torch.Tensor] = field(default_factory=dict)
+    enabled: dict[str, bool] = field(default_factory=dict)
+
+
+    
+
+
+
+# def _validate_upweight_params(config: dict):
+#     """Validate upweight params once instead of inside the SR_upweight function every call."""
+#     if "upweight_params" not in config:
+#         raise ValueError("'upweight_params' not found in training_config. This field is necessary for SR upweighting.")
+    
+#     params = config["upweight_params"]
+#     required_keys = ["max_upweight", ""]
+
+#     pass
+
+# def SR_upweight(y_pred: torch.Tensor, max_upweight: float, min_upweight: float, ) -> torch.Tensor:
+#     """Apply signal region upweighting to model predictions.
+
+#     Args:
+#         y_pred (torch.Tensor): Model predictions (logits or probabilities).
+#         training_config (dict): Training configuration dictionary.
+
+#     Returns:
+#         torch.Tensor: Upweighted model predictions.
+#     """
+#     params = training_config["upweight_params"]
+#     max_upweight = params["max_upweight"]
+#     min_upweight = params.get("min_upweight", 1.0)
+#     sr_def = {}
+
+
+
 
 
 # Define custom dataset
 class CustomDataset(Dataset):
-    def __init__(self, X, y, sample_weights, no_absolute_weights=None, disco_var=None):
+    def __init__(self, X, y, sample_weights, no_absolute_weights=None, disco_vars=None):
         self.X = X
         self.y = y
         self.sample_weights = sample_weights
         self.no_absolute_weights = no_absolute_weights
-        self.disco_var = disco_var # 1D tensor aligned to X (e.g. mjj)
+        self.disco_vars = disco_vars # 2D tensor aligned to X (e.g. mjj, mgg)
 
     def __len__(self):
         return len(self.X)
 
     def __getitem__(self, idx):
-        if self.disco_var is not None and self.no_absolute_weights is not None:
-            return self.X[idx], self.y[idx], self.sample_weights[idx], self.no_absolute_weights[idx], self.disco_var[idx]
-        elif self.disco_var is not None:
-            return self.X[idx], self.y[idx], self.sample_weights[idx], self.disco_var[idx]
+        if self.disco_vars is not None and self.no_absolute_weights is not None:
+            return self.X[idx], self.y[idx], self.sample_weights[idx], self.no_absolute_weights[idx], self.disco_vars[idx]
+        elif self.disco_vars is not None:
+            return self.X[idx], self.y[idx], self.sample_weights[idx], self.disco_vars[idx]
         elif self.no_absolute_weights is not None:
             return self.X[idx], self.y[idx], self.sample_weights[idx], self.no_absolute_weights[idx]
         else:
             return self.X[idx], self.y[idx], self.sample_weights[idx]
 
 
-def _plot_norm_weights_for_disco(weights: torch.Tensor):
+def _plot_norm_weights_for_disco(weights: torch.Tensor, title="Distribution of Normalized Weights used in DisCo Calculation",fname="norm_weights_disco_0.png"):
     """This is a diagnostic plot. Do not call it every batch during training apart from debugging efforts."""
-    fname = "norm_weights_disco_0.png"
+    # fname = "norm_weights_disco_0.png"
     n = 0
     while os.path.exists(fname):
         n += 1
@@ -57,7 +195,7 @@ def _plot_norm_weights_for_disco(weights: torch.Tensor):
     plt.xlabel("Normalized Weights for DisCo", fontsize=14)
     plt.ylabel("Counts", fontsize=14)
     plt.yscale('log')
-    plt.title("Distribution of Normalized Weights used in DisCo Calculation", fontsize=16)
+    plt.title(title, fontsize=16)
     plt.savefig(fname)
     plt.close()
 
@@ -76,7 +214,7 @@ def apply_disco(
         loss_nominal: torch.Tensor,
         y_pred: torch.Tensor,
         weights_batch: torch.Tensor,
-        disco_var_batch: torch.Tensor,
+        disco_vars_batch: torch.Tensor,
         decorr_lambda: float,
         disco_signal_class_idx: Union[int, list[int], None],
         y_true: Union[torch.Tensor, None]=None,
@@ -84,6 +222,9 @@ def apply_disco(
     ) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Apply the DisCo (Decorrelation) loss to the nominal loss.
+
+    N -> Number of events per batch
+    C -> Number of classes (nominally 4)
     """
     # Experimental flags
     USE_MULTIDIM_DISCO = True # DisCo score uses multiple target classes instead of just one
@@ -96,19 +237,40 @@ def apply_disco(
             + "DisCo loss component only counts background MC events when background-only mask is enabled."
         )
 
+    # Unpack DisCo variables
+    # [[v11, v21], [v12, v22], [v13, v23], ...] -> [v11, v12, v13, ...], [v21, v22, v23, ...]
+    var1: torch.Tensor = disco_vars_batch[:, 0] # [N,]
+    var2: torch.Tensor = disco_vars_batch[:, 1] # [N,]
+
+    if False: # FOR TESTING / DEBUGGING
+        # Mix DisCo vars to induce correlation for testing purposes
+        var2 = 0.2 * var2 + 0.8 * var1
+
     if USE_BKG_MASK and y_true is not None:
-        bkg_mask = _get_bkg_mask(y_true)
+        bkg_mask = _get_bkg_mask(y_true) # [N,] boolean tensor
     else:
-        bkg_mask = torch.ones_like(disco_var_batch, dtype=torch.bool)
+        bkg_mask = torch.ones_like(disco_vars_batch[:, 0], dtype=torch.bool) # [N,] all True
 
     norm_w = weights_batch / weights_batch.mean() # Normalize weights to mean 1
-    # _plot_norm_weights_for_disco(norm_w) # COMMENT OUT WHEN TRAINING NORMALLY
-    # print(f"[DEBUG] weights_batch shape: {weights_batch.shape}")
-    # print(f"[DEBUG] norm_w shape: {norm_w.shape}")
-    # print(f"[DEBUG] weights_batch sum: {weights_batch.sum().item()}") # BUG: ~0.0014 for train, ~0.003 for val
-    # print(f"[DEBUG] sum of norm_w: {norm_w.sum().item()}") # ~1024 for both train and val
-    # print(f"[DEBUG] norm_w mean: {norm_w.mean().item()}, std: {norm_w.std().item()}")
-    # print(f"[DEBUG] weights_batch mean: {weights_batch.mean().item()}, std: {weights_batch.std().item()}")
+    # _plot_norm_weights_for_disco(norm_w, title="Inclusive Normalized Weights used in DisCo Calculation", fname="norm_weights_disco_inclusive_0.png") # COMMENT OUT WHEN TRAINING NORMALLY
+    # _plot_norm_weights_for_disco(norm_w[bkg_mask], title="Background-only Normalized Weights used in DisCo Calculation", fname="norm_weights_disco_bkg_0.png") # COMMENT OUT WHEN TRAINING NORMALLY
+    # _plot_norm_weights_for_disco(norm_w[~bkg_mask], title="Signal-only Normalized Weights used in DisCo Calculation", fname="norm_weights_disco_sig_0.png") # COMMENT OUT WHEN TRAINING NORMALLY
+    # convert logits to probabilities so the >0.9 threshold is meaningful
+    # probs_for_sel = F.softmax(y_pred, dim=1)
+    # print(f"[DEBUG] Probs for DisCo selection debug: {probs_for_sel[:5,:].detach().cpu().numpy()}") # COMMENT OUT WHEN TRAINING NORMALLY
+    # high_sig_mask = probs_for_sel[:, 3] > 0.5  # boolean mask [N,]
+    # print(f"[DEBUG] Number of high signal score events (>0.5): {high_sig_mask.sum().item()} out of {y_pred.shape[0]} total events.") # COMMENT OUT WHEN TRAINING NORMALLY
+    # high_avg_weight = norm_w[high_sig_mask].mean().item() if high_sig_mask.any() else 0.0
+    # high_uncert = norm_w[high_sig_mask].std().item() / np.sqrt(norm_w[high_sig_mask].shape[0]) if high_sig_mask.any() else 0.0
+    # low_avg_weight = norm_w[~high_sig_mask].mean().item() if (~high_sig_mask).any() else 0.0
+    # low_uncert = norm_w[~high_sig_mask].std().item() / np.sqrt(norm_w[~high_sig_mask].shape[0]) if (~high_sig_mask).any() else 0.0
+    # if high_sig_mask.any():
+    #     print(f"[DEBUG] Mean high signal score (>0.5) weight: {high_avg_weight:.4f} +/- {high_uncert:.4f}; low signal score weight: {low_avg_weight:.4f} +/- {low_uncert:.4f}") # COMMENT OUT WHEN TRAINING NORMALLY
+        # _plot_norm_weights_for_disco(
+        #     norm_w[high_sig_mask],
+        #     title="High signal score Normalized Weights used in DisCo Calculation",
+        #     fname="norm_weights_disco_sigscorehigh_0.png"
+        # ) # COMMENT OUT WHEN TRAINING NORMALLY
     if y_pred.ndim == 2 and y_pred.shape[1] > 1:
 
         if USE_PRED_WITHOUT_SOFTMAX:
@@ -116,13 +278,11 @@ def apply_disco(
         else:
             probs = F.softmax(y_pred, dim=1) # [N,C] # QUESTION: Can we get more effective DisCo without softmax?
 
-        # if USE_BKG_MASK:
-        #     disco_var_batch = disco_var_batch[bkg_mask]
-        #     probs = probs[bkg_mask]
-        #     norm_w = norm_w[bkg_mask]
-        disco_var_batch = disco_var_batch[bkg_mask]
+        # disco_vars_batch = disco_vars_batch[bkg_mask]
         probs = probs[bkg_mask]
         norm_w = norm_w[bkg_mask]
+        var1 = var1[bkg_mask]
+        var2 = var2[bkg_mask]
 
         if USE_MULTIDIM_DISCO:
             if disco_signal_class_idx is None:
@@ -133,7 +293,8 @@ def apply_disco(
                 class_indices = disco_signal_class_idx
             else:
                 raise ValueError("disco_signal_class_idx must be int or list of int when y_pred is multi-dimensional.")
-            d_corr_vec = distance_corr_multi(disco_var_batch.reshape(-1), probs[:, class_indices], norm_w, reduce="none") #, reduce=disco_reduce)
+            # d_corr_vec = distance_corr_multi(disco_vars_batch.reshape(-1), probs[:, class_indices], norm_w, reduce="none") #, reduce=disco_reduce)
+            d_corr_vec = distance_corr_multi(var1, var2, norm_w, reduce="none")
             d_corr = reduce_disco_scores(d_corr_vec, disco_reduce)
         else:
             if isinstance(disco_signal_class_idx, int):
@@ -142,7 +303,8 @@ def apply_disco(
                 raise NotImplementedError("Multi-class DisCo with list of indices not implemented without USE_MULTIDIM_DISCO=True.")
             else:
                 raise ValueError("disco_signal_class_idx must be int or list of int when y_pred is multi-dimensional.")
-            d_corr_vec = distance_corr_multi(disco_var_batch.reshape(-1), probs[:, class_indices], norm_w) #, reduce=disco_reduce)
+            # d_corr_vec = distance_corr_multi(disco_vars_batch.reshape(-1), probs[:, class_indices], norm_w) #, reduce=disco_reduce)
+            d_corr_vec = distance_corr_multi(var1, var2, norm_w, reduce="none")
             d_corr = reduce_disco_scores(d_corr_vec, disco_reduce)
 
     else:
@@ -152,15 +314,14 @@ def apply_disco(
         else:
             probs = torch.sigmoid(y_pred).reshape(-1) # [N]
 
-        # if USE_BKG_MASK:
-        #     disco_var_batch = disco_var_batch[bkg_mask]
-        #     probs = probs[bkg_mask]
-        #     norm_w = norm_w[bkg_mask]
-        disco_var_batch = disco_var_batch[bkg_mask]
+        # disco_vars_batch = disco_vars_batch[bkg_mask]
         probs = probs[bkg_mask]
         norm_w = norm_w[bkg_mask]
+        var1 = var1[bkg_mask]
+        var2 = var2[bkg_mask]
 
-        d_corr = distance_corr(disco_var_batch.reshape(-1), probs, norm_w.reshape(-1))
+        # d_corr = distance_corr(disco_vars_batch.reshape(-1), probs, norm_w.reshape(-1))
+        d_corr = distance_corr(var1, var2, norm_w.reshape(-1))
     total_weighted_loss = loss_nominal + decorr_lambda * d_corr
 
     # print(f"[DEBUG] Multidim DisCo scores: {d_corr_vec.item()}") # COMMENT OUT WHEN TRAINING NORMALLY
@@ -179,8 +340,9 @@ def train_one_epoch(
         use_disco=False,
         decorr_lambda=0.1,
         disco_signal_class_idx: Union[int, list[int], None]=0,
-    disco_reduce: str='mean',
-    progress_update_interval: int = 50,
+        disco_reduce: str='mean',
+        progress_update_interval: int = 50,
+        upweight_params: Union[dict, None] = None,
 ) -> tuple[float, float, float, float, float, Union[float, None], Union[float, None]]:
     """
     Train the model for one epoch.
@@ -199,6 +361,8 @@ def train_one_epoch(
             If int, use that one class index. (n.b. zero indexed)
             If list[int], use those class indices (e.g. for multi-class classification).
         disco_reduce (str): 'mean'|'sum'|'max'|'quadrature'|'none' to aggregate distance correlations across multiple classes.
+        progress_update_interval (int): Interval (in batches) to update the progress bar.
+        upweight_params (dict): Parameters for upweighting. None means no upweighting.
 
     Returns:
         tuple: Average across batches for the epoch
@@ -219,6 +383,20 @@ def train_one_epoch(
     batch_dist_corr = []
     batch_losses_no_abs_no_dist_corr = []
 
+    weights_batch_multiplier_epoch = torch.Tensor() # [N*B,]
+    y_pred_epoch = torch.Tensor() # [N*B, C]
+    weights_batch_epoch = torch.Tensor() # [N*B,]
+    mjj_epoch = torch.Tensor() # [N*B,]
+    mgg_epoch = torch.Tensor() # [N*B,]
+
+    # planning to make these plots:
+    # - weight multiplier vs HH score
+    # - weight multiplier vs nonres score
+    # - weight multiplier vs ttH score
+    # - weight multiplier vs singleH score
+    # - mgg/mjj correlation vs weight multiplier (coarse bins of weight multiplier) (should see positive trend if upweighting is selecting mgg-mjj correlated events)
+
+
     progress_bar = tqdm(data_loader, desc=f"Epoch {epoch} [Training]", leave=False)
     # Enable mixed precision on CUDA for speed; safe no-op on CPU
     use_cuda = (device.type == 'cuda')
@@ -228,7 +406,7 @@ def train_one_epoch(
         if use_disco:
             # Expect dataset to include disco_var in batch
             if len(batch) == 5:
-                X_batch, y_batch, weights_batch, weights_batch_no, disco_var_batch = batch
+                X_batch, y_batch, weights_batch, weights_batch_no, disco_vars_batch = batch
             else:
                 raise ValueError("use_disco=True but dataset does not include disco_var. Check how the dataset was created.")
         else:
@@ -244,15 +422,40 @@ def train_one_epoch(
         # Use non_blocking transfers to overlap HtoD when pin_memory=True
         X_batch = X_batch.to(device, non_blocking=True)
         y_batch = y_batch.to(device, non_blocking=True)
-        weights_batch = weights_batch.to(device, non_blocking=True)
-        weights_batch_no = weights_batch_no.to(device, non_blocking=True)
-        if use_disco:
-            disco_var_batch = disco_var_batch.to(device, non_blocking=True)
-        # print(f"[DEBUG] weights_batch sum (inside train loop): {weights_batch.sum().item()}")
+        # weights_batch = weights_batch.to(device, non_blocking=True)
+        # weights_batch_no = weights_batch_no.to(device, non_blocking=True)
+        # if use_disco:
+        #     disco_vars_batch = disco_vars_batch.to(device, non_blocking=True)
+
+    
+        upweight_score_midpoint = torch.Tensor()
+        upweight_score_90_percent = torch.Tensor()
+        upweight_max: float = 1.0
+        upweight_min: float = 1.0
+        if upweight_params is not None:
+            upweight_score_midpoint = torch.tensor(upweight_params["sr_definition"]["score_midpoint"].values, device=device)
+            upweight_score_90_percent = torch.tensor(upweight_params["sr_definition"]["score_90_percent"].values, device=device)
+            upweight_max = upweight_params["max_upweight"]
+            upweight_min = upweight_params["min_upweight"]
+
 
         optimizer.zero_grad(set_to_none=True)
         with autocast(enabled=use_cuda):
             y_pred = model(X_batch)
+            weights_batch = weights_batch.to(device, non_blocking=True)
+            weights_batch_no = weights_batch_no.to(device, non_blocking=True)
+            if use_disco:
+                disco_vars_batch = disco_vars_batch.to(device, non_blocking=True)
+            if upweight_params is not None:
+                weights_batch_multiplier = sigmoid_upweight(y_pred, 
+                                                weights_batch, 
+                                                x0=upweight_score_midpoint,
+                                                x90=upweight_score_90_percent,
+                                                y_min=upweight_min,
+                                                y_max=upweight_max
+                                                )
+                weights_batch = weights_batch * weights_batch_multiplier
+
             loss = loss_fn(y_pred, y_batch) # [N]
             wsum = weights_batch.sum() # weights_batch is absolute-valued
             weighted_loss = (loss * weights_batch).sum() / wsum
@@ -263,7 +466,7 @@ def train_one_epoch(
                     weighted_loss,
                     y_pred,
                     weights_batch,
-                    disco_var_batch,
+                    disco_vars_batch,
                     decorr_lambda,
                     disco_signal_class_idx,
                     y_true=y_batch,
@@ -360,9 +563,9 @@ def evaluate(
             if use_disco:
                 # Expect dataset to include disco_var in batch
                 if len(batch) == 5:
-                    X_batch, y_batch, weights_batch, weights_batch_no_abs, disco_var_batch = batch
+                    X_batch, y_batch, weights_batch, weights_batch_no_abs, disco_vars_batch = batch
                 elif len(batch) == 4:
-                    X_batch, y_batch, weights_batch, disco_var_batch = batch
+                    X_batch, y_batch, weights_batch, disco_vars_batch = batch
                 else:
                     raise ValueError("use_disco=True but dataset does not include disco_var. Check how the dataset was created.")
             else:
@@ -384,12 +587,12 @@ def evaluate(
 
             # Add DisCo term
             if use_disco:
-                disco_var_batch = disco_var_batch.to(device, non_blocking=True)
+                disco_vars_batch = disco_vars_batch.to(device, non_blocking=True)
                 total_weighted_loss, d_corr = apply_disco(
                     weighted_loss,
                     y_pred,
                     weights_batch,
-                    disco_var_batch,
+                    disco_vars_batch,
                     decorr_lambda,
                     disco_signal_class_idx,
                     y_true=y_batch,
@@ -624,6 +827,7 @@ if __name__ == "__main__":
 
     # --- REPROD SETUP ---
     import random
+
     import numpy as np
     import torch
     random.seed(seed)
@@ -731,7 +935,7 @@ if __name__ == "__main__":
 
     # Load DisCo variable if needed
     if use_disco:
-        z_train = np.load(f'{input_path}/z_train.npy')  # e.g., mjj for decorrelation
+        z_train = np.load(f'{input_path}/z_train.npy')  # e.g., mjj and mgg for decorrelation
         z_val = np.load(f'{input_path}/z_val.npy')
         disco_var_train = torch.tensor(z_train, dtype=torch.float32)
         disco_var_val = torch.tensor(z_val, dtype=torch.float32)
@@ -739,8 +943,8 @@ if __name__ == "__main__":
         disco_var_train, disco_var_val = None, None
 
     # Create datasets
-    train_dataset = CustomDataset(X_train, y_train, class_weights_for_training, class_weights_for_train_no_absolute, disco_var=disco_var_train)
-    val_dataset = CustomDataset(X_val, y_val, class_weights_for_val, class_weights_for_val_no_absolute, disco_var=disco_var_val)
+    train_dataset = CustomDataset(X_train, y_train, class_weights_for_training, class_weights_for_train_no_absolute, disco_vars=disco_var_train)
+    val_dataset = CustomDataset(X_val, y_val, class_weights_for_val, class_weights_for_val_no_absolute, disco_vars=disco_var_val)
 
     # Create data loaders
     g = torch.Generator().manual_seed(seed)
@@ -756,13 +960,13 @@ if __name__ == "__main__":
         all_weights_batch_train_no_abs = np.array([])
         all_weights_batch_val = np.array([])
         all_weights_batch_val_no_abs = np.array([])
-        for idx, (X_batch, y_batch, weights_batch, weights_batch_no_abs, disco_var_batch) in enumerate(train_loader):
+        for idx, (X_batch, y_batch, weights_batch, weights_batch_no_abs, disco_vars_batch) in enumerate(train_loader):
             all_weights_batch_train = np.append(all_weights_batch_train, weights_batch.numpy())
             all_weights_batch_train_no_abs = np.append(all_weights_batch_train_no_abs, weights_batch_no_abs.numpy())
             if idx >= 1000:
                 print("break after 1000 batches")
                 break
-        for idx, (X_batch, y_batch, weights_batch, weights_batch_no_abs, disco_var_batch) in enumerate(val_loader):
+        for idx, (X_batch, y_batch, weights_batch, weights_batch_no_abs, disco_vars_batch) in enumerate(val_loader):
             all_weights_batch_val = np.append(all_weights_batch_val, weights_batch.numpy())
             all_weights_batch_val_no_abs = np.append(all_weights_batch_val_no_abs, weights_batch_no_abs.numpy())
             if idx >= 1000:

@@ -107,7 +107,15 @@ def _get_python_env_base(job_config: dict) -> str:
     return sys.prefix
 
 
-def write_sub_file(condor_dir: str, plot_dir: str, checkpoint_path: str, input_path: str, script_path: str, model_folder: str, **kwargs) -> str:
+def write_sub_file(
+        condor_dir: str, 
+        plot_dir: str, 
+        checkpoint_path: str, 
+        input_path: str, 
+        script_path: str, 
+        model_folder: str, 
+        **kwargs
+) -> str:
     """
     Writes a condor submission file with the given output path and keyword arguments.
 
@@ -117,6 +125,11 @@ def write_sub_file(condor_dir: str, plot_dir: str, checkpoint_path: str, input_p
         checkpoint_path (str): Path to the model checkpoint, including filename (relative path).
         input_path (str): Path to the input data (relative path).
         script_path (str): Path to the script to be executed (relative path).
+        model_folder (str): Folder name inside input_path where the model and plots are stored (nominally "after_random_search_best1").
+    
+    Kwargs:
+        epoch (int, optional): Specifies epoch for output file naming/labeling, not which input data is selected.
+        verbose (bool, optional): If True, enables verbose condor submission output.
 
     Returns:
         str: Path to submission file.
@@ -170,7 +183,8 @@ def write_sub_file(condor_dir: str, plot_dir: str, checkpoint_path: str, input_p
         f.write("\n")
         f.write("queue\n")
 
-    print("[INFO] Condor submission file written to:", sub_file_path)
+    if kwargs.get('verbose', False):
+        print("[DEBUG] Condor submission file written to:", sub_file_path)
     return sub_file_path
 
 
@@ -311,6 +325,7 @@ def run_condor_job(
         epoch (int, optional): Specific epoch of plot. Controls output file naming/labeling, not which input data is selected.
     """
     config_conda_env: str | None = job_config.get('conda_env', None)
+    verbose: bool = clargs.get('verbose', False) if clargs is not None else False
 
     # Validate
     if not input_path:
@@ -338,7 +353,7 @@ def run_condor_job(
         )
 
     script_path = write_condor_script(condor_dir, job_config)
-    sub_path = write_sub_file(condor_dir, plot_dir, checkpoint_file, input_path, script_path, model_folder, epoch=kwargs.get('epoch', None))
+    sub_path = write_sub_file(condor_dir, plot_dir, checkpoint_file, input_path, script_path, model_folder, epoch=kwargs.get('epoch', None), verbose=verbose)
     if kwargs.get('dry_run', False):
         print(f"mlp_plotter condor job dry run. Condor submission file written to: {sub_path}, script written to: {script_path}")
     else:
