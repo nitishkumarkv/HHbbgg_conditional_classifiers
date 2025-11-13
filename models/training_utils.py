@@ -184,7 +184,7 @@ class CustomDataset(Dataset):
             return self.X[idx], self.y[idx], self.sample_weights[idx]
 
 
-def _plot_norm_weights_for_disco(weights: torch.Tensor, title="Distribution of Normalized Weights used in DisCo Calculation",fname="norm_weights_disco_0.png"):
+def _plot_norm_weights_for_disco(weights: Tensor, title="Distribution of Normalized Weights used in DisCo Calculation",fname="norm_weights_disco_0.png"):
     """This is a diagnostic plot. Do not call it every batch during training apart from debugging efforts."""
     # fname = "norm_weights_disco_0.png"
     n = 0
@@ -440,18 +440,25 @@ def train_one_epoch(
                                                 y_min=upweight_min,
                                                 y_max=upweight_max
                                                 )
-                weights_batch = weights_batch * weights_batch_multiplier
+            else:
+                weights_batch_multiplier = torch.ones_like(weights_batch, device=device)
 
             loss = loss_fn(y_pred, y_batch) # [N]
-            wsum = weights_batch.sum() # weights_batch is absolute-valued
-            weighted_loss = (loss * weights_batch).sum() / wsum
+            # print(f"loss = {loss.detach().cpu().numpy()}")
+            # print(f"loss.shape: {loss.shape}")
+            # print(f"type(loss) = {type(loss)}")
+            wsum: Tensor = weights_batch.sum() # weights_batch is absolute-valued
+            weighted_loss: Tensor = (loss * weights_batch).sum() / wsum # scalar
+            # print(f"weighted_loss = {weighted_loss.item():.6f}")
+            # print(f"weighted_loss.shape: {weighted_loss.shape}")
+            # print(f"type(weighted_loss) = {type(weighted_loss)}")
 
             # Add DisCo term
             if use_disco:
                 total_weighted_loss, d_corr = apply_disco(
                     weighted_loss,
                     y_pred,
-                    weights_batch,
+                    weights_batch * weights_batch_multiplier,
                     disco_vars_batch,
                     decorr_lambda,
                     disco_signal_class_idx,
@@ -460,8 +467,8 @@ def train_one_epoch(
                 )
                 assert d_corr is not None, "d_corr should not be None when using DisCo. Something is wrong inside the apply_disco function."
             else:
-                total_weighted_loss = weighted_loss
-                d_corr = None # Dummy
+                total_weighted_loss: Tensor = weighted_loss # scalar
+                d_corr: Tensor = Tensor(0.0, device=device) # Dummy
 
         # Backward with gradient scaling (no-op on CPU)
         scaler.scale(total_weighted_loss).backward()
@@ -479,7 +486,7 @@ def train_one_epoch(
         weighted_acc_f = float(weighted_acc.detach().item())
         weighted_loss_no_abs_f = float(weighted_loss_no_abs.detach().item())
         weighted_loss_f = float(weighted_loss.detach().item())
-        d_corr_f = float(d_corr.detach().item()) if d_corr is not None else None
+        d_corr_f = float(d_corr.detach().item())
 
         batch_losses.append(            total_weighted_loss_f)
         batch_accs.append(              weighted_acc_f)
@@ -493,7 +500,7 @@ def train_one_epoch(
         if progress_update_interval and (batch_idx % progress_update_interval == 0 or batch_idx == len(progress_bar) - 1):
             if use_disco:
                 progress_bar.set_postfix({
-                    'Loss': f'{weighted_loss_f:.4f}+{decorr_lambda}*{(d_corr_f if d_corr_f is not None else 0.0):.4f}',
+                    'Loss': f'{weighted_loss_f:.4f}+{decorr_lambda}*{(d_corr_f):.4f}',
                     'Acc': f'{weighted_acc_f:.4f}',
                     'Loss_no_abs': f'{weighted_loss_no_abs_f:.4f}'
                 })
@@ -509,8 +516,8 @@ def train_one_epoch(
     mean_batch_losses_no_abs                = float(np.mean(batch_losses_no_abs))
     mean_batch_losses_no_dist_corr          = float(np.mean(batch_losses_no_dist_corr))
     mean_batch_losses_no_abs_no_dist_corr   = float(np.mean(batch_losses_no_abs_no_dist_corr))
-    mean_batch_dist_corr                    = float(np.mean([dc for dc in batch_dist_corr if dc is not None])) if use_disco else None
-    mean_batch_dist_corr_times_lambda       = float(np.mean([dc * decorr_lambda for dc in batch_dist_corr if dc is not None])) if use_disco else None
+    mean_batch_dist_corr                    = float(np.mean([dc for dc in batch_dist_corr])) if use_disco else None
+    mean_batch_dist_corr_times_lambda       = float(np.mean([dc * decorr_lambda for dc in batch_dist_corr])) if use_disco else None
 
     return (
         mean_batch_losses, 
