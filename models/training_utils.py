@@ -112,18 +112,20 @@ def sigmoid_upweight(
 
 
 
-@dataclass
-class Weights():
-    """Highly efficient, flexible weight storage class to wrap around different weight types
-    while minimizing memory usage and data transfers. This class allows convenient storage and access
-    of various modifications to event weights used during training and evaluation, like upweight factors.
+# @dataclass
+# class Weights():
+#     """Highly efficient, flexible weight storage class to wrap around different weight types
+#     while minimizing memory usage and data transfers. This class allows convenient storage and access
+#     of various modifications to event weights used during training and evaluation, like upweight factors.
 
-    weights = Weights(weights_for_training)
+#     weights = Weights(weights_for_training)
 
-    """
-    base: torch.Tensor
-    modifiers: dict[str, torch.Tensor] = field(default_factory=dict)
-    enabled: dict[str, bool] = field(default_factory=dict)
+#     """
+#     base: torch.Tensor
+#     modifiers: dict[str, torch.Tensor] = field(default_factory=dict)
+#     enabled: dict[str, bool] = field(default_factory=dict)
+
+#     # unfinished
 
 
     
