@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from torch import Tensor
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
@@ -23,7 +24,7 @@ from utils.decorr_utils import distance_corr, distance_corr_multi, reduce_disco_
 from utils.predictions import save_predictions
 
 
-def sigmoid(x: torch.Tensor, x0: torch.Tensor, k: torch.Tensor) -> torch.Tensor:
+def sigmoid(x: Tensor, x0: Tensor, k: Tensor) -> Tensor:
     """x [N,C] -> [N,]  C classes
     
     x0 [C,] midpoints
@@ -32,15 +33,15 @@ def sigmoid(x: torch.Tensor, x0: torch.Tensor, k: torch.Tensor) -> torch.Tensor:
     exp [N,] = exp(-k [C,] * (x [N,C] - x0 [C,]))
     """
 
-    xx0: torch.Tensor = x - x0 # xt [N,C] = x [N,C] - x0 [C,] broadcasted along first dim
-    kxx0: torch.Tensor = k * xx0 # kxx0 [N,C] = k [C,] * xx0 [N,C]
+    xx0: Tensor = x - x0 # xt [N,C] = x [N,C] - x0 [C,] broadcasted along first dim
+    kxx0: Tensor = k * xx0 # kxx0 [N,C] = k [C,] * xx0 [N,C]
     sumexp = torch.sum(torch.exp(-kxx0), dim=1) # sumexp [N,] = sum over C of exp(-kxx0 [N,C])
-    sig: torch.Tensor = 1 / (1 + sumexp) # sigmoid batch vector [N,]
+    sig: Tensor = 1 / (1 + sumexp) # sigmoid batch vector [N,]
 
     return sig
 
 
-def generalized_sigmoid(x: torch.Tensor, x0: torch.Tensor, k: torch.Tensor, y_min: float, y_max: float) -> torch.Tensor:
+def generalized_sigmoid(x: Tensor, x0: Tensor, k: Tensor, y_min: float, y_max: float) -> Tensor:
     """Generalized sigmoid function mapping to [y_min, y_max].
     C number of classes
 
@@ -53,50 +54,50 @@ def generalized_sigmoid(x: torch.Tensor, x0: torch.Tensor, k: torch.Tensor, y_mi
     return y_min + (y_max - y_min) * sigmoid(x, x0, k)
 
 def generalized_5090_sigmoid(
-        x: torch.Tensor, 
-        x0: torch.Tensor, # midpoint
-        x90: torch.Tensor, # 90% maximum point
+        x: Tensor, 
+        x0: Tensor, # midpoint
+        x90: Tensor, # 90% maximum point
         y_min: float,
         y_max: float,
-    ) -> torch.Tensor:
+    ) -> Tensor:
     """Generalized sigmoid function mapping to [y_min, y_max] with specified 50% and 90% points.
     
     Args:
-        x (torch.Tensor): [N,C] batch predictions
-        x0 (torch.Tensor): [C,] midpoints
-        x90 (torch.Tensor): [C,] 90% points
+        x (Tensor): [N,C] batch predictions
+        x0 (Tensor): [C,] midpoints
+        x90 (Tensor): [C,] 90% points
         y_min (float): Minimum upweight value (<1 will downweight events far from SR)
         y_max (float): Maximum upweight multiplier in SR
 
     Returns:
-        torch.Tensor: Upweighting factors [N,]
+        Tensor: Upweighting factors [N,]
     """
-    k: torch.Tensor = np.log((9*y_max - 10*y_min)/y_max) / (x90 - x0) # [C,] steepness
+    k: Tensor = np.log((9*y_max - 10*y_min)/y_max) / (x90 - x0) # [C,] steepness
     return generalized_sigmoid(x, x0, k, y_min, y_max) # [N,]
 
 
 def sigmoid_upweight(
-        y_pred: torch.Tensor, 
-        weights: torch.Tensor, 
-        x0: torch.Tensor, 
-        x90: torch.Tensor, 
+        y_pred: Tensor, 
+        weights: Tensor, 
+        x0: Tensor, 
+        x90: Tensor, 
         y_min: float, 
         y_max: float,
-    )-> torch.Tensor:
+    )-> Tensor:
     """[N,C]-dim logisitc upweighting function based on model predictions.
     N -> number of events (per batch)
     C -> number of classes (nominally 4)
     
     Args:
-        y_pred (torch.Tensor): Model predictions [N,C]
-        weights (torch.Tensor): Original event weights [N,]
-        x0 (torch.Tensor): Midpoint(s) [C,]
-        x90 (torch.Tensor): 90% point(s) [C,]
+        y_pred (Tensor): Model predictions [N,C]
+        weights (Tensor): Original event weights [N,]
+        x0 (Tensor): Midpoint(s) [C,]
+        x90 (Tensor): 90% point(s) [C,]
         y_min (float): Minimum upweight value (<1 will downweight events far from SR)
         y_max (float): Maximum upweight multiplier in SR
     
     Returns:
-        torch.Tensor: New event weights after upweighting [N,]"""
+        Tensor: New event weights after upweighting [N,]"""
 
     upweights = generalized_5090_sigmoid(
         y_pred,
@@ -160,7 +161,6 @@ def sigmoid_upweight(
 
 
 
-
 # Define custom dataset
 class CustomDataset(Dataset):
     def __init__(self, X, y, sample_weights, no_absolute_weights=None, disco_vars=None):
@@ -202,7 +202,7 @@ def _plot_norm_weights_for_disco(weights: torch.Tensor, title="Distribution of N
     plt.close()
 
 
-def _get_bkg_mask(y_true: torch.Tensor) -> torch.Tensor:
+def _get_bkg_mask(y_true: Tensor) -> Tensor:
     """Get boolean mask for background events only, assuming y_true is class indices.
     0 -> nonRes_score   (bkg)
     1 -> ttH_score      (bkg)
@@ -213,15 +213,15 @@ def _get_bkg_mask(y_true: torch.Tensor) -> torch.Tensor:
 
 
 def apply_disco(
-        loss_nominal: torch.Tensor,
-        y_pred: torch.Tensor,
-        weights_batch: torch.Tensor,
-        disco_vars_batch: torch.Tensor,
+        loss_nominal: Tensor,
+        y_pred: Tensor,
+        weights_batch: Tensor,
+        disco_vars_batch: Tensor,
         decorr_lambda: float,
         disco_signal_class_idx: Union[int, list[int], None],
-        y_true: Union[torch.Tensor, None]=None,
+        y_true: Union[Tensor, None]=None,
         disco_reduce: str='mean'
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[Tensor, Tensor]:
     """
     Apply the DisCo (Decorrelation) loss to the nominal loss.
 
