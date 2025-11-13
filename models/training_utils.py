@@ -229,7 +229,7 @@ def apply_disco(
     C -> Number of classes (nominally 4)
     """
     # Experimental flags
-    USE_MULTIDIM_DISCO = True # DisCo score uses multiple target classes instead of just one
+    # USE_MULTIDIM_DISCO = True # DisCo score uses multiple target classes instead of just one
     USE_BKG_MASK = True # Only bkg MC events contribute to DisCo score
     USE_PRED_WITHOUT_SOFTMAX = True # Use raw model outputs instead of softmax probabilities for DisCo calculation
 
@@ -243,10 +243,6 @@ def apply_disco(
     # [[v11, v21], [v12, v22], [v13, v23], ...] -> [v11, v12, v13, ...], [v21, v22, v23, ...]
     var1: torch.Tensor = disco_vars_batch[:, 0] # [N,]
     var2: torch.Tensor = disco_vars_batch[:, 1] # [N,]
-
-    if False: # FOR TESTING / DEBUGGING
-        # Mix DisCo vars to induce correlation for testing purposes
-        var2 = 0.2 * var2 + 0.8 * var1
 
     if USE_BKG_MASK and y_true is not None:
         bkg_mask = _get_bkg_mask(y_true) # [N,] boolean tensor
@@ -273,58 +269,46 @@ def apply_disco(
         #     title="High signal score Normalized Weights used in DisCo Calculation",
         #     fname="norm_weights_disco_sigscorehigh_0.png"
         # ) # COMMENT OUT WHEN TRAINING NORMALLY
-    if y_pred.ndim == 2 and y_pred.shape[1] > 1:
-
-        if USE_PRED_WITHOUT_SOFTMAX:
-            probs = y_pred
-        else:
-            probs = F.softmax(y_pred, dim=1) # [N,C] # QUESTION: Can we get more effective DisCo without softmax?
-
-        # disco_vars_batch = disco_vars_batch[bkg_mask]
-        probs = probs[bkg_mask]
-        norm_w = norm_w[bkg_mask]
-        var1 = var1[bkg_mask]
-        var2 = var2[bkg_mask]
-
-        if USE_MULTIDIM_DISCO:
-            if disco_signal_class_idx is None:
-                raise ValueError("disco_signal_class_idx must be provided when use_disco=True.")
-            if isinstance(disco_signal_class_idx, int):
-                class_indices = [disco_signal_class_idx]
-            elif isinstance(disco_signal_class_idx, list):
-                class_indices = disco_signal_class_idx
-            else:
-                raise ValueError("disco_signal_class_idx must be int or list of int when y_pred is multi-dimensional.")
-            # d_corr_vec = distance_corr_multi(disco_vars_batch.reshape(-1), probs[:, class_indices], norm_w, reduce="none") #, reduce=disco_reduce)
-            d_corr_vec = distance_corr_multi(var1, var2, norm_w, reduce="none")
-            d_corr = reduce_disco_scores(d_corr_vec, disco_reduce)
-        else:
-            if isinstance(disco_signal_class_idx, int):
-                class_indices = [disco_signal_class_idx]
-            elif isinstance(disco_signal_class_idx, list):
-                raise NotImplementedError("Multi-class DisCo with list of indices not implemented without USE_MULTIDIM_DISCO=True.")
-            else:
-                raise ValueError("disco_signal_class_idx must be int or list of int when y_pred is multi-dimensional.")
-            # d_corr_vec = distance_corr_multi(disco_vars_batch.reshape(-1), probs[:, class_indices], norm_w) #, reduce=disco_reduce)
-            d_corr_vec = distance_corr_multi(var1, var2, norm_w, reduce="none")
-            d_corr = reduce_disco_scores(d_corr_vec, disco_reduce)
-
+    if USE_PRED_WITHOUT_SOFTMAX:
+        probs = y_pred
     else:
-        # Single output (binary classification)
-        if USE_PRED_WITHOUT_SOFTMAX:
-            probs = y_pred
-        else:
-            probs = torch.sigmoid(y_pred).reshape(-1) # [N]
+        probs = F.softmax(y_pred, dim=1) # [N,C] # QUESTION: Can we get more effective DisCo without softmax?
 
-        # disco_vars_batch = disco_vars_batch[bkg_mask]
-        probs = probs[bkg_mask]
-        norm_w = norm_w[bkg_mask]
-        var1 = var1[bkg_mask]
-        var2 = var2[bkg_mask]
+    # disco_vars_batch = disco_vars_batch[bkg_mask]
+    probs = probs[bkg_mask]
+    norm_w = norm_w[bkg_mask]
+    var1 = var1[bkg_mask]
+    var2 = var2[bkg_mask]
 
-        # d_corr = distance_corr(disco_vars_batch.reshape(-1), probs, norm_w.reshape(-1))
-        d_corr = distance_corr(var1, var2, norm_w.reshape(-1))
+    class_indices = list[disco_signal_class_idx]
+
+    # if disco_signal_class_idx is None:
+    #     raise ValueError("disco_signal_class_idx must be provided when use_disco=True.")
+    # if isinstance(disco_signal_class_idx, int):
+    #     class_indices = [disco_signal_class_idx]
+    # elif isinstance(disco_signal_class_idx, list):
+    #     class_indices = disco_signal_class_idx
+    # else:
+    #     raise ValueError("disco_signal_class_idx must be int or list of int when y_pred is multi-dimensional.")
+
+    # d_corr_vec = distance_corr_multi(disco_vars_batch.reshape(-1), probs[:, class_indices], norm_w, reduce="none") #, reduce=disco_reduce)
+    d_corr_vec = distance_corr_multi(var1, var2, norm_w, reduce="none")
+    d_corr: Tensor = reduce_disco_scores(d_corr_vec, disco_reduce) # scalar
+
+    # print(f"d_corr = {d_corr.item():.6f}")
+    # print(f"d_corr.shape = {d_corr.shape}")
+    # print(f"type(d_corr) = {type(d_corr)}")
+    # print(f"d_corr_vec = {d_corr_vec.detach().cpu().numpy()}")
+    # print(f"d_corr_vec.shape = {d_corr_vec.shape}")
+    # print(f"loss_nominal = {loss_nominal.item():.6f}")
+    # print(f"loss_nominal.shape = {loss_nominal.shape}")
+    # print(f"type(loss_nominal) = {type(loss_nominal)}")
+
     total_weighted_loss = loss_nominal + decorr_lambda * d_corr
+
+    # print(f"total_weighted_loss = {total_weighted_loss.item():.6f}")
+    # print(f"total_weighted_loss.shape = {total_weighted_loss.shape}")
+    # print(f"type(total_weighted_loss) = {type(total_weighted_loss)}")
 
     # print(f"[DEBUG] Multidim DisCo scores: {d_corr_vec.item()}") # COMMENT OUT WHEN TRAINING NORMALLY
 
