@@ -20,95 +20,80 @@ from tqdm.auto import tqdm
 
 from models import mlp_plotter
 from models.mlp import MLP
-from utils.decorr_utils import distance_corr, distance_corr_multi, reduce_disco_scores
+from utils.decorr_utils import distance_corr, reduce_disco_scores
 from utils.predictions import save_predictions
 
 
 def sigmoid(x: Tensor, x0: Tensor, k: Tensor) -> Tensor:
-    """x [N,C] -> [N,]  C classes
-    
-    x0 [C,] midpoints
-    k  [C,] steepness
+    """Elementwise generalized sigmoid with per-class midpoints/steepness.
 
-    exp [N,] = exp(-k [C,] * (x [N,C] - x0 [C,]))
+    Args:
+        x (Tensor): [N,C] values to transform (typically class probabilities).
+        x0 (Tensor): [C,] midpoint for each class where sigmoid = 0.5.
+        k (Tensor): [C,] steepness for each class (sign controls monotonicity).
+
+    Returns:
+        Tensor: [N,C] values in (0,1).
     """
 
-    xx0: Tensor = x - x0 # xt [N,C] = x [N,C] - x0 [C,] broadcasted along first dim
-    kxx0: Tensor = k * xx0 # kxx0 [N,C] = k [C,] * xx0 [N,C]
-    sumexp = torch.sum(torch.exp(-kxx0), dim=1) # sumexp [N,] = sum over C of exp(-kxx0 [N,C])
-    sig: Tensor = 1 / (1 + sumexp) # sigmoid batch vector [N,]
-
-    return sig
+    return torch.sigmoid(k * (x - x0))
 
 
 def generalized_sigmoid(x: Tensor, x0: Tensor, k: Tensor, y_min: float, y_max: float) -> Tensor:
-    """Generalized sigmoid function mapping to [y_min, y_max].
-    C number of classes
-
-    x [N,C] batch predictions
-    x0 [C,] midpoints
-    k [C,] steepness
-    y_min float minimum output value (<1 will downweight events far from SR)
-    y_max float maximum output value in SR
-    """
+    """Generalized sigmoid mapping to [y_min, y_max] for each class."""
     return y_min + (y_max - y_min) * sigmoid(x, x0, k)
 
 def generalized_5090_sigmoid(
-        x: Tensor, 
-        x0: Tensor, # midpoint
-        x90: Tensor, # 90% maximum point
+        x: Tensor,
+        x0: Tensor,
+        x90: Tensor,
         y_min: float,
         y_max: float,
     ) -> Tensor:
-    """Generalized sigmoid function mapping to [y_min, y_max] with specified 50% and 90% points.
-    
-    Args:
-        x (Tensor): [N,C] batch predictions
-        x0 (Tensor): [C,] midpoints
-        x90 (Tensor): [C,] 90% points
-        y_min (float): Minimum upweight value (<1 will downweight events far from SR)
-        y_max (float): Maximum upweight multiplier in SR
+    """Sigmoid per class hitting 50% at x0 and 90% at x90."""
+    if torch.any((x90 - x0).abs() < 1e-6).item():
+        raise ValueError("score_midpoint and score_90_percent must differ for each class.")
 
-    Returns:
-        Tensor: Upweighting factors [N,]
-    """
-    k: Tensor = np.log((9*y_max - 10*y_min)/y_max) / (x90 - x0) # [C,] steepness
-    return generalized_sigmoid(x, x0, k, y_min, y_max) # [N,]
+    log_nine = torch.log(torch.tensor(9.0, device=x.device, dtype=x.dtype))
+    k: Tensor = log_nine / (x90 - x0)
+    return generalized_sigmoid(x, x0, k, y_min, y_max)
 
 
 def sigmoid_upweight(
-        y_pred: Tensor, 
-        weights: Tensor, 
-        x0: Tensor, 
-        x90: Tensor, 
-        y_min: float, 
+        y_pred: Tensor,
+        x0: Tensor,
+        x90: Tensor,
+        y_min: float,
         y_max: float,
-    )-> Tensor:
-    """[N,C]-dim logisitc upweighting function based on model predictions.
-    N -> number of events (per batch)
-    C -> number of classes (nominally 4)
-    
-    Args:
-        y_pred (Tensor): Model predictions [N,C]
-        weights (Tensor): Original event weights [N,]
-        x0 (Tensor): Midpoint(s) [C,]
-        x90 (Tensor): 90% point(s) [C,]
-        y_min (float): Minimum upweight value (<1 will downweight events far from SR)
-        y_max (float): Maximum upweight multiplier in SR
-    
-    Returns:
-        Tensor: New event weights after upweighting [N,]"""
+    ) -> Tensor:
+    """SR upweighting based on class scores.
 
-    upweights = generalized_5090_sigmoid(
-        y_pred,
-        x0=torch.tensor(x0, device=y_pred.device),
-        x90=torch.tensor(x90, device=y_pred.device),
-        y_min=y_min,
-        y_max=y_max,
-    ) # [N,]
-    # new_weights = weights * upweights # [N,]
-    # return new_weights
-    return upweights
+    Produces a per-event multiplier in [y_min, y_max] that approaches y_max
+    only when all classes satisfy their SR criteria: signal scores high (x > x0)
+    and background scores low (x < x0).
+    """
+    probs = F.softmax(y_pred, dim=1, dtype=torch.float32)
+    per_class_focus = generalized_5090_sigmoid(
+        probs,
+        x0=x0.to(device=y_pred.device, dtype=probs.dtype),
+        x90=x90.to(device=y_pred.device, dtype=probs.dtype),
+        y_min=0.0,
+        y_max=1.0,
+    )  # [N,C]
+    sr_focus = torch.prod(per_class_focus, dim=1)  # [N]
+    return y_min + (y_max - y_min) * sr_focus
+
+
+def _extract_ordered_values(obj) -> list[float]:
+    """Return a list preserving the original ordering for dicts/Series."""
+    values_attr = getattr(obj, "values", None)
+    if callable(values_attr):
+        iterable = values_attr()
+    elif values_attr is not None:
+        iterable = values_attr
+    else:
+        iterable = obj
+    return list(iterable)
 
 
 
@@ -228,10 +213,7 @@ def apply_disco(
     N -> Number of events per batch
     C -> Number of classes (nominally 4)
     """
-    # Experimental flags
-    # USE_MULTIDIM_DISCO = True # DisCo score uses multiple target classes instead of just one
     USE_BKG_MASK = True # Only bkg MC events contribute to DisCo score
-    USE_PRED_WITHOUT_SOFTMAX = True # Use raw model outputs instead of softmax probabilities for DisCo calculation
 
     if USE_BKG_MASK and y_true is None:
         raise ValueError(
@@ -239,61 +221,38 @@ def apply_disco(
             + "DisCo loss component only counts background MC events when background-only mask is enabled."
         )
 
-    # Unpack DisCo variables
-    # [[v11, v21], [v12, v22], [v13, v23], ...] -> [v11, v12, v13, ...], [v21, v22, v23, ...]
-    var1: torch.Tensor = disco_vars_batch[:, 0] # [N,]
-    var2: torch.Tensor = disco_vars_batch[:, 1] # [N,]
-
     if USE_BKG_MASK and y_true is not None:
         bkg_mask = _get_bkg_mask(y_true) # [N,] boolean tensor
     else:
         bkg_mask = torch.ones_like(disco_vars_batch[:, 0], dtype=torch.bool) # [N,] all True
 
-    norm_w = weights_batch / weights_batch.mean() # Normalize weights to mean 1
-    # _plot_norm_weights_for_disco(norm_w, title="Inclusive Normalized Weights used in DisCo Calculation", fname="norm_weights_disco_inclusive_0.png") # COMMENT OUT WHEN TRAINING NORMALLY
-    # _plot_norm_weights_for_disco(norm_w[bkg_mask], title="Background-only Normalized Weights used in DisCo Calculation", fname="norm_weights_disco_bkg_0.png") # COMMENT OUT WHEN TRAINING NORMALLY
-    # _plot_norm_weights_for_disco(norm_w[~bkg_mask], title="Signal-only Normalized Weights used in DisCo Calculation", fname="norm_weights_disco_sig_0.png") # COMMENT OUT WHEN TRAINING NORMALLY
-    # convert logits to probabilities so the >0.9 threshold is meaningful
-    # probs_for_sel = F.softmax(y_pred, dim=1)
-    # print(f"[DEBUG] Probs for DisCo selection debug: {probs_for_sel[:5,:].detach().cpu().numpy()}") # COMMENT OUT WHEN TRAINING NORMALLY
-    # high_sig_mask = probs_for_sel[:, 3] > 0.5  # boolean mask [N,]
-    # print(f"[DEBUG] Number of high signal score events (>0.5): {high_sig_mask.sum().item()} out of {y_pred.shape[0]} total events.") # COMMENT OUT WHEN TRAINING NORMALLY
-    # high_avg_weight = norm_w[high_sig_mask].mean().item() if high_sig_mask.any() else 0.0
-    # high_uncert = norm_w[high_sig_mask].std().item() / np.sqrt(norm_w[high_sig_mask].shape[0]) if high_sig_mask.any() else 0.0
-    # low_avg_weight = norm_w[~high_sig_mask].mean().item() if (~high_sig_mask).any() else 0.0
-    # low_uncert = norm_w[~high_sig_mask].std().item() / np.sqrt(norm_w[~high_sig_mask].shape[0]) if (~high_sig_mask).any() else 0.0
-    # if high_sig_mask.any():
-    #     print(f"[DEBUG] Mean high signal score (>0.5) weight: {high_avg_weight:.4f} +/- {high_uncert:.4f}; low signal score weight: {low_avg_weight:.4f} +/- {low_uncert:.4f}") # COMMENT OUT WHEN TRAINING NORMALLY
-        # _plot_norm_weights_for_disco(
-        #     norm_w[high_sig_mask],
-        #     title="High signal score Normalized Weights used in DisCo Calculation",
-        #     fname="norm_weights_disco_sigscorehigh_0.png"
-        # ) # COMMENT OUT WHEN TRAINING NORMALLY
-    if USE_PRED_WITHOUT_SOFTMAX:
-        probs = y_pred
-    else:
-        probs = F.softmax(y_pred, dim=1) # [N,C] # QUESTION: Can we get more effective DisCo without softmax?
+    disco_vars_batch = disco_vars_batch[bkg_mask]
+    weights_batch = weights_batch[bkg_mask]
 
-    # disco_vars_batch = disco_vars_batch[bkg_mask]
-    probs = probs[bkg_mask]
-    norm_w = norm_w[bkg_mask]
-    var1 = var1[bkg_mask]
-    var2 = var2[bkg_mask]
+    if disco_vars_batch.dim() == 1:
+        raise ValueError("disco_vars_batch must have at least two columns to compute distance correlation.")
 
-    class_indices = list[disco_signal_class_idx]
+    n_vars = disco_vars_batch.shape[1]
+    if n_vars < 2:
+        raise ValueError("At least two decorrelation variables are required to compute DisCo.")
 
-    # if disco_signal_class_idx is None:
-    #     raise ValueError("disco_signal_class_idx must be provided when use_disco=True.")
-    # if isinstance(disco_signal_class_idx, int):
-    #     class_indices = [disco_signal_class_idx]
-    # elif isinstance(disco_signal_class_idx, list):
-    #     class_indices = disco_signal_class_idx
-    # else:
-    #     raise ValueError("disco_signal_class_idx must be int or list of int when y_pred is multi-dimensional.")
+    norm_w = weights_batch / (weights_batch.mean() + 1e-12) # Normalize weights to mean 1
 
-    # d_corr_vec = distance_corr_multi(disco_vars_batch.reshape(-1), probs[:, class_indices], norm_w, reduce="none") #, reduce=disco_reduce)
-    d_corr_vec = distance_corr_multi(var1, var2, norm_w, reduce="none")
-    d_corr: Tensor = reduce_disco_scores(d_corr_vec, disco_reduce) # scalar
+    pairwise_corrs: list[Tensor] = []
+    for i in range(n_vars):
+        for j in range(i + 1, n_vars):
+            pairwise_corrs.append(
+                distance_corr(
+                    disco_vars_batch[:, i],
+                    disco_vars_batch[:, j],
+                    norm_w.reshape(-1),
+                )
+            )
+
+    if not pairwise_corrs:
+        raise ValueError("DisCo requires at least one pair of variables to decorrelate.")
+
+    d_corr = reduce_disco_scores(torch.stack(pairwise_corrs), disco_reduce)
 
     # print(f"d_corr = {d_corr.item():.6f}")
     # print(f"d_corr.shape = {d_corr.shape}")
@@ -414,15 +373,24 @@ def train_one_epoch(
         #     disco_vars_batch = disco_vars_batch.to(device, non_blocking=True)
 
     
-        upweight_score_midpoint = torch.Tensor()
-        upweight_score_90_percent = torch.Tensor()
+        use_sr_upweight = bool(upweight_params and upweight_params.get("do_upweight", False))
+        upweight_score_midpoint = None
+        upweight_score_90_percent = None
         upweight_max: float = 1.0
         upweight_min: float = 1.0
-        if upweight_params is not None:
-            upweight_score_midpoint = torch.tensor(upweight_params["sr_definition"]["score_midpoint"].values, device=device)
-            upweight_score_90_percent = torch.tensor(upweight_params["sr_definition"]["score_90_percent"].values, device=device)
-            upweight_max = upweight_params["max_upweight"]
-            upweight_min = upweight_params["min_upweight"]
+        if use_sr_upweight:
+            upweight_score_midpoint = torch.tensor(
+                _extract_ordered_values(upweight_params["sr_definition"]["score_midpoint"]),
+                device=device,
+                dtype=torch.float32,
+            )
+            upweight_score_90_percent = torch.tensor(
+                _extract_ordered_values(upweight_params["sr_definition"]["score_90_percent"]),
+                device=device,
+                dtype=torch.float32,
+            )
+            upweight_max = float(upweight_params["max_upweight"])
+            upweight_min = float(upweight_params["min_upweight"])
 
 
         optimizer.zero_grad(set_to_none=True)
@@ -432,14 +400,14 @@ def train_one_epoch(
             weights_batch_no = weights_batch_no.to(device, non_blocking=True)
             if use_disco:
                 disco_vars_batch = disco_vars_batch.to(device, non_blocking=True)
-            if upweight_params is not None:
-                weights_batch_multiplier = sigmoid_upweight(y_pred, 
-                                                weights_batch, 
-                                                x0=upweight_score_midpoint,
-                                                x90=upweight_score_90_percent,
-                                                y_min=upweight_min,
-                                                y_max=upweight_max
-                                                )
+            if use_sr_upweight:
+                weights_batch_multiplier = sigmoid_upweight(
+                    y_pred,
+                    x0=upweight_score_midpoint,
+                    x90=upweight_score_90_percent,
+                    y_min=upweight_min,
+                    y_max=upweight_max,
+                )
             else:
                 weights_batch_multiplier = torch.ones_like(weights_batch, device=device)
 
