@@ -24,6 +24,45 @@ from utils.decorr_utils import distance_corr, reduce_disco_scores
 from utils.predictions import save_predictions
 
 
+# Define custom dataset
+class CustomDataset(Dataset):
+    # YES disco
+    #   - 5 elements: X, y, sample_weights, no_absolute_weights, disco_vars
+    #   - 4 elements: X, y, sample_weights, disco_vars
+    # NO disco
+    #   - 4 elements: X, y, sample_weights, no_absolute_weights
+    #   - 3 elements: X, y, sample_weights
+    def __init__(self, X, y, sample_weights, no_absolute_weights=None, disco_vars=None):
+        self.X = X
+        self.y = y
+        self.sample_weights = sample_weights
+        self.no_absolute_weights = no_absolute_weights
+        self.disco_vars = disco_vars # 2D tensor aligned to X (e.g. mjj, mgg)
+
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self, idx):
+        if self.disco_vars is not None and self.no_absolute_weights is not None:
+            return self.X[idx], self.y[idx], self.sample_weights[idx], self.no_absolute_weights[idx], self.disco_vars[idx]
+        elif self.disco_vars is not None:
+            return self.X[idx], self.y[idx], self.sample_weights[idx], self.disco_vars[idx]
+        elif self.no_absolute_weights is not None:
+            return self.X[idx], self.y[idx], self.sample_weights[idx], self.no_absolute_weights[idx]
+        else:
+            return self.X[idx], self.y[idx], self.sample_weights[idx]
+
+
+@dataclass
+class BatchDiscoContext:
+    """Context manager to handle DisCo variables and settings during training/evaluation."""
+    use_disco: bool         # shared
+    decorr_lambda: float    # shared
+    decorrelation_variables: dict[str, list[str]] # {'var1': [list of str], 'var2': [list of str]}
+    # z_vars: 
+    
+
+
 def sigmoid(x: Tensor, x0: Tensor, k: Tensor) -> Tensor:
     """Elementwise generalized sigmoid with per-class midpoints/steepness.
 
@@ -54,6 +93,7 @@ def generalized_5090_sigmoid(
     if torch.any((x90 - x0).abs() < 1e-6).item():
         raise ValueError("score_midpoint and score_90_percent must differ for each class.")
 
+    # TODO: Check numerator
     log_nine = torch.log(torch.tensor(9.0, device=x.device, dtype=x.dtype))
     k: Tensor = log_nine / (x90 - x0)
     return generalized_sigmoid(x, x0, k, y_min, y_max)
@@ -135,7 +175,7 @@ def _extract_ordered_values(obj) -> list[float]:
 #         y_pred (torch.Tensor): Model predictions (logits or probabilities).
 #         training_config (dict): Training configuration dictionary.
 
-#     Returns:
+#     Returns
 #         torch.Tensor: Upweighted model predictions.
 #     """
 #     params = training_config["upweight_params"]
@@ -144,29 +184,6 @@ def _extract_ordered_values(obj) -> list[float]:
 #     sr_def = {}
 
 
-
-
-# Define custom dataset
-class CustomDataset(Dataset):
-    def __init__(self, X, y, sample_weights, no_absolute_weights=None, disco_vars=None):
-        self.X = X
-        self.y = y
-        self.sample_weights = sample_weights
-        self.no_absolute_weights = no_absolute_weights
-        self.disco_vars = disco_vars # 2D tensor aligned to X (e.g. mjj, mgg)
-
-    def __len__(self):
-        return len(self.X)
-
-    def __getitem__(self, idx):
-        if self.disco_vars is not None and self.no_absolute_weights is not None:
-            return self.X[idx], self.y[idx], self.sample_weights[idx], self.no_absolute_weights[idx], self.disco_vars[idx]
-        elif self.disco_vars is not None:
-            return self.X[idx], self.y[idx], self.sample_weights[idx], self.disco_vars[idx]
-        elif self.no_absolute_weights is not None:
-            return self.X[idx], self.y[idx], self.sample_weights[idx], self.no_absolute_weights[idx]
-        else:
-            return self.X[idx], self.y[idx], self.sample_weights[idx]
 
 
 def _plot_norm_weights_for_disco(weights: Tensor, title="Distribution of Normalized Weights used in DisCo Calculation",fname="norm_weights_disco_0.png"):
@@ -197,21 +214,71 @@ def _get_bkg_mask(y_true: Tensor) -> Tensor:
     return (y_true == 0) | (y_true == 1) | (y_true == 2)
 
 
+def _get_disco_vars(var_names: list[str], config: dict, y_pred: Tensor, z_vars: Tensor) -> Tensor:
+    """Retrieve disco variables from global context or dataset.
+
+    Args:
+        var_names (list[str]): List of variable names to retrieve.
+        config (dict): Global configuration dictionary.
+        y_pred (Tensor): [N,C] tensor of model predictions, if needed for derived variables.
+
+    Returns:
+        Tensor: [N, len(var_names)] tensor of disco variables.
+    """
+    # Types of variables:
+    #   - class scores from y_pred (parse idx from config["classes"])
+    #   - z-variables from dataset (e.g. mjj, mgg)
+
+    # var_tensor: Tensor = torch.Tensor() # [N, len(var_names)]
+    var_tensor: Tensor = torch.empty((y_pred.shape[0], len(var_names)), device=y_pred.device, dtype=torch.float32) # Preallocate
+    for vn in var_names:
+        if vn in config["classes"]:
+            class_idx = config["classes"].index(vn) # index in var1/var2 list
+            class_scores = F.softmax(y_pred, dim=1, dtype=torch.float32)[:, class_idx].unsqueeze(1) # [N,1]
+            # var_tensor = torch.cat((var_tensor, class_scores), dim=1) if var_tensor.numel() > 0 else class_scores
+            var_tensor[:, var_names.index(vn)] = class_scores.squeeze(1)
+        elif vn in config["z_variables"]:
+            z_var_idx = config["z_variables"].index(vn) # index in z_variables list to retrieve from z_vars tensor
+            z_var_values = z_vars[:, z_var_idx].unsqueeze(1) # [N,1]
+            # var_tensor = torch.cat((var_tensor, z_var_values), dim=1) if var_tensor.numel() > 0 else z_var_values
+            var_tensor[:, var_names.index(vn)] = z_var_values.squeeze(1)
+        else:
+            raise NotImplementedError(f"DisCo variable '{vn}' not found in classes or z_variables in config. Check spelling or consider implementing derived variables.")
+    return var_tensor
+
+
 def apply_disco(
+        v1: Tensor,
+        v2: Tensor,
         loss_nominal: Tensor,
-        y_pred: Tensor,
         weights_batch: Tensor,
-        disco_vars_batch: Tensor,
         decorr_lambda: float,
-        disco_signal_class_idx: Union[int, list[int], None],
         y_true: Union[Tensor, None]=None,
-        disco_reduce: str='mean'
+        reduce: str='mean'
     ) -> tuple[Tensor, Tensor]:
     """
-    Apply the DisCo (Decorrelation) loss to the nominal loss.
+    Apply the DisCo (Decorrelation) loss to the nominal loss pairwise across:
+        (z-variables) X (class scores) 
+    or specifically:
+        (mgg, mjj) X (nonres_score, ttH_score, singleH_score, HH_score) 8 pairs
+
+    shapes [N, n1] X [N, n2] produce n1 x n2 distance correlations reduced to a single scalar via 'reduce' method.
 
     N -> Number of events per batch
     C -> Number of classes (nominally 4)
+
+    Args:
+        v1 (Tensor): [N, n1] tensor of first set of variables to decorrelate (e.g. mjj, mgg).
+        v2 (Tensor): [N, n2] tensor of second set of variables to decorrelate (e.g. class scores).
+        loss_nominal (Tensor): [1,] Scalar tensor with the nominal loss value (without DisCo term).
+        weights_batch (Tensor): [N,] tensor of event weights for the batch. Add upweighting before passing here if desired.
+        decorr_lambda (float): Weighting factor for the DisCo term in the loss.
+        y_true (Tensor | None): [N,] tensor of target truths (class indices). Required if using background-only mask.
+        reduce (str): 'mean'|'sum'|'max'|'quadrature'|'none' to aggregate distance correlations across n1 x n2 pairs. Default 'mean'.
+
+    Returns:
+        total_weighted_loss (Tensor): Scalar tensor with the total loss including DisCo term.
+        d_corr (Tensor): Scalar tensor with the computed DisCo distance correlation.
     """
     USE_BKG_MASK = True # Only bkg MC events contribute to DisCo score
 
@@ -222,29 +289,27 @@ def apply_disco(
         )
 
     if USE_BKG_MASK and y_true is not None:
-        bkg_mask = _get_bkg_mask(y_true) # [N,] boolean tensor
+        bkg_mask: Tensor = _get_bkg_mask(y_true) # [N,] boolean tensor
     else:
-        bkg_mask = torch.ones_like(disco_vars_batch[:, 0], dtype=torch.bool) # [N,] all True
+        bkg_mask: Tensor = torch.ones_like(v1[:, 0], dtype=torch.bool) # [N,] all True
 
-    disco_vars_batch = disco_vars_batch[bkg_mask]
+    # disco_vars_batch = disco_vars_batch[bkg_mask]
+    v1 = v1[bkg_mask]
+    v2 = v2[bkg_mask]
     weights_batch = weights_batch[bkg_mask]
 
-    if disco_vars_batch.dim() == 1:
-        raise ValueError("disco_vars_batch must have at least two columns to compute distance correlation.")
-
-    n_vars = disco_vars_batch.shape[1]
-    if n_vars < 2:
-        raise ValueError("At least two decorrelation variables are required to compute DisCo.")
+    v1_vars = v1.shape[1]
+    v2_vars = v2.shape[1]
 
     norm_w = weights_batch / (weights_batch.mean() + 1e-12) # Normalize weights to mean 1
 
     pairwise_corrs: list[Tensor] = []
-    for i in range(n_vars):
-        for j in range(i + 1, n_vars):
+    for i in range(v1_vars):
+        for j in range(v2_vars):
             pairwise_corrs.append(
                 distance_corr(
-                    disco_vars_batch[:, i],
-                    disco_vars_batch[:, j],
+                    v1[:, i],
+                    v2[:, j],
                     norm_w.reshape(-1),
                 )
             )
@@ -252,22 +317,8 @@ def apply_disco(
     if not pairwise_corrs:
         raise ValueError("DisCo requires at least one pair of variables to decorrelate.")
 
-    d_corr = reduce_disco_scores(torch.stack(pairwise_corrs), disco_reduce)
-
-    # print(f"d_corr = {d_corr.item():.6f}")
-    # print(f"d_corr.shape = {d_corr.shape}")
-    # print(f"type(d_corr) = {type(d_corr)}")
-    # print(f"d_corr_vec = {d_corr_vec.detach().cpu().numpy()}")
-    # print(f"d_corr_vec.shape = {d_corr_vec.shape}")
-    # print(f"loss_nominal = {loss_nominal.item():.6f}")
-    # print(f"loss_nominal.shape = {loss_nominal.shape}")
-    # print(f"type(loss_nominal) = {type(loss_nominal)}")
-
+    d_corr = reduce_disco_scores(torch.stack(pairwise_corrs), reduce)
     total_weighted_loss = loss_nominal + decorr_lambda * d_corr
-
-    # print(f"total_weighted_loss = {total_weighted_loss.item():.6f}")
-    # print(f"total_weighted_loss.shape = {total_weighted_loss.shape}")
-    # print(f"type(total_weighted_loss) = {type(total_weighted_loss)}")
 
     # print(f"[DEBUG] Multidim DisCo scores: {d_corr_vec.item()}") # COMMENT OUT WHEN TRAINING NORMALLY
 
@@ -282,12 +333,14 @@ def train_one_epoch(
         loss_fn: nn.Module,
         device: torch.device,
         epoch: int,
-        use_disco=False,
-        decorr_lambda=0.1,
-        disco_signal_class_idx: Union[int, list[int], None]=0,
+        use_disco: bool = False,
+        decorr_lambda: float = 0.1,
+        # disco_signal_class_idx: Union[int, list[int], None]=0,
         disco_reduce: str='mean',
+        decorrelation_variables: dict[str, list[str]] = {}, # {'var1': [list of str], 'var2': [list of str]}
         progress_update_interval: int = 50,
-        upweight_params: Union[dict, None] = None,
+        upweight_params: dict = {},
+        training_config: dict = {},
 ) -> tuple[float, float, float, float, float, Union[float, None], Union[float, None]]:
     """
     Train the model for one epoch.
@@ -301,13 +354,11 @@ def train_one_epoch(
         epoch (int): Current epoch number (for logging).
         use_disco (bool): Whether to include DisCo distance correlation in the loss.
         decorr_lambda (float): Weighting factor for the DisCo term in the loss. Typically between 0 and 1.
-        disco_signal_class_idx (int | list[int] | None): Index/indices of class(es) in model output to use for DisCo decorrelation.
-            If None, don't use DisCo even if use_disco=True.
-            If int, use that one class index. (n.b. zero indexed)
-            If list[int], use those class indices (e.g. for multi-class classification).
+        decorrelation_variables (dict[str, list[str]]): Dictionary specifying variable names for DisCo calculation.
         disco_reduce (str): 'mean'|'sum'|'max'|'quadrature'|'none' to aggregate distance correlations across multiple classes.
         progress_update_interval (int): Interval (in batches) to update the progress bar.
         upweight_params (dict): Parameters for upweighting. None means no upweighting.
+        training_config: (dict): Full training configuration dictionary.
 
     Returns:
         tuple: Average across batches for the epoch
@@ -352,12 +403,20 @@ def train_one_epoch(
             # Expect dataset to include disco_var in batch
             if len(batch) == 5:
                 X_batch, y_batch, weights_batch, weights_batch_no, disco_vars_batch = batch
+            elif len(batch) == 4:
+                X_batch, y_batch, weights_batch, disco_vars_batch = batch
+                weights_batch_no = weights_batch # dummy assignment to avoid errors
             else:
                 raise ValueError("use_disco=True but dataset does not include disco_var. Check how the dataset was created.")
         else:
             # Not using DisCo
             if len(batch) == 4:
                 X_batch, y_batch, weights_batch, weights_batch_no = batch
+                disco_vars_batch = Tensor()
+            elif len(batch) == 3:
+                X_batch, y_batch, weights_batch = batch
+                weights_batch_no = weights_batch # dummy assignment to avoid errors
+                disco_vars_batch = Tensor()
             else:
                 # Not using weights without absolute value (not using no_absolute_weights)
                 X_batch, y_batch, weights_batch = batch
@@ -412,28 +471,22 @@ def train_one_epoch(
                 weights_batch_multiplier = torch.ones_like(weights_batch, device=device)
 
             loss = loss_fn(y_pred, y_batch) # [N]
-            # print(f"loss = {loss.detach().cpu().numpy()}")
-            # print(f"loss.shape: {loss.shape}")
-            # print(f"type(loss) = {type(loss)}")
             wsum: Tensor = weights_batch.sum() # weights_batch is absolute-valued
             weighted_loss: Tensor = (loss * weights_batch).sum() / wsum # scalar
-            # print(f"weighted_loss = {weighted_loss.item():.6f}")
-            # print(f"weighted_loss.shape: {weighted_loss.shape}")
-            # print(f"type(weighted_loss) = {type(weighted_loss)}")
 
             # Add DisCo term
             if use_disco:
+                var1: Tensor = _get_disco_vars(decorrelation_variables["var1"], y_pred=y_pred, config=training_config, z_vars=disco_vars_batch)
+                var2: Tensor = _get_disco_vars(decorrelation_variables["var2"], y_pred=y_pred, config=training_config, z_vars=disco_vars_batch)
                 total_weighted_loss, d_corr = apply_disco(
+                    var1,
+                    var2,
                     weighted_loss,
-                    y_pred,
                     weights_batch * weights_batch_multiplier,
-                    disco_vars_batch,
                     decorr_lambda,
-                    disco_signal_class_idx,
                     y_true=y_batch,
-                    disco_reduce=disco_reduce
+                    reduce=disco_reduce
                 )
-                assert d_corr is not None, "d_corr should not be None when using DisCo. Something is wrong inside the apply_disco function."
             else:
                 total_weighted_loss: Tensor = weighted_loss # scalar
                 d_corr: Tensor = Tensor(0.0, device=device) # Dummy
@@ -468,7 +521,7 @@ def train_one_epoch(
         if progress_update_interval and (batch_idx % progress_update_interval == 0 or batch_idx == len(progress_bar) - 1):
             if use_disco:
                 progress_bar.set_postfix({
-                    'Loss': f'{weighted_loss_f:.4f}+{decorr_lambda}*{(d_corr_f):.4f}',
+                    'Loss': f'{weighted_loss_f:.4f}+{(decorr_lambda*d_corr_f):.4f}',
                     'Acc': f'{weighted_acc_f:.4f}',
                     'Loss_no_abs': f'{weighted_loss_no_abs_f:.4f}'
                 })
@@ -506,9 +559,11 @@ def evaluate(
         epoch,
         use_disco=False,
         decorr_lambda=0.1,
-        disco_signal_class_idx: Union[int, list[int], None]=0,
-    disco_reduce: str='mean',
-    progress_update_interval: int = 50,
+        decorrelation_variables: dict[str, list[str]] = {}, # {'var1': [list of str], 'var2': [list of str]}
+        disco_reduce: str='mean',
+        progress_update_interval: int = 50,
+        upweight_params: dict = {},
+        training_config: dict = {},
     ) -> tuple[float, float, float, Union[float, None], Union[float, None]]:
     model.eval()
     val_losses = []
@@ -527,41 +582,74 @@ def evaluate(
                     X_batch, y_batch, weights_batch, weights_batch_no_abs, disco_vars_batch = batch
                 elif len(batch) == 4:
                     X_batch, y_batch, weights_batch, disco_vars_batch = batch
+                    weights_batch_no_abs = weights_batch # dummy assignment to avoid errors
                 else:
                     raise ValueError("use_disco=True but dataset does not include disco_var. Check how the dataset was created.")
             else:
                 # Not using DisCo
                 if len(batch) == 4:
                     X_batch, y_batch, weights_batch, weights_batch_no_abs = batch
-                else:
+                    disco_vars_batch = Tensor()
+                elif len(batch) == 3:
                     # Not using weights without absolute value (not using no_absolute_weights)
                     X_batch, y_batch, weights_batch = batch
+                    weights_batch_no_abs = weights_batch # dummy assignment to avoid errors
+                    disco_vars_batch = Tensor()
+                else:
+                    raise ValueError("Batch size unexpected for dataset without DisCo. Check how the dataset was created.")
             X_batch = X_batch.to(device, non_blocking=True)
             y_batch = y_batch.to(device, non_blocking=True)
             weights_batch = weights_batch.to(device, non_blocking=True)
-            # print(f"[DEBUG] weights_batch sum (inside val loop): {weights_batch.sum().item()}") 
+            use_sr_upweight = bool(upweight_params and upweight_params.get("do_upweight", False))
+            upweight_score_midpoint = None
+            upweight_score_90_percent = None
+            upweight_max: float = 1.0
+            upweight_min: float = 1.0
+            if use_sr_upweight:
+                upweight_score_midpoint = torch.tensor(
+                    _extract_ordered_values(upweight_params["sr_definition"]["score_midpoint"]),
+                    device=device,
+                    dtype=torch.float32,
+                )
+                upweight_score_90_percent = torch.tensor(
+                    _extract_ordered_values(upweight_params["sr_definition"]["score_90_percent"]),
+                    device=device,
+                    dtype=torch.float32,
+                )
+                upweight_max = float(upweight_params["max_upweight"])
+                upweight_min = float(upweight_params["min_upweight"])
 
             with autocast(enabled=use_cuda):
                 y_pred = model(X_batch)
                 loss = loss_fn(y_pred, y_batch)
                 weighted_loss = (loss * weights_batch).sum() / weights_batch.sum()
+                if use_sr_upweight:
+                    weights_batch_multiplier = sigmoid_upweight(
+                        y_pred,
+                        x0=upweight_score_midpoint,
+                        x90=upweight_score_90_percent,
+                        y_min=upweight_min,
+                        y_max=upweight_max,
+                    )
+                else:
+                    weights_batch_multiplier = torch.ones_like(weights_batch, device=device)
 
             # Add DisCo term
             if use_disco:
-                disco_vars_batch = disco_vars_batch.to(device, non_blocking=True)
+                var1: Tensor = _get_disco_vars(decorrelation_variables["var1"], config=training_config, y_pred=y_pred, z_vars=disco_vars_batch)
+                var2: Tensor = _get_disco_vars(decorrelation_variables["var2"], config=training_config, y_pred=y_pred, z_vars=disco_vars_batch)
                 total_weighted_loss, d_corr = apply_disco(
+                    var1,
+                    var2,
                     weighted_loss,
-                    y_pred,
-                    weights_batch,
-                    disco_vars_batch,
+                    weights_batch * weights_batch_multiplier,
                     decorr_lambda,
-                    disco_signal_class_idx,
                     y_true=y_batch,
-                    disco_reduce=disco_reduce
+                    reduce=disco_reduce
                 )
             else:
-                total_weighted_loss = weighted_loss
-                d_corr = None # Dummy
+                total_weighted_loss: Tensor = weighted_loss # scalar
+                d_corr: Tensor = Tensor(0.0, device=device)
 
             # compute weighted accuracy
             correct = (torch.argmax(y_pred, dim=1) == y_batch).float()
@@ -570,20 +658,20 @@ def evaluate(
             total_weighted_loss_f = float(total_weighted_loss.detach().item())
             weighted_acc_f = float(weighted_acc.detach().item())
             weighted_loss_f = float(weighted_loss.detach().item())
-            d_corr_f = float(d_corr.detach().item()) if d_corr is not None else None
+            d_corr_f = float(d_corr.detach().item())
 
             val_losses.append(                  total_weighted_loss_f)
             val_accs.append(                    weighted_acc_f)
             # For display we separate the dist-corr part, but for storage reuse weighted_loss directly
             val_losses_no_dist_corr.append(     weighted_loss_f)
             val_dist_corr.append(               d_corr_f)
-            val_dist_corr_times_lambda.append(  (d_corr_f * decorr_lambda) if d_corr_f is not None else None)
+            val_dist_corr_times_lambda.append(  (d_corr_f * decorr_lambda))
 
             # Update progress bar
             if progress_update_interval and (batch_idx % progress_update_interval == 0 or batch_idx == len(progress_bar) - 1):
                 if use_disco:
                     progress_bar.set_postfix({
-                        'Loss': f'{weighted_loss_f:.4f}+{decorr_lambda}*{(d_corr_f if d_corr_f is not None else 0.0):.4f}',
+                        'Loss': f'{weighted_loss_f:.4f}+{(decorr_lambda*d_corr_f):.4f}',
                         'Acc': f'{weighted_acc_f:.4f}',
                     })
                 else:
@@ -595,8 +683,8 @@ def evaluate(
         mean_losses                 = float(np.mean(val_losses))
         mean_accs                   = float(np.mean(val_accs))
         mean_losses_no_dist_corr    = float(np.mean(val_losses_no_dist_corr))
-        mean_dist_corr              = float(np.mean(val_dist_corr)) if d_corr is not None else None
-        mean_dist_corr_times_lambda = float(np.mean(val_dist_corr_times_lambda)) if d_corr is not None else None
+        mean_dist_corr              = float(np.mean(val_dist_corr))
+        mean_dist_corr_times_lambda = float(np.mean(val_dist_corr_times_lambda))
 
     return (
         mean_losses, # Includes distance correlation if use_disco=True
@@ -755,8 +843,8 @@ def _validate_training_config(training_config: dict):
             raise ValueError("Missing key in training_config.yaml. decorr_lambda must be specified when use_DisCo is True.")
         if training_config.get("disco_reduce_method") is None:
             raise ValueError("Missing key in training_config.yaml. disco_reduce_method must be specified when use_DisCo is True.")
-        if training_config.get("disco_decorr_class_idx") is None:
-            raise ValueError("Missing key in training_config.yaml. disco_decorr_class_idx must be specified when use_DisCo is True.")
+        if training_config.get("decorrelation_variables") is None:
+            raise ValueError("Missing key in training_config.yaml. decorrelation_variables must be specified when use_DisCo is True.")
 
 
 if __name__ == "__main__":
@@ -772,9 +860,9 @@ if __name__ == "__main__":
 
     # Load training configuration
     with open(f"{args.training_config_path}", 'r') as f:
-        training_config = yaml.safe_load(f)
+        training_config: dict = yaml.safe_load(f)
     with open(f"{args.job_config_path}", 'r') as f:
-        job_config = yaml.safe_load(f)
+        job_config: dict = yaml.safe_load(f)
 
     _validate_training_config(training_config)
 
@@ -785,6 +873,8 @@ if __name__ == "__main__":
     decorr_lambda:          float           = training_config.get("decorr_lambda", 0.1)
     disco_reduce_method:    str             = training_config.get("decorr_reduce_method", "mean")
     disco_decorr_class_idx: list[int] | int = training_config.get("disco_decorr_class_idx", 0) # 0 for signal, [0,1,2,3] for all classes, etc.
+    disco_upweight_params:  dict            = training_config.get("upweight_params", {})
+    decorr_vars:            dict[str, list[str]] = training_config.get("decorrelation_variables", {})
 
     # --- REPROD SETUP ---
     import random
@@ -810,13 +900,22 @@ if __name__ == "__main__":
         os.makedirs(f'{input_path}/random_search_1', exist_ok=True)
         # best_params = {"num_layers": 3, "num_nodes": 100, "act_fn_name": "ELU", "lr": 2.027496582741043e-05, "weight_decay": 5.159904717896079e-05, "dropout_prob": 0.05, "n_trials": 0}
         # best_params = {"num_layers": 5, "num_nodes": 1024, "act_fn_name": "ELU", "lr": 2.027496582741043e-05, "weight_decay": 5.159904717896079e-05, "dropout_prob": 0.25, "n_trials": 0}
+        # best_params = {
+        #     "num_layers": 5,
+        #     "num_nodes": 1024,
+        #     "act_fn_name": "ELU",
+        #     "lr": 2.027496582741043e-05,
+        #     "weight_decay": 5.159904717896079e-05,
+        #     "dropout_prob": 0.25,
+        #     "n_trials": 0
+        # }
         best_params = {
-            "num_layers": 5,
-            "num_nodes": 1024,
+            "num_layers": 4,
+            "num_nodes": 300,
             "act_fn_name": "ELU",
             "lr": 2.027496582741043e-05,
             "weight_decay": 5.159904717896079e-05,
-            "dropout_prob": 0.25,
+            "dropout_prob": 0.20,
             "n_trials": 0
         }
         with open(f'{input_path}/random_search_1/best_params.json', 'w', encoding='utf-8') as f:
@@ -1027,8 +1126,10 @@ if __name__ == "__main__":
             epoch,
             use_disco=use_disco,
             decorr_lambda=decorr_lambda,
-            disco_signal_class_idx=disco_decorr_class_idx,
-            disco_reduce=disco_reduce_method
+            decorrelation_variables=decorr_vars, # dict[str, list[str]]
+            disco_reduce=disco_reduce_method,
+            upweight_params=disco_upweight_params,
+            training_config=training_config
         )
 
         train_loss, train_acc, train_loss_no_absolute, train_loss_no_dist_corr, train_loss_no_abs_no_dist_corr, train_dist_corr, train_dist_corr_times_lambda = packed_metrics
@@ -1054,8 +1155,10 @@ if __name__ == "__main__":
             epoch,
             use_disco=use_disco,
             decorr_lambda=decorr_lambda,
-            disco_signal_class_idx=disco_decorr_class_idx,
-            disco_reduce=disco_reduce_method
+            decorrelation_variables=decorr_vars, # dict[str, list[str]]
+            disco_reduce=disco_reduce_method,
+            upweight_params=disco_upweight_params,
+            training_config=training_config
         )
         val_loss_hist.append(val_loss)
         val_acc_hist.append(val_acc)

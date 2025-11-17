@@ -119,6 +119,7 @@ class OptunaCategorizer:
         os.makedirs(out_dir, exist_ok=True)  # Ensure the output directory exists
         fig.savefig(os.path.join(out_dir, f"optuna_history_cat_{category}.png"))
         plt.clf()
+        plt.close()
 
     def plot_parallel_coordinates(self, study, out_dir, category):
         """
@@ -130,6 +131,7 @@ class OptunaCategorizer:
         out_dir = os.path.join(out_dir, "optuna_history_plots")
         fig.savefig(os.path.join(out_dir, f"parallel_coordinates_cat_{category}.png"))
         plt.clf()
+        plt.close()
 
     def preselection(self, events, scores):
         
@@ -571,6 +573,7 @@ class OptunaCategorizer:
             ax.set_xlabel(var_config[variable]["label"], fontsize=14)
             plt.savefig(f"{out_path}/{variable}.png", dpi=300, bbox_inches="tight")
             plt.clf()
+            plt.close()
         print("output saved in ", out_path)
 
     def plot_category_summary_with_thresholds(
@@ -1383,6 +1386,8 @@ class OptunaCategorizer:
             # concatenate the samples
             events_nonRes = ak.concatenate([preEE, postEE, preBPix, postBPix, preEE_ttgg, postEE_ttgg, preBPix_ttgg, postBPix_ttgg], axis=0)
             cat_events[cat] = events_nonRes
+            
+            
 
 
 
@@ -1422,6 +1427,7 @@ class OptunaCategorizer:
         plt.tight_layout()
         fig.savefig(f"{path_for_plots}/mass.png")
         plt.clf()
+        plt.close()
 
         fig, ax = plt.subplots()
         plot_with_errorbars(presel, "nonResReg_dijet_mass_DNNreg", [70, 190], "Pre-selection", ax)
@@ -1434,6 +1440,7 @@ class OptunaCategorizer:
         plt.tight_layout()
         fig.savefig(f"{path_for_plots}/nonResReg_dijet_mass_DNNreg.png")
         plt.clf()
+        plt.close()
 
         # get correlation
         cat_corr_dict = {}
@@ -1473,6 +1480,15 @@ class OptunaCategorizer:
             plt.tight_layout()
             fig.savefig(f"{path_for_plots}/nonResReg_dijet_mass_DNNreg_diff_mass_{cat}.png")
             plt.clf()
+            plt.close()
+            
+            # # Signal
+            # fig, ax = plt.subplots()
+            # plot_with_errorbars(cat_events_, ""
+
+
+
+
 
 
     def run_categorisation(self):
