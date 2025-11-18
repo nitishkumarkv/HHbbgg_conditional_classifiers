@@ -29,9 +29,14 @@ num_random_search: 1
 weight_scheme: weighted_abs # weighted_only_positive # weighted_CRUW_abs # weighted_CRUW_only_positive
 random_seed: 42
 cuda_device: "0"
+
+
+# ========== Training loop ==========
+submit_mlp_plotter_condor_every_checkpoint: False
 max_epoch: 300
 
-# Decorrelation settings
+
+# ========== Decorrelation ==========
 use_DisCo: True
 decorr_lambda: 10.0
 disco_reduce_method: mean # mean, max, sum, quadrature
@@ -174,6 +179,7 @@ save_all_columns_sim_systematics : False
 
 # Chunk size for converting akward arrays to pandas dataframes to alleviate memory pressure
 write_chunk : 50000
+
 
 # ========== Categorization ==========
 class_name_map: # for mapping multiclass class names to other formats

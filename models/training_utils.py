@@ -1234,16 +1234,17 @@ if __name__ == "__main__":
                 training_config=training_config
             )
             # TODO: Numpy save y_pred_train.npy, y_train.npy, y_pred_val.npy, and y_val.npy for checkpoint ROC plots
-            mlp_plotter.run_condor_job(
-                input_path=input_path,                                                    # base path to input files
-                condor_dir=f"{path_to_checkpoint}/condor/mlp_plotter/",                   # condor directory
-                plot_dir=f"{path_to_checkpoint}/checkpoints/epoch{epoch}/plots/",         # output directory for plots
-                checkpoint_file=f"{path_to_checkpoint}/checkpoints/epoch{epoch}/mlp.pth", # checkpoint path
-                job_config=job_config,
-                model_folder=args.model_folder,
-                dry_run=False,
-                epoch=epoch,
-            )
+            if training_config.get("submit_mlp_plotter_condor_every_checkpoint", False):
+                mlp_plotter.run_condor_job(
+                    input_path=input_path,                                                    # base path to input files
+                    condor_dir=f"{path_to_checkpoint}/condor/mlp_plotter/",                   # condor directory
+                    plot_dir=f"{path_to_checkpoint}/checkpoints/epoch{epoch}/plots/",         # output directory for plots
+                    checkpoint_file=f"{path_to_checkpoint}/checkpoints/epoch{epoch}/mlp.pth", # checkpoint path
+                    job_config=job_config,
+                    model_folder=args.model_folder,
+                    dry_run=False,
+                    epoch=epoch,
+                )
         print()
 
 
