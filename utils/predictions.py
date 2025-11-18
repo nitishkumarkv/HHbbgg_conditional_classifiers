@@ -20,6 +20,7 @@ import torch.nn.functional as F
 import numpy as np
 
 from models.mlp import MLP
+from utils.device import get_torch_device
 
 def _load_X_train_val(input_dir: str) -> Tuple[np.ndarray, np.ndarray]:
     """Load X_train and X_val using memory mapping for chunked access.
@@ -101,7 +102,7 @@ def save_predictions(
         input_dir (str): Directory containing the input data, e.g. Version_20250524_MVAID_forPreApp.
         batch_size (int, optional): Batch size for predictions. Defaults to 1024.
     """
-    device = torch.device('cuda:'+training_config["cuda_device"] if torch.cuda.is_available() else 'cpu')
+    device = get_torch_device(training_config.get("cuda_device"))
 
     # Load data
     X_train, X_val = _load_X_train_val(input_dir)

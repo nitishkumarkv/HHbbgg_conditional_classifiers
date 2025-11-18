@@ -30,7 +30,7 @@ except ImportError:
 plt.style.use(mplhep.style.CMS)
 
 def load_checkpoint(file_path):
-    checkpoint = torch.load(file_path, weights_only=False)
+    checkpoint = torch.load(file_path, map_location='cpu', weights_only=False)
     #model.load_state_dict(checkpoint['model_state_dict'])
     #optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     #scheduler.load_state_dict(checkpoint['scheduler_state_dict'])

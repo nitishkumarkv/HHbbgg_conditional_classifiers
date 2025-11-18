@@ -15,6 +15,7 @@ from typing import Union
 
 from mjj_predictor_mlp import MJJPredictorMLP
 from training_utils import CustomDataset, save_checkpoint
+from utils.device import get_torch_device
 
 
 def _loss_no_weights(loss_fn, y_pred, y_true, optimizer):
@@ -223,11 +224,13 @@ if __name__ == "__main__":
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+        if torch.backends.cudnn.is_available():
+            torch.backends.cudnn.deterministic = True
 
     # Set device
-    device = torch.device('cuda:'+training_config["cuda_device"] if torch.cuda.is_available() else 'cpu')
+    device = get_torch_device(training_config.get("cuda_device"))
     print('\n', 'INFO: Used device is', device, '\n')
     input_path = args.input_path
     os.makedirs(f'{input_path}/sculpting_study', exist_ok=True)

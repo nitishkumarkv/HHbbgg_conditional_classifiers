@@ -60,7 +60,7 @@ def perform_training(args: argparse.Namespace):
     if do_random_search:
         print('INFO: Performing random search')
         subprocess.run(
-            "python3 models/random_search.py "
+            "python3 -m models.random_search "
             + f"--input_path {out_path} "
             + f"--training_config_path {training_config_path} ",
             shell=True, check=True
@@ -102,7 +102,7 @@ def perform_training(args: argparse.Namespace):
     if args.get_predictions:
         print('INFO: Getting the predictions nominal')
         subprocess.run(
-            "python3 models/get_prediction.py "
+            "python3 -m models.get_prediction "
             + f"--model_folder {out_path}/{args.model_folder}/ "
             + f"--samples_path {out_path} "
             + f"--config_path {config_path} "
@@ -114,7 +114,7 @@ def perform_training(args: argparse.Namespace):
     if args.get_predictions_sys:
         print('INFO: Getting the predictions systematics')
         subprocess.run(
-            "python3 models/get_prediction.py "
+            "python3 -m models.get_prediction "
             + f"--model_folder {out_path}/{args.model_folder}/ "
             + f"--samples_path {out_path} "
             + f"--config_path {config_path} "
@@ -220,7 +220,7 @@ def perform_mjj_sculpting_study(args: argparse.Namespace):
     if args.train_mjj_predictor:
         print('INFO: Training the Mjj predictor for sculpting study')
         subprocess.run(
-            "python3 models/mjj_training_utils.py "
+            "python3 -m models.mjj_training_utils "
             + f"--input_path {out_path} "
             + f"--training_config_path {training_config_path} "
             + f"--sculpting_study_config_path {sculpting_study_config_path} ",
@@ -231,7 +231,7 @@ def perform_mjj_sculpting_study(args: argparse.Namespace):
     if args.mjj_predictor_permutation_importance:
         print('INFO: Getting permutation importance')
         subprocess.run(
-            "python3 models/permutation_importance.py "
+            "python3 -m models.permutation_importance "
             + f"--input_path {out_path} "
             + "--y_path sculpting_study/y_val.npy "
             + "--training_folder sculpting_study "

@@ -1,11 +1,12 @@
 import os
 import torch
-from mlp import MLP
+from models.mlp import MLP
 import numpy as np
 import json
 import torch.nn as nn
 import torch.nn.functional as F
 import yaml
+from utils.device import get_torch_device
 
 # DEPENDS ON:
 #   <configs>/training_config.yaml
@@ -49,10 +50,10 @@ def get_prediction(model_dict_path, model_path, X):
     try:
         dev = device  # type: ignore[name-defined]
     except NameError:
-        dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        dev = get_torch_device()
     model = MLP(input_size, best_num_layers, best_num_nodes, output_size, best_act_fn, best_dropout_prob).to(dev)
     model.to(dev)
-    model_state = torch.load(model_path, weights_only=False)
+    model_state = torch.load(model_path, map_location=dev, weights_only=False)
     model.load_state_dict(model_state['model_state_dict'])
 
     model.eval()
@@ -101,10 +102,10 @@ def get_prediction_binary(model_dict_path, model_path, X):
     try:
         dev = device  # type: ignore[name-defined]
     except NameError:
-        dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        dev = get_torch_device()
     model = MLP(input_size, best_num_layers, best_num_nodes, output_size, best_act_fn, best_dropout_prob).to(dev)
     model.to(dev)
-    model_state = torch.load(model_path)
+    model_state = torch.load(model_path, map_location=dev)
     model.load_state_dict(model_state['model_state_dict'])
 
     model.eval()
@@ -172,7 +173,7 @@ if __name__ == "__main__":
             for sample in samples:
                 inputs_path = f"{samples_path}/individual_samples/{era}/{sample}"
 
-                device = torch.device('cuda:'+training_config["cuda_device"] if torch.cuda.is_available() else 'cpu')
+                device = get_torch_device(training_config.get("cuda_device"))
                 #device = 'cpu'
                 print("Device: ", device)
                 # Memmap large feature matrix to avoid full GPU allocation
@@ -189,7 +190,7 @@ if __name__ == "__main__":
         data_samples = training_config["samples_info"]["data"].keys()
         for data_sample in data_samples:
             inputs_path = f"{samples_path}/individual_samples_data/{data_sample}"
-            device = torch.device('cuda:'+training_config["cuda_device"] if torch.cuda.is_available() else 'cpu')
+            device = get_torch_device(training_config.get("cuda_device"))
             X = np.load(f'{inputs_path}/X.npy', mmap_mode='r')
 
             print(f"Getting prediction for {data_sample}")
@@ -209,7 +210,7 @@ if __name__ == "__main__":
                 for sys in training_config["systematics"]:
                     inputs_path = f"{samples_path}/individual_samples/{era}/{sample}/{sys}/"
 
-                    device = torch.device('cuda:'+training_config["cuda_device"] if torch.cuda.is_available() else 'cpu')
+                    device = get_torch_device(training_config.get("cuda_device"))
                     #device = 'cpu'
                     print("Device: ", device)
                     X = np.load(f'{inputs_path}/X.npy', mmap_mode='r')

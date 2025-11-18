@@ -13,7 +13,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import yaml
-from torch.cuda.amp import GradScaler, autocast
+from torch.amp import GradScaler # amp = automatic mixed precision
+import inspect
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
@@ -21,6 +22,7 @@ from tqdm.auto import tqdm
 from models import mlp_plotter
 from models.mlp import MLP
 from utils.decorr_utils import distance_corr, reduce_disco_scores
+from utils.device import autocast_for_device, get_torch_device
 from utils.predictions import save_predictions
 
 
@@ -394,9 +396,13 @@ def train_one_epoch(
 
 
     progress_bar = tqdm(data_loader, desc=f"Epoch {epoch} [Training]", leave=False)
-    # Enable mixed precision on CUDA for speed; safe no-op on CPU
+    # Enable mixed precision on CUDA/MPS for speed; safe no-op on CPU
     use_cuda = (device.type == 'cuda')
-    scaler = GradScaler(enabled=use_cuda)
+    use_amp = device.type in ('cuda', 'mps')
+    _gradscaler_params = {'enabled': use_amp}
+    if 'device_type' in inspect.signature(GradScaler.__init__).parameters:
+        _gradscaler_params['device_type'] = device.type if use_amp else 'cuda'
+    scaler = GradScaler(**_gradscaler_params)
     for batch_idx, batch in enumerate(progress_bar):
         # Unpack depending on options
         if use_disco:
@@ -453,7 +459,7 @@ def train_one_epoch(
 
 
         optimizer.zero_grad(set_to_none=True)
-        with autocast(enabled=use_cuda):
+        with autocast_for_device(device):
             y_pred = model(X_batch)
             weights_batch = weights_batch.to(device, non_blocking=True)
             weights_batch_no = weights_batch_no.to(device, non_blocking=True)
@@ -619,7 +625,7 @@ def evaluate(
                 upweight_max = float(upweight_params["max_upweight"])
                 upweight_min = float(upweight_params["min_upweight"])
 
-            with autocast(enabled=use_cuda):
+            with autocast_for_device(device):
                 y_pred = model(X_batch)
                 loss = loss_fn(y_pred, y_batch)
                 weighted_loss = (loss * weights_batch).sum() / weights_batch.sum()
@@ -884,12 +890,14 @@ if __name__ == "__main__":
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+        if torch.backends.cudnn.is_available():
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
 
     # Set device
-    device = torch.device('cuda:'+training_config["cuda_device"] if torch.cuda.is_available() else 'cpu')
+    device = get_torch_device(training_config.get("cuda_device"))
     print('\n', 'INFO: Used device is', device, '\n')
 
     input_path = args.input_path
@@ -900,24 +908,24 @@ if __name__ == "__main__":
         os.makedirs(f'{input_path}/random_search_1', exist_ok=True)
         # best_params = {"num_layers": 3, "num_nodes": 100, "act_fn_name": "ELU", "lr": 2.027496582741043e-05, "weight_decay": 5.159904717896079e-05, "dropout_prob": 0.05, "n_trials": 0}
         # best_params = {"num_layers": 5, "num_nodes": 1024, "act_fn_name": "ELU", "lr": 2.027496582741043e-05, "weight_decay": 5.159904717896079e-05, "dropout_prob": 0.25, "n_trials": 0}
-        # best_params = {
-        #     "num_layers": 5,
-        #     "num_nodes": 1024,
-        #     "act_fn_name": "ELU",
-        #     "lr": 2.027496582741043e-05,
-        #     "weight_decay": 5.159904717896079e-05,
-        #     "dropout_prob": 0.25,
-        #     "n_trials": 0
-        # }
         best_params = {
-            "num_layers": 4,
-            "num_nodes": 300,
+            "num_layers": 5,
+            "num_nodes": 1024,
             "act_fn_name": "ELU",
             "lr": 2.027496582741043e-05,
             "weight_decay": 5.159904717896079e-05,
-            "dropout_prob": 0.20,
+            "dropout_prob": 0.25,
             "n_trials": 0
         }
+        # best_params = {
+        #     "num_layers": 4,
+        #     "num_nodes": 300,
+        #     "act_fn_name": "ELU",
+        #     "lr": 2.027496582741043e-05,
+        #     "weight_decay": 5.159904717896079e-05,
+        #     "dropout_prob": 0.20,
+        #     "n_trials": 0
+        # }
         with open(f'{input_path}/random_search_1/best_params.json', 'w', encoding='utf-8') as f:
             json.dump(best_params, f)
 

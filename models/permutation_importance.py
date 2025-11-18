@@ -15,6 +15,7 @@ import json
 import os
 import yaml
 hep.style.use("CMS")
+from utils.device import get_torch_device
 
 
 # Wrapper class for your model
@@ -35,7 +36,7 @@ class ModelEstimatorWrapper:
     
     def load_model(self, input_size):
         # Load the model parameters
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        device = get_torch_device()
         self.device = device
 
         # Load best parameters from JSON file
