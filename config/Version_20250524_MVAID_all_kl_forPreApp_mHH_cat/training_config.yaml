@@ -36,10 +36,10 @@ cuda_device: "0"
 samples_info: 
     samples_path: /eos/cms/store/group/phys_b2g/HHbbgg/HiggsDNA_parquet/v3/ # samples path
     eras:
-    - preEE
-    - postEE
+    #- preEE
+    #- postEE
     - preBPix
-    - postBPix
+    #- postBPix
     preEE: # give relative path to
         GGJets: "Run3_2022/sim/preEE/DDQCDGJets/GGJets_high_Rescaled.parquet"
         DDQCDGJET: "Run3_2022/sim/preEE/DDQCDGJets/DDQCDGJET_Rescaled.parquet"
