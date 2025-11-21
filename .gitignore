@@ -17,3 +17,7 @@ notebooks/gifs.ipynb
 notebooks/nolumi.ipynb
 notebooks/torch_negative_avg.ipynb
 notebooks/bootstrap_merged_boosted.ipynb
+plots/
+HHbbgg_conditional_classifiers.code-workspace
+env_debug.yml
+env-mac.yml
