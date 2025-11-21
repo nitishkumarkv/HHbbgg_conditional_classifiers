@@ -24,7 +24,6 @@ from optuna.visualization.matplotlib import plot_slice
 from optuna.visualization.matplotlib import plot_timeline
 import os
 import yaml
-from utils.device import get_torch_device
 
 from mlp import MLP
 
@@ -114,7 +113,7 @@ def perform_random_search(input_path, ntrial = 1):
     class_weights_for_val = np.load(f'{input_path}/class_weights_for_val.npy')
     #class_weights_for_test = np.load(f'{input_path}/class_weights_for_test.npy')
 
-    device = get_torch_device()
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     X_train = torch.tensor(X_train, dtype=torch.float32).to(device)
     #X_test = torch.tensor(X_test, dtype=torch.float32).to(device)
@@ -249,7 +248,7 @@ if __name__ == "__main__":
     class_weights_for_val = np.load(f'{input_path}/class_weights_for_val.npy')
     #class_weights_for_test = np.load(f'{input_path}/class_weights_for_test.npy')
 
-    device = get_torch_device()
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     X_train = torch.tensor(X_train, dtype=torch.float32).to(device)
     #X_test = torch.tensor(X_test, dtype=torch.float32).to(device)
@@ -337,3 +336,4 @@ if __name__ == "__main__":
 
     with open(f"{path_for_plots}/best_params.json", 'w') as f:
         json.dump(best_params, f)
+
