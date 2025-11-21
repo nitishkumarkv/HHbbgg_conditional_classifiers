@@ -147,9 +147,9 @@ if __name__ == "__main__":
 
     import argparse
     parser = argparse.ArgumentParser(description='Preform MLP based classification')
-    parser.add_argument('--model_folder', type=str, help='Path to the model folder')
-    parser.add_argument('--samples_path', type=str, help='Path to the samples')
-    parser.add_argument('--config_path', type=str, help='Path to the configuration files')
+    parser.add_argument('--model_folder', type=str, help='Path to the model folder (e.g. Version_XXXXXX/after_random_search_best1)')
+    parser.add_argument('--samples_path', type=str, help='Path to the samples (e.g. Version_XXXXXX)')
+    parser.add_argument('--config_path', type=str, help='Path to the configuration files (e.g. config/Version_XXXXXX)')
     parser.add_argument('--get_pred_nominal', action='store_true', help='Get predictions for nominal samples')
     parser.add_argument('--get_pred_sys', action='store_true', help='Get predictions for systematics samples')
     args = parser.parse_args()
@@ -165,6 +165,9 @@ if __name__ == "__main__":
 
     samples_path = args.samples_path
     eras = training_config["samples_info"]["eras"]
+    device = get_torch_device(training_config.get("cuda_device"))
+    #device = 'cpu'
+    print("Device: ", device)
 
     if args.get_pred_nominal:
 
@@ -173,16 +176,15 @@ if __name__ == "__main__":
             for sample in samples:
                 inputs_path = f"{samples_path}/individual_samples/{era}/{sample}"
 
-                device = get_torch_device(training_config.get("cuda_device"))
-                #device = 'cpu'
-                print("Device: ", device)
                 # Memmap large feature matrix to avoid full GPU allocation
                 X = np.load(f'{inputs_path}/X.npy', mmap_mode='r')
 
                 print(f"Getting prediction for {sample} in {era} era")
                 #pred = get_prediction(model_dict_path, model_path, X)
                 pred = get_prediction(model_dict_path, model_path, X)
-                print(np.sum(pred, axis=1))
+                # print(np.sum(pred, axis=1))
+                assert np.sum(pred, axis=1).shape[0] == X.shape[0], "Prediction and input sample size mismatch!"
+                assert np.round(np.sum(pred, axis=1), 5).all() == 1.0, "Some predictions do not sum to 1! Check model outputs and softmax."
                 # save the prediction
                 print(f"Saving prediction for {sample} in {era} era \n")
                 np.save(f"{samples_path}/individual_samples/{era}/{sample}/y.npy", pred)
@@ -190,19 +192,20 @@ if __name__ == "__main__":
         data_samples = training_config["samples_info"]["data"].keys()
         for data_sample in data_samples:
             inputs_path = f"{samples_path}/individual_samples_data/{data_sample}"
-            device = get_torch_device(training_config.get("cuda_device"))
             X = np.load(f'{inputs_path}/X.npy', mmap_mode='r')
 
             print(f"Getting prediction for {data_sample}")
             #pred = get_prediction(model_dict_path, model_path, X)
             pred = get_prediction(model_dict_path, model_path, X)
-            print(np.sum(pred, axis=1))
+            # print(np.sum(pred, axis=1))
+            assert np.sum(pred, axis=1).shape[0] == X.shape[0], "Prediction and input sample size mismatch!"
+            assert np.round(np.sum(pred, axis=1), 5).all() == 1.0, "Some predictions do not sum to 1! Check model outputs and softmax."
             # save the prediction
             print(f"Saving prediction for {data_sample} \n")
             np.save(f"{samples_path}/individual_samples_data/{data_sample}/y.npy", pred)
 
     elif args.get_pred_sys:
-        for era in eras:   
+        for era in eras:
             samples = training_config["samples_info"][era].keys()
             for sample in samples:
                 if sample in ["GGJets", "DDQCDGJET", "TTG_10_100", "TTG_100_200", "TTG_200", "TT", "TTGG"]:
@@ -210,15 +213,14 @@ if __name__ == "__main__":
                 for sys in training_config["systematics"]:
                     inputs_path = f"{samples_path}/individual_samples/{era}/{sample}/{sys}/"
 
-                    device = get_torch_device(training_config.get("cuda_device"))
-                    #device = 'cpu'
-                    print("Device: ", device)
                     X = np.load(f'{inputs_path}/X.npy', mmap_mode='r')
 
                     print(f"Getting prediction for {sample} in {era} era")
                     #pred = get_prediction(model_dict_path, model_path, X)
                     pred = get_prediction(model_dict_path, model_path, X)
-                    print(np.sum(pred, axis=1))
+                    # print(np.sum(pred, axis=1))
+                    assert np.sum(pred, axis=1).shape[0] == X.shape[0], "Prediction and input sample size mismatch!"
+                    assert np.round(np.sum(pred, axis=1), 5).all() == 1.0, "Some predictions do not sum to 1! Check model outputs and softmax."
                     # save the prediction
                     print(f"Saving prediction for {sample} in {era} era for {sys} \n")
                     np.save(f"{samples_path}/individual_samples/{era}/{sample}/{sys}/y.npy", pred)
