@@ -76,7 +76,9 @@ def sigmoid(x: Tensor, x0: Tensor, k: Tensor) -> Tensor:
     Returns:
         Tensor: [N,C] values in (0,1).
     """
-
+    # print(f"[DEBUG] sigmoid params x0: {x0}, k: {k}")  # COMMENT OUT WHEN TRAINING NORMALLY
+    # print(f"[DEBUG] sigmoid input x (first 5 rows): {x[:5, :]}")  # COMMENT OUT WHEN TRAINING NORMALLY
+    # print(f"[DEBUG] sigmoid output (first 5 rows): {torch.sigmoid(k * (x - x0))[:5, :]}")  # COMMENT OUT WHEN TRAINING NORMALLY
     return torch.sigmoid(k * (x - x0))
 
 
@@ -85,19 +87,20 @@ def generalized_sigmoid(x: Tensor, x0: Tensor, k: Tensor, y_min: float, y_max: f
     return y_min + (y_max - y_min) * sigmoid(x, x0, k)
 
 def generalized_5090_sigmoid(
-        x: Tensor,
-        x0: Tensor,
-        x90: Tensor,
-        y_min: float,
-        y_max: float,
+        x: Tensor,      # [N,C]
+        x0: Tensor,     # [C,]
+        x90: Tensor,    # [C,]
+        y_min: float,   # scalar
+        y_max: float,   # scalar
     ) -> Tensor:
     """Sigmoid per class hitting 50% at x0 and 90% at x90."""
     if torch.any((x90 - x0).abs() < 1e-6).item():
         raise ValueError("score_midpoint and score_90_percent must differ for each class.")
 
     # TODO: Check numerator
-    log_nine = torch.log(torch.tensor(9.0, device=x.device, dtype=x.dtype))
-    k: Tensor = log_nine / (x90 - x0)
+    # log_nine = torch.log(torch.tensor(9.0, device=x.device, dtype=x.dtype))
+    # k: Tensor = log_nine / (x90 - x0)
+    k: Tensor = torch.log(torch.tensor((9*y_max - 10*y_min)/y_max, device=x.device, dtype=x.dtype)) / (x90 - x0) # [C,]
     return generalized_sigmoid(x, x0, k, y_min, y_max)
 
 
@@ -107,6 +110,7 @@ def sigmoid_upweight(
         x90: Tensor,
         y_min: float,
         y_max: float,
+        softmax=False
     ) -> Tensor:
     """SR upweighting based on class scores.
 
@@ -114,7 +118,12 @@ def sigmoid_upweight(
     only when all classes satisfy their SR criteria: signal scores high (x > x0)
     and background scores low (x < x0).
     """
-    probs = F.softmax(y_pred, dim=1, dtype=torch.float32)
+    # reshape: [N,] -> [N,1] or [N,C] -> [N,C]
+    y_pred = y_pred.reshape(y_pred.shape[0], -1)  # [N,C]
+    if softmax:
+        probs = F.softmax(y_pred, dim=1, dtype=torch.float32)
+    else:
+        probs = y_pred
     per_class_focus = generalized_5090_sigmoid(
         probs,
         x0=x0.to(device=y_pred.device, dtype=probs.dtype),
@@ -207,13 +216,14 @@ def _plot_norm_weights_for_disco(weights: Tensor, title="Distribution of Normali
 
 
 def _get_bkg_mask(y_true: Tensor) -> Tensor:
-    """Get boolean mask for background events only, assuming y_true is class indices.
+    """Get boolean mask for nonRes bkg events only, assuming y_true is class indices.
     0 -> nonRes_score   (bkg)
     1 -> ttH_score      (bkg)
     2 -> singleH_score  (bkg)
     3 -> HH_score       (sig)
     """
-    return (y_true == 0) | (y_true == 1) | (y_true == 2)
+    # return (y_true == 0) | (y_true == 1) | (y_true == 2)
+    return (y_true == 0) # only compute DisCo on nonRes bkg events
 
 
 def _get_disco_vars(var_names: list[str], config: dict, y_pred: Tensor, z_vars: Tensor) -> Tensor:
@@ -225,7 +235,7 @@ def _get_disco_vars(var_names: list[str], config: dict, y_pred: Tensor, z_vars: 
         y_pred (Tensor): [N,C] tensor of model predictions, if needed for derived variables.
 
     Returns:
-        Tensor: [N, len(var_names)] tensor of disco variables.
+        Tensor: [N, len(var_names)] tensor of disco variables to be fed into DisCo calculation. 
     """
     # Types of variables:
     #   - class scores from y_pred (parse idx from config["classes"])
@@ -256,7 +266,11 @@ def apply_disco(
         weights_batch: Tensor,
         decorr_lambda: float,
         y_true: Union[Tensor, None]=None,
-        reduce: str='mean'
+        y_pred: Tensor=Tensor(),
+        reduce: str='mean',
+        use_sr_upweight: bool = False,
+        # hh_lower_score_threshold: float = 0.5,
+        thresholds: dict = {},
     ) -> tuple[Tensor, Tensor]:
     """
     Apply the DisCo (Decorrelation) loss to the nominal loss pairwise across:
@@ -290,20 +304,99 @@ def apply_disco(
             + "DisCo loss component only counts background MC events when background-only mask is enabled."
         )
 
+    # Apply softmax to y_pred but keep isolated
+    y_pred = F.softmax(y_pred, dim=1, dtype=torch.float32)
+
     if USE_BKG_MASK and y_true is not None:
         bkg_mask: Tensor = _get_bkg_mask(y_true) # [N,] boolean tensor
     else:
         bkg_mask: Tensor = torch.ones_like(v1[:, 0], dtype=torch.bool) # [N,] all True
 
-    # disco_vars_batch = disco_vars_batch[bkg_mask]
-    v1 = v1[bkg_mask]
-    v2 = v2[bkg_mask]
-    weights_batch = weights_batch[bkg_mask]
+    if use_sr_upweight:
+        high_HH_score_mask = (y_pred[:, 3] > thresholds["HH_score"]).to(dtype=torch.bool) # [N,]
+        low_nonRes_score_mask = (y_pred[:, 0] < thresholds["nonRes_score"]).to(dtype=torch.bool) # [N,]
+    else:
+        high_HH_score_mask = torch.ones_like(v1[:, 0], dtype=torch.bool) # [N,] all True
+        low_nonRes_score_mask = torch.ones_like(v1[:, 0], dtype=torch.bool) # [N,] all True
+
+
+    sum_bkg_mask = bkg_mask.sum().item()
+    sum_high_HH_score_mask = high_HH_score_mask.sum().item()
+    sum_low_nonRes_score_mask = low_nonRes_score_mask.sum().item()
+    sum_bkg_and_high_HH = (bkg_mask & high_HH_score_mask).sum().item()
+    sum_bkg_and_low_nonRes = (bkg_mask & low_nonRes_score_mask).sum().item()
+    sum_high_HH_and_low_nonRes = (high_HH_score_mask & low_nonRes_score_mask).sum().item()
+    sum_all_masks = (bkg_mask & high_HH_score_mask & low_nonRes_score_mask).sum().item()
+
+    # DisCo returns NaN if given less than 2 events, which makes sense mathematically, but we need to gaurd against it
+    # if any([sum_bkg_mask < 2,
+    #         (use_sr_upweight and sum_high_HH_score_mask < 2),
+    #         (use_sr_upweight and sum_low_nonRes_score_mask < 2),
+    #         (use_sr_upweight and sum_bkg_and_high_HH < 2),
+    #         (use_sr_upweight and sum_bkg_and_low_nonRes < 2),
+    #         (use_sr_upweight and sum_high_HH_and_low_nonRes < 2),
+    #         (use_sr_upweight and sum_all_masks < 2),
+    #     ]):
+    if sum_all_masks < 2:
+        print(f"[DEBUG] HH score pred: mean {y_pred[:,3].mean().item()}, max {y_pred[:,3].max().item()}, min {y_pred[:,3].min().item()}, std {y_pred[:,3].std().item()}")  # COMMENT OUT WHEN TRAINING NORMALLY
+        print(f"[DEBUG] nonRes score pred: mean {y_pred[:,0].mean().item()}, max {y_pred[:,0].max().item()}, min {y_pred[:,0].min().item()}, std {y_pred[:,0].std().item()}")  # COMMENT OUT WHEN TRAINING NORMALLY
+        print(f"[DEBUG] sum_bkg_mask: {sum_bkg_mask}")  # COMMENT OUT WHEN TRAINING NORMALLY
+        print(f"[DEBUG] sum_high_HH_score_mask: {sum_high_HH_score_mask}")  # COMMENT OUT WHEN TRAINING NORMALLY
+        print(f"[DEBUG] sum_low_nonRes_score_mask: {sum_low_nonRes_score_mask}")  # COMMENT OUT WHEN TRAINING NORMALLY
+        print(f"[DEBUG] sum_bkg_and_high_HH: {sum_bkg_and_high_HH}")  # COMMENT OUT WHEN TRAINING NORMALLY
+        print(f"[DEBUG] sum_bkg_and_low_nonRes: {sum_bkg_and_low_nonRes}")  # COMMENT OUT WHEN TRAINING NORMALLY
+        print(f"[DEBUG] sum_high_HH_and_low_nonRes: {sum_high_HH_and_low_nonRes}")  # COMMENT OUT WHEN TRAINING NORMALLY
+        print(f"[DEBUG] sum_all_masks: {sum_all_masks}")  # COMMENT OUT WHEN TRAINING NORMALLY
+        print("[WARNING] <2 events in at least one DisCo mask combination; skipping DisCo calculation for this batch.")
+        return loss_nominal, torch.zeros(1, device=loss_nominal.device, dtype=loss_nominal.dtype)
+
+    
+    # if bkg_mask.sum().item() < 2:
+    #     # No background events in batch; skip DisCo calculation
+    #     print("[WARNING] <2 background events in batch; skipping DisCo calculation for this batch.")
+    #     return loss_nominal, torch.zeros(1, device=loss_nominal.device, dtype=loss_nominal.dtype)
+    # if (use_sr_upweight and high_HH_score_mask.sum().item() < 2):
+    #     print("[WARNING] <2 background events in batch passing high_HH_score_mask; skipping DisCo calculation for this batch.")
+    #     return loss_nominal, torch.zeros(1, device=loss_nominal.device, dtype=loss_nominal.dtype)
+    # if (use_sr_upweight and low_nonRes_score_mask.sum().item() < 2):
+    #     print("[WARNING] <2 background events in batch passing low_nonRes_score_mask; skipping DisCo calculation for this batch.")
+    #     return loss_nominal, torch.zeros(1, device=loss_nominal.device, dtype=loss_nominal.dtype)
+    # if (use_sr_upweight and (bkg_mask & high_HH_score_mask).sum().item() < 2):
+    #     print("[WARNING] <2 background events in batch passing combined bkg & high_HH_score_mask; skipping DisCo calculation for this batch.")
+    #     return loss_nominal, torch.zeros(1, device=loss_nominal.device, dtype=loss_nominal.dtype)
+    # if (use_sr_upweight and (bkg_mask & low_nonRes_score_mask).sum().item() < 2):
+    #     print("[WARNING] <2 background events in batch passing combined bkg & low_nonRes_score_mask; skipping DisCo calculation for this batch.")
+    #     return loss_nominal, torch.zeros(1, device=loss_nominal.device, dtype=loss_nominal.dtype)
+    # if (use_sr_upweight and (high_HH_score_mask & low_nonRes_score_mask).sum().item() < 2):
+    #     print("[WARNING] <2 background events in batch passing combined high_HH_score_mask & low_nonRes_score_mask; skipping DisCo calculation for this batch.")
+    #     return loss_nominal, torch.zeros(1, device=loss_nominal.device, dtype=loss_nominal.dtype)
+    # if (use_sr_upweight and (bkg_mask & high_HH_score_mask & low_nonRes_score_mask).sum().item() < 2):
+    #     print("[WARNING] <2 background events in batch passing combined bkg & high_HH_score_mask & low_nonRes_score_mask; skipping DisCo calculation for this batch.")
+    #     return loss_nominal, torch.zeros(1, device=loss_nominal.device, dtype=loss_nominal.dtype)
+
+
+    v1 = v1[bkg_mask & high_HH_score_mask & low_nonRes_score_mask]
+    v2 = v2[bkg_mask & high_HH_score_mask & low_nonRes_score_mask]
+    weights_batch = weights_batch[bkg_mask & high_HH_score_mask & low_nonRes_score_mask]
+
+    if len(v1) < 2:
+        # No background events in batch after masking; skip DisCo calculation
+        # TODO: should we add a small but nonzero penalty instead? don't want to ensourage model to underweight nonres bkg events in HH score. wait no, that's perfectly fine.
+        print("[WARNING] <2 background events in batch after applying DisCo masks; skipping DisCo calculation for this batch.")
+        return loss_nominal, torch.zeros(1, device=loss_nominal.device, dtype=loss_nominal.dtype)
 
     v1_vars = v1.shape[1]
     v2_vars = v2.shape[1]
 
     norm_w = weights_batch / (weights_batch.mean() + 1e-12) # Normalize weights to mean 1
+    # print(f"[DEBUG] NaN in norm_w: {torch.isnan(norm_w).any().item()}")  # COMMENT OUT WHEN TRAINING NORMALLY
+    # print(f"[DEBUG] Sum of norm_w: {norm_w.sum().item()}")  # COMMENT OUT WHEN TRAINING NORMALLY
+    # print(f"[DEBUG] number of events passing masks for DisCo: {len(norm_w)}")  # COMMENT OUT WHEN TRAINING NORMALLY
+    # print(f"[DEBUG] v1[:5, 0]: {v1[:5, 0]}")  # COMMENT OUT WHEN TRAINING NORMALLY
+    # print(f"[DEBUG] v2[:5, 0]: {v2[:5, 0]}")  # COMMENT OUT WHEN TRAINING NORMALLY
+    # print(f"[DEBUG] norm_w.reshape(-1)[:5]: {norm_w.reshape(-1)[:5]}")  # COMMENT OUT WHEN TRAINING NORMALLY
+    # print(f"[DEBUG] NaN in v1: {torch.isnan(v1).any().item()}")  # COMMENT OUT WHEN TRAINING NORMALLY
+    # print(f"[DEBUG] NaN in v2: {torch.isnan(v2).any().item()}")  # COMMENT OUT WHEN TRAINING NORMALLY
 
     pairwise_corrs: list[Tensor] = []
     for i in range(v1_vars):
@@ -315,14 +408,23 @@ def apply_disco(
                     norm_w.reshape(-1),
                 )
             )
+    # print(f"[DEBUG] Pairwise DisCo correlations: {[pc.item() for pc in pairwise_corrs]}")  # COMMENT OUT WHEN TRAINING NORMALLY
+    # print(f"[DEBUG] Normalized weights for DisCo (first 10): {norm_w[:10].cpu().detach().numpy()}")  # COMMENT OUT WHEN TRAINING NORMALLY
 
     if not pairwise_corrs:
         raise ValueError("DisCo requires at least one pair of variables to decorrelate.")
 
     d_corr = reduce_disco_scores(torch.stack(pairwise_corrs), reduce)
-    total_weighted_loss = loss_nominal + decorr_lambda * d_corr
+    if torch.isnan(d_corr).any().item():
+        raise ValueError("Distance correlation computed by DisCo is NaN. Check inputs and weight normalization.")
+    total_weighted_loss = loss_nominal + decorr_lambda * d_corr # Original
 
-    # print(f"[DEBUG] Multidim DisCo scores: {d_corr_vec.item()}") # COMMENT OUT WHEN TRAINING NORMALLY
+    # print(f"[DEBUG] DisCo distance correlation: {d_corr.item()}")  # COMMENT OUT WHEN TRAINING NORMALLY
+    # print(f"[DEBUG] Total weighted loss (including DisCo): {total_weighted_loss.item()}")  # COMMENT OUT WHEN TRAINING NORMALLY
+
+    if torch.isnan(total_weighted_loss).any().item():
+        raise ValueError("Total weighted loss including DisCo is NaN. Check inputs and DisCo calculation.")
+
 
     return total_weighted_loss, d_corr
 
@@ -343,6 +445,7 @@ def train_one_epoch(
         progress_update_interval: int = 50,
         upweight_params: dict = {},
         training_config: dict = {},
+        thresholds: dict = {},
 ) -> tuple[float, float, float, float, float, Union[float, None], Union[float, None]]:
     """
     Train the model for one epoch.
@@ -394,16 +497,21 @@ def train_one_epoch(
     # - weight multiplier vs singleH score
     # - mgg/mjj correlation vs weight multiplier (coarse bins of weight multiplier) (should see positive trend if upweighting is selecting mgg-mjj correlated events)
 
+    # hh_lower_score_threshold = min(epoch/100, 0.95)
+    # if use_disco:
+    #     print(f"[INFO] DisCo HH score lower threshold: {hh_lower_score_threshold}")
 
     progress_bar = tqdm(data_loader, desc=f"Epoch {epoch} [Training]", leave=False)
     # Enable mixed precision on CUDA/MPS for speed; safe no-op on CPU
     use_cuda = (device.type == 'cuda')
-    use_amp = device.type in ('cuda', 'mps')
+    # use_amp = device.type in ('cuda', 'mps') # original
+    use_amp = False
     _gradscaler_params = {'enabled': use_amp}
     if 'device_type' in inspect.signature(GradScaler.__init__).parameters:
         _gradscaler_params['device_type'] = device.type if use_amp else 'cuda'
     scaler = GradScaler(**_gradscaler_params)
     for batch_idx, batch in enumerate(progress_bar):
+        # print("================================================================================")
         # Unpack depending on options
         if use_disco:
             # Expect dataset to include disco_var in batch
@@ -463,18 +571,26 @@ def train_one_epoch(
             y_pred = model(X_batch)
             weights_batch = weights_batch.to(device, non_blocking=True)
             weights_batch_no = weights_batch_no.to(device, non_blocking=True)
+            # print(f"[DEBUG] y_pred (first 5 rows): {y_pred[:5, :]}")  # COMMENT OUT WHEN TRAINING NORMALLY
+            # print(f"[DEBUG] weights_batch (first 5): {weights_batch[:5]}")  # COMMENT OUT WHEN TRAINING NORMALLY
+            # print(f"[DEBUG] weights_batch_no (first 5): {weights_batch_no[:5]}")  # COMMENT OUT WHEN TRAINING NORMALLY
             if use_disco:
                 disco_vars_batch = disco_vars_batch.to(device, non_blocking=True)
             if use_sr_upweight:
                 weights_batch_multiplier = sigmoid_upweight(
-                    y_pred,
+                    y_pred[:, [0,3]], # 3 -> HH score
                     x0=upweight_score_midpoint,
                     x90=upweight_score_90_percent,
                     y_min=upweight_min,
                     y_max=upweight_max,
+                    softmax=True,
                 )
             else:
                 weights_batch_multiplier = torch.ones_like(weights_batch, device=device)
+
+            # print(f"[DEBUG] weights_batch_multiplier (first 5): {weights_batch_multiplier[:5]}")  # COMMENT OUT WHEN TRAINING NORMALLY
+            # print(f"[DEBUG] any NaNs in weights_batch_multiplier: {torch.isnan(weights_batch_multiplier).any().item()}")  # COMMENT OUT WHEN TRAINING NORMALLY
+            # print(f"[DEBUG] y_batch (first 5): {y_batch[:5]}")  # COMMENT OUT WHEN TRAINING NORMALLY
 
             loss = loss_fn(y_pred, y_batch) # [N]
             wsum: Tensor = weights_batch.sum() # weights_batch is absolute-valued
@@ -491,16 +607,24 @@ def train_one_epoch(
                     weights_batch * weights_batch_multiplier,
                     decorr_lambda,
                     y_true=y_batch,
-                    reduce=disco_reduce
+                    y_pred=y_pred,
+                    reduce=disco_reduce,
+                    use_sr_upweight=use_sr_upweight,
+                    thresholds=thresholds,
                 )
             else:
                 total_weighted_loss: Tensor = weighted_loss # scalar
-                d_corr: Tensor = Tensor(0.0, device=device) # Dummy
+                d_corr: Tensor = torch.zeros(1, device=device) # Dummy
+
+        # print(f"[DEBUG] total_weighted_loss: {total_weighted_loss.item()}")  # COMMENT OUT WHEN TRAINING NORMALLY
+        # print(f"[DEBUG] any NaNs in total_weighted_loss: {torch.isnan(total_weighted_loss).any().item()}")  # COMMENT OUT WHEN TRAINING NORMALLY
 
         # Backward with gradient scaling (no-op on CPU)
         scaler.scale(total_weighted_loss).backward()
         scaler.step(optimizer)
         scaler.update()
+
+        # print(f"[DEBUG] new y_pred (first 5 rows): {model(X_batch)[:5, :]}")  # COMMENT OUT WHEN TRAINING NORMALLY
 
         weighted_loss_no_abs = (loss * weights_batch_no).sum() / weights_batch_no.sum()
 
@@ -538,6 +662,23 @@ def train_one_epoch(
                     'Loss_no_abs': f'{weighted_loss_no_abs_f:.4f}'
                 })
 
+    # Remove NaNs
+    if any(np.isnan(batch_dist_corr)):
+        print(f"[WARNING] {np.sum(np.isnan(batch_dist_corr))} NaN losses found during training epoch {epoch}. These will be ignored in the epoch averages.")
+        batch_dist_corr = [dc for dc in batch_dist_corr if not np.isnan(dc)]
+    if any(np.isnan(batch_losses)):
+        print(f"[WARNING] {np.sum(np.isnan(batch_losses))} NaN losses found during training epoch {epoch}. These will be ignored in the epoch averages.")
+        batch_losses = [bl for bl in batch_losses if not np.isnan(bl)]
+    if any(np.isnan(batch_losses_no_abs)):
+        print(f"[WARNING] {np.sum(np.isnan(batch_losses_no_abs))} NaN losses found during training epoch {epoch}. These will be ignored in the epoch averages.")
+        batch_losses_no_abs = [bl for bl in batch_losses_no_abs if not np.isnan(bl)]
+    if any(np.isnan(batch_losses_no_dist_corr)):
+        print(f"[WARNING] {np.sum(np.isnan(batch_losses_no_dist_corr))} NaN losses found during training epoch {epoch}. These will be ignored in the epoch averages.")
+        batch_losses_no_dist_corr = [bl for bl in batch_losses_no_dist_corr if not np.isnan(bl)]
+    if any(np.isnan(batch_losses_no_abs_no_dist_corr)):
+        print(f"[WARNING] {np.sum(np.isnan(batch_losses_no_abs_no_dist_corr))} NaN losses found during training epoch {epoch}. These will be ignored in the epoch averages.")
+        batch_losses_no_abs_no_dist_corr = [bl for bl in batch_losses_no_abs_no_dist_corr if not np.isnan(bl)]
+
     mean_batch_losses                       = float(np.mean(batch_losses))
     mean_accs                               = float(np.mean(batch_accs))
     mean_batch_losses_no_abs                = float(np.mean(batch_losses_no_abs))
@@ -547,7 +688,7 @@ def train_one_epoch(
     mean_batch_dist_corr_times_lambda       = float(np.mean([dc * decorr_lambda for dc in batch_dist_corr])) if use_disco else None
 
     return (
-        mean_batch_losses, 
+        mean_batch_losses,
         mean_accs,
         mean_batch_losses_no_abs,
         mean_batch_losses_no_dist_corr,
@@ -570,6 +711,7 @@ def evaluate(
         progress_update_interval: int = 50,
         upweight_params: dict = {},
         training_config: dict = {},
+        thresholds: dict = {},
     ) -> tuple[float, float, float, Union[float, None], Union[float, None]]:
     model.eval()
     val_losses = []
@@ -577,6 +719,8 @@ def evaluate(
     val_losses_no_dist_corr = []
     val_dist_corr = []
     val_dist_corr_times_lambda = []
+    # if use_disco:
+    #     print(f"[INFO] DisCo HH score lower threshold: {hh_lower_score_threshold}")
     progress_bar = tqdm(data_loader, desc=f"Epoch {epoch} [Validation]", leave=False)
     use_cuda = (device.type == 'cuda')
     # inference_mode is slightly faster than no_grad for eval
@@ -631,11 +775,12 @@ def evaluate(
                 weighted_loss = (loss * weights_batch).sum() / weights_batch.sum()
                 if use_sr_upweight:
                     weights_batch_multiplier = sigmoid_upweight(
-                        y_pred,
+                        y_pred[:, [0,3]], # 3 -> only HH score to upweight
                         x0=upweight_score_midpoint,
                         x90=upweight_score_90_percent,
                         y_min=upweight_min,
                         y_max=upweight_max,
+                        softmax=True,
                     )
                 else:
                     weights_batch_multiplier = torch.ones_like(weights_batch, device=device)
@@ -651,11 +796,14 @@ def evaluate(
                     weights_batch * weights_batch_multiplier,
                     decorr_lambda,
                     y_true=y_batch,
-                    reduce=disco_reduce
+                    reduce=disco_reduce,
+                    y_pred=y_pred,
+                    use_sr_upweight=use_sr_upweight,
+                    thresholds=thresholds
                 )
             else:
                 total_weighted_loss: Tensor = weighted_loss # scalar
-                d_corr: Tensor = Tensor(0.0, device=device)
+                d_corr: Tensor = torch.zeros(1, device=device)
 
             # compute weighted accuracy
             correct = (torch.argmax(y_pred, dim=1) == y_batch).float()
@@ -685,6 +833,19 @@ def evaluate(
                         'Loss': f'{weighted_loss_f:.4f}',
                         'Acc': f'{weighted_acc_f:.4f}',
                     })
+        # Remove NaNs
+        if any(np.isnan(val_dist_corr)):
+            print(f"[WARNING] {np.sum(np.isnan(val_dist_corr))} NaN losses found during validation epoch {epoch}. These will be ignored in the epoch averages.")
+            val_dist_corr = [dc for dc in val_dist_corr if not np.isnan(dc)]
+        if any(np.isnan(val_losses)):
+            print(f"[WARNING] {np.sum(np.isnan(val_losses))} NaN losses found during validation epoch {epoch}. These will be ignored in the epoch averages.")
+            val_losses = [vl for vl in val_losses if not np.isnan(vl)]
+        if any(np.isnan(val_losses_no_dist_corr)):
+            print(f"[WARNING] {np.sum(np.isnan(val_losses_no_dist_corr))} NaN losses found during validation epoch {epoch}. These will be ignored in the epoch averages.")
+            val_losses_no_dist_corr = [vl for vl in val_losses_no_dist_corr if not np.isnan(vl)]
+        if any(np.isnan(val_dist_corr_times_lambda)):
+            print(f"[WARNING] {np.sum(np.isnan(val_dist_corr_times_lambda))} NaN losses found during validation epoch {epoch}. These will be ignored in the epoch averages.")
+            val_dist_corr_times_lambda = [dc for dc in val_dist_corr_times_lambda if not np.isnan(dc)]
 
         mean_losses                 = float(np.mean(val_losses))
         mean_accs                   = float(np.mean(val_accs))
@@ -1124,6 +1285,25 @@ if __name__ == "__main__":
 
     # Training loop
     for epoch in range(max_epoch):
+        # --> Constant schedule
+        hh_lower_score_threshold_final = 0.5
+        nonRes_upper_score_threshold_final = 0.01
+
+        # --> Linear schedule
+        # hh_lower_score_threshold = min(epoch/100, hh_lower_score_threshold_final)
+        # nonRes_upper_score_threshold = max(1.0 - epoch/100, nonRes_upper_score_threshold_final)
+
+        # --> Stepwise schedule
+        # hh_lower_score_threshold = min(10*(epoch//10)/100, hh_lower_score_threshold_final) 
+        # nonRes_upper_score_threshold = max(1.0 - 10*(epoch//10)/100, nonRes_upper_score_threshold_final)
+
+        hh_lower_score_threshold = hh_lower_score_threshold_final
+        nonRes_upper_score_threshold = nonRes_upper_score_threshold_final
+        thresholds = {
+            "HH_score": hh_lower_score_threshold,
+            "nonRes_score": nonRes_upper_score_threshold,
+        }
+
         # Training
         packed_metrics = train_one_epoch(
             best_model,
@@ -1137,7 +1317,8 @@ if __name__ == "__main__":
             decorrelation_variables=decorr_vars, # dict[str, list[str]]
             disco_reduce=disco_reduce_method,
             upweight_params=disco_upweight_params,
-            training_config=training_config
+            training_config=training_config,
+            thresholds=thresholds
         )
 
         train_loss, train_acc, train_loss_no_absolute, train_loss_no_dist_corr, train_loss_no_abs_no_dist_corr, train_dist_corr, train_dist_corr_times_lambda = packed_metrics
@@ -1166,7 +1347,8 @@ if __name__ == "__main__":
             decorrelation_variables=decorr_vars, # dict[str, list[str]]
             disco_reduce=disco_reduce_method,
             upweight_params=disco_upweight_params,
-            training_config=training_config
+            training_config=training_config,
+            thresholds=thresholds
         )
         val_loss_hist.append(val_loss)
         val_acc_hist.append(val_acc)
