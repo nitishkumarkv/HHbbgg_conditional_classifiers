@@ -10,7 +10,12 @@ import mplhep as hep
 import pandas as pd
 import json
 import mplhep
+import pyarrow as pa
 from matplotlib.backends.backend_pdf import PdfPages
+
+# pyarrow>=15 removed PyExtensionType; awkward still looks for it, so alias it when missing
+if not hasattr(pa.lib, "PyExtensionType"):
+    pa.lib.PyExtensionType = pa.lib.ExtensionType
 
 
 class OptunaCategorizer:
