@@ -98,6 +98,12 @@ class OptunaCategorizer:
             self.signal_samples = ["GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00"]
 
         self.apply_preselection = True
+        # Bookkeeping for final category-level metrics and thresholds
+        self.best_sig_values = None
+        self.best_sig_peak_list = None
+        self.best_bkg_side_list = None
+        self.best_cut_params_list = None
+        self.best_z_sum_quadrature = None
     
     def gamma_fn(self):
         def gamma_linear(n):
@@ -581,6 +587,16 @@ class OptunaCategorizer:
             plt.close()
         print("output saved in ", out_path)
 
+    def _compute_z_sum_quadrature(self, z_scores):
+        """Return cumulative Z sum in quadrature for the provided Z scores."""
+        if z_scores is None:
+            return []
+        z_scores_arr = np.asarray(z_scores, dtype=float)
+        return [
+            float(np.sqrt(np.sum(z_scores_arr[:i] ** 2)))
+            for i in range(1, len(z_scores_arr) + 1)
+        ]
+
     def plot_category_summary_with_thresholds(
         self,
         best_sig_values,
@@ -681,6 +697,73 @@ class OptunaCategorizer:
         # plt.savefig(os.path.join(save_path, "category_summary_new.png"))
         plt.close(fig)
 
+    def save_category_summary_dataframe(self, save_dir, correlation_by_category=None):
+        """
+        Persist the data shown in the category summary and mass-sculpting plots.
+        Stores per-category thresholds, Z, cumulative Z, signal in peak, background
+        in sidebands, and weighted Pearson correlations.
+        """
+        if self.best_cut_params_list is None or self.best_sig_values is None:
+            print("[save_category_summary_dataframe] Missing category summary inputs, skipping save.")
+            return
+
+        n_cats = len(self.best_cut_params_list)
+        z_scores = self.best_sig_values or []
+        z_sum_quad = self.best_z_sum_quadrature or self._compute_z_sum_quadrature(z_scores)
+        sig_peak = self.best_sig_peak_list or []
+        bkg_side = self.best_bkg_side_list or []
+
+        boundary_cols = sorted(
+            {f"boundary_{key}" for params in self.best_cut_params_list for key in params.keys()}
+        )
+
+        records = []
+        for idx in range(n_cats):
+            category_label = f"cat{idx+1}"
+            params = self.best_cut_params_list[idx] if idx < len(self.best_cut_params_list) else {}
+            corr_entry = correlation_by_category.get(category_label, {}) if correlation_by_category else {}
+
+            record = {
+                "category_index": idx + 1,
+                "category_label": category_label,
+                "z_score": z_scores[idx] if idx < len(z_scores) else np.nan,
+                "z_sum_quadrature": z_sum_quad[idx] if idx < len(z_sum_quad) else np.nan,
+                "signal_under_peak": sig_peak[idx] if idx < len(sig_peak) else np.nan,
+                "background_in_sidebands": bkg_side[idx] if idx < len(bkg_side) else np.nan,
+                "weighted_pearson_corr_mean": corr_entry.get("mean", np.nan),
+                "weighted_pearson_corr_std": corr_entry.get("std", np.nan),
+                "weighted_pearson_corr_min": corr_entry.get("min", np.nan),
+                "weighted_pearson_corr_max": corr_entry.get("max", np.nan),
+            }
+
+            for key, value in params.items():
+                record[f"boundary_{key}"] = value
+
+            records.append(record)
+
+        df = pd.DataFrame(records)
+
+        # Ensure consistent column ordering
+        metric_cols = [
+            "category_index",
+            "category_label",
+            "z_score",
+            "z_sum_quadrature",
+            "signal_under_peak",
+            "background_in_sidebands",
+            "weighted_pearson_corr_mean",
+            "weighted_pearson_corr_std",
+            "weighted_pearson_corr_min",
+            "weighted_pearson_corr_max",
+        ]
+        ordered_cols = metric_cols + [col for col in boundary_cols if col not in metric_cols]
+        df = df[[col for col in ordered_cols if col in df.columns]]
+
+        os.makedirs(save_dir, exist_ok=True)
+        parquet_path = os.path.join(save_dir, "category_summary_data.parquet")
+        csv_path = os.path.join(save_dir, "category_summary_data.csv")
+        df.to_parquet(parquet_path, index=False)
+        df.to_csv(csv_path, index=False)
 
     def asymptotic_significance(self, df):
 
@@ -873,6 +956,13 @@ class OptunaCategorizer:
             best_cut_params_list,
             f"{cat_path}/"
         )
+
+        # Cache the best-performing run metrics for later reuse.
+        self.best_cut_params_list = best_cut_params_list
+        self.best_sig_values = best_sig_values
+        self.best_sig_peak_list = sig_peak_list
+        self.best_bkg_side_list = bkg_side_list
+        self.best_z_sum_quadrature = self._compute_z_sum_quadrature(best_sig_values)
 
         # save the best cut parameters
         best_params_path = os.path.join(cat_path, "best_cut_params.txt")
@@ -1367,12 +1457,7 @@ class OptunaCategorizer:
         # concatenate the samples
         presel = ak.concatenate([preEE, postEE, preBPix, postBPix, presel_GGjets], axis=0)
 
-        cat_to_label = {
-            "cat1": "SR1",
-            "cat2": "SR2",
-            "cat3": "SR3",
-            "cat4": "SR4",
-        }
+        cat_to_label = {cat: f"SR{i+1}" for i, cat in enumerate(cat_list)}
 
         cat_events = {}
         # loop over the categories
@@ -1471,6 +1556,8 @@ class OptunaCategorizer:
             cat_corr = np.array(cat_corr)
             cat_corr_dict[cat]["mean"] = np.mean(cat_corr)
             cat_corr_dict[cat]["std"] = np.std(cat_corr)
+            cat_corr_dict[cat]["min"] = np.min(cat_corr)
+            cat_corr_dict[cat]["max"] = np.max(cat_corr)
 
         for cat in cat_list:
             cat_events_ = cat_events[cat]
@@ -1486,15 +1573,7 @@ class OptunaCategorizer:
             fig.savefig(f"{path_for_plots}/nonResReg_dijet_mass_DNNreg_diff_mass_{cat}.png")
             plt.clf()
             plt.close()
-            
-            # # Signal
-            # fig, ax = plt.subplots()
-            # plot_with_errorbars(cat_events_, ""
-
-
-
-
-
+        return cat_corr_dict
 
     def run_categorisation(self):
     
@@ -1520,7 +1599,7 @@ class OptunaCategorizer:
 
         # plots for sculpting test
         print("Testing mass sculpting...")
-        self.test_mass_sculpting(f"{self.base_path}/", folder_list, self.cat_folder)
+        cat_corr_dict = self.test_mass_sculpting(f"{self.base_path}/", folder_list, self.cat_folder)
 
         # plot data-MC for SRs
         sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET", "TTG_100_200", "TTG_200"]
@@ -1536,6 +1615,12 @@ class OptunaCategorizer:
             f"{self.base_path}/{self.cat_folder}/",
             folder_list,
             mass_range=(100, 180)  # Example mass range, adjust as needed
+        )
+
+        # Save a structured snapshot of the category summary and mass-sculpting data.
+        self.save_category_summary_dataframe(
+            os.path.join(self.base_path, self.cat_folder),
+            correlation_by_category=cat_corr_dict
         )
 
 
