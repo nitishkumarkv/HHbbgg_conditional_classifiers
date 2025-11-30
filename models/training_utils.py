@@ -2,7 +2,7 @@ import copy
 import json
 import os
 import sys
-from typing import Union, Optional, Literal
+from typing import Union, Optional, Literal, Any
 from dataclasses import dataclass, field
 
 import matplotlib.pyplot as plt
@@ -53,6 +53,46 @@ class CustomDataset(Dataset):
             return self.X[idx], self.y[idx], self.sample_weights[idx], self.no_absolute_weights[idx]
         else:
             return self.X[idx], self.y[idx], self.sample_weights[idx]
+
+
+class WarningDisplay:
+    """Render a single rolling warning without breaking tqdm output."""
+
+    def __init__(self, progress_bar: Optional[Any] = None):
+        self.progress_bar = progress_bar
+        self.stream = getattr(progress_bar, 'fp', sys.stderr)
+        self.lines_printed = 0
+        self.total_warnings = 0
+        is_tty = getattr(self.stream, "isatty", None)
+        self._can_rewrite = bool(is_tty and is_tty())
+
+    def show(self, lines: list[str]):
+        if not lines:
+            return
+        formatted_lines = list(lines)
+        self.total_warnings += 1
+        formatted_lines[0] = f"[WARNING {self.total_warnings}] {formatted_lines[0]}"
+        message = "\n".join(formatted_lines)
+        if self._can_rewrite and self.lines_printed:
+            self.stream.write(f"\033[{self.lines_printed}F")
+            self.stream.write("\033[J")
+            self.stream.flush()
+        if self.progress_bar is not None:
+            self.progress_bar.write(message, file=self.stream)
+            self.progress_bar.refresh()
+        else:
+            tqdm.write(message, file=self.stream)
+        self.lines_printed = message.count("\n") + 1
+
+
+def _emit_disco_warning(lines: list[str], warning_display: Optional[WarningDisplay]):
+    if warning_display is not None:
+        warning_display.show(lines)
+        return
+    if not lines:
+        return
+    fallback = [f"[WARNING] {lines[0]}"] + [f"          {line}" for line in lines[1:]]
+    print("\n".join(fallback))
 
 
 @dataclass
@@ -271,6 +311,7 @@ def apply_disco(
         use_sr_upweight: bool = False,
         # hh_lower_score_threshold: float = 0.5,
         thresholds: dict = {},
+    warning_display: Optional[WarningDisplay] = None,
     ) -> tuple[Tensor, Tensor]:
     """
     Apply the DisCo (Decorrelation) loss to the nominal loss pairwise across:
@@ -338,16 +379,21 @@ def apply_disco(
     #         (use_sr_upweight and sum_all_masks < 2),
     #     ]):
     if sum_all_masks < 2:
-        print(f"[DEBUG] HH score pred: mean {y_pred[:,3].mean().item()}, max {y_pred[:,3].max().item()}, min {y_pred[:,3].min().item()}, std {y_pred[:,3].std().item()}")  # COMMENT OUT WHEN TRAINING NORMALLY
-        print(f"[DEBUG] nonRes score pred: mean {y_pred[:,0].mean().item()}, max {y_pred[:,0].max().item()}, min {y_pred[:,0].min().item()}, std {y_pred[:,0].std().item()}")  # COMMENT OUT WHEN TRAINING NORMALLY
-        print(f"[DEBUG] sum_bkg_mask: {sum_bkg_mask}")  # COMMENT OUT WHEN TRAINING NORMALLY
-        print(f"[DEBUG] sum_high_HH_score_mask: {sum_high_HH_score_mask}")  # COMMENT OUT WHEN TRAINING NORMALLY
-        print(f"[DEBUG] sum_low_nonRes_score_mask: {sum_low_nonRes_score_mask}")  # COMMENT OUT WHEN TRAINING NORMALLY
-        print(f"[DEBUG] sum_bkg_and_high_HH: {sum_bkg_and_high_HH}")  # COMMENT OUT WHEN TRAINING NORMALLY
-        print(f"[DEBUG] sum_bkg_and_low_nonRes: {sum_bkg_and_low_nonRes}")  # COMMENT OUT WHEN TRAINING NORMALLY
-        print(f"[DEBUG] sum_high_HH_and_low_nonRes: {sum_high_HH_and_low_nonRes}")  # COMMENT OUT WHEN TRAINING NORMALLY
-        print(f"[DEBUG] sum_all_masks: {sum_all_masks}")  # COMMENT OUT WHEN TRAINING NORMALLY
-        print("[WARNING] <2 events in at least one DisCo mask combination; skipping DisCo calculation for this batch.")
+        hh_scores = y_pred[:, 3]
+        nonres_scores = y_pred[:, 0]
+        warning_lines = [
+            "<2 events in at least one DisCo mask combination; skipping DisCo calculation for this batch.",
+            f"    HH score stats               mean {hh_scores.mean().item():.6f}, min {hh_scores.min().item():.6f}, max {hh_scores.max().item():.6f}, std {hh_scores.std().item():.6f}",
+            f"    nonRes score stats           mean {nonres_scores.mean().item():.6f}, min {nonres_scores.min().item():.6f}, max {nonres_scores.max().item():.6f}, std {nonres_scores.std().item():.6f}",
+            f"    sum (true nonRes bkg).........................................{sum_bkg_mask}",
+            f"    sum (high HH score)...........................................{sum_high_HH_score_mask}",
+            f"    sum (low nonRes score)........................................{sum_low_nonRes_score_mask}",
+            f"    sum (true nonRes bkg) & (high HH score).......................{sum_bkg_and_high_HH}",
+            f"    sum (true nonRes bkg) & (low nonRes score)....................{sum_bkg_and_low_nonRes}",
+            f"    sum (high HH score) & (low nonRes score)......................{sum_high_HH_and_low_nonRes}",
+            f"    sum (true nonRes bkg) & (high HH score) & (low nonRes score)..{sum_all_masks}",
+        ]
+        _emit_disco_warning(warning_lines, warning_display)
         return loss_nominal, torch.zeros(1, device=loss_nominal.device, dtype=loss_nominal.dtype)
 
     
@@ -380,10 +426,13 @@ def apply_disco(
     weights_batch = weights_batch[bkg_mask & high_HH_score_mask & low_nonRes_score_mask]
 
     if len(v1) < 2:
-        # No background events in batch after masking; skip DisCo calculation
-        # TODO: should we add a small but nonzero penalty instead? don't want to ensourage model to underweight nonres bkg events in HH score. wait no, that's perfectly fine.
-        print("[WARNING] <2 background events in batch after applying DisCo masks; skipping DisCo calculation for this batch.")
-        return loss_nominal, torch.zeros(1, device=loss_nominal.device, dtype=loss_nominal.dtype)
+        warning_lines = [
+            "<2 background events in batch after applying DisCo masks; skipping DisCo calculation for this batch.",
+            f"Events after masking: {len(v1)}"
+        ]
+        _emit_disco_warning(warning_lines, warning_display)
+        return loss_nominal, torch.zeros(1, device=loss_nominal.device, dtype=loss_nominal.dtype) # no penalty to missing DisCo
+        # return loss_nominal, 0.5 * loss_nominal
 
     v1_vars = v1.shape[1]
     v2_vars = v2.shape[1]
@@ -502,6 +551,7 @@ def train_one_epoch(
     #     print(f"[INFO] DisCo HH score lower threshold: {hh_lower_score_threshold}")
 
     progress_bar = tqdm(data_loader, desc=f"Epoch {epoch} [Training]", leave=False)
+    warning_display = WarningDisplay(progress_bar) if use_disco else None
     # Enable mixed precision on CUDA/MPS for speed; safe no-op on CPU
     use_cuda = (device.type == 'cuda')
     # use_amp = device.type in ('cuda', 'mps') # original
@@ -611,6 +661,7 @@ def train_one_epoch(
                     reduce=disco_reduce,
                     use_sr_upweight=use_sr_upweight,
                     thresholds=thresholds,
+                    warning_display=warning_display,
                 )
             else:
                 total_weighted_loss: Tensor = weighted_loss # scalar
@@ -722,6 +773,7 @@ def evaluate(
     # if use_disco:
     #     print(f"[INFO] DisCo HH score lower threshold: {hh_lower_score_threshold}")
     progress_bar = tqdm(data_loader, desc=f"Epoch {epoch} [Validation]", leave=False)
+    warning_display = WarningDisplay(progress_bar) if use_disco else None
     use_cuda = (device.type == 'cuda')
     # inference_mode is slightly faster than no_grad for eval
     with torch.inference_mode():
@@ -799,7 +851,8 @@ def evaluate(
                     reduce=disco_reduce,
                     y_pred=y_pred,
                     use_sr_upweight=use_sr_upweight,
-                    thresholds=thresholds
+                    thresholds=thresholds,
+                    warning_display=warning_display,
                 )
             else:
                 total_weighted_loss: Tensor = weighted_loss # scalar
