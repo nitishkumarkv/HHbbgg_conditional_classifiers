@@ -10,6 +10,12 @@ pyproject.toml
 HHbbgg_classifier.yaml
 condor/
 
+# Misc Environment Files
+HHbbgg_classifier_backup_torch2.0.0cuda.yaml
+HHbbgg_classifier_backup_torch2.9.1cu130.yaml
+env_debug.yml
+env-mac.yml
+
 # Notebooks
 merge_multiclass.ipynb
 sculpting.ipynb
@@ -19,5 +25,3 @@ notebooks/torch_negative_avg.ipynb
 notebooks/bootstrap_merged_boosted.ipynb
 plots/
 HHbbgg_conditional_classifiers.code-workspace
-env_debug.yml
-env-mac.yml
