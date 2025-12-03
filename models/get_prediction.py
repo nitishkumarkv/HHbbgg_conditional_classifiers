@@ -26,7 +26,7 @@ def get_prediction(model_dict_path, model_path, X):
 
     model = MLP(input_size, best_num_layers, best_num_nodes, output_size, best_act_fn, best_dropout_prob).to(device)
     model.to(device)
-    model_state = torch.load(model_path, weights_only=False)
+    model_state = torch.load(model_path, weights_only=False, map_location=torch.device('cpu'))
     model.load_state_dict(model_state['model_state_dict'])
 
     model.eval()
@@ -63,7 +63,7 @@ def get_prediction_binary(model_dict_path, model_path, X):
 
     model = MLP(input_size, best_num_layers, best_num_nodes, output_size, best_act_fn, best_dropout_prob).to(device)
     model.to(device)
-    model_state = torch.load(model_path)
+    model_state = torch.load(model_path, map_location=torch.device('cpu'))
     model.load_state_dict(model_state['model_state_dict'])
 
     model.eval()
@@ -128,7 +128,8 @@ if __name__ == "__main__":
                 device = torch.device('cuda:'+training_config["cuda_device"] if torch.cuda.is_available() else 'cpu')
                 #device = 'cpu'
                 print("Device: ", device)
-                X = torch.tensor(np.load(f'{inputs_path}/X.npy'), dtype=torch.float32).to(device)
+                X = np.load(f'{inputs_path}/X.npy')
+                X = torch.tensor(X, dtype=torch.float32).to(device)
 
                 print(f"Getting prediction for {sample} in {era} era")
                 #pred = get_prediction(model_dict_path, model_path, X)

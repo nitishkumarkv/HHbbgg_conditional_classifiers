@@ -29,17 +29,79 @@ def load_samples(base_path, samples, data=False, syst=""):
     # Example MC file to get the weight columns
     parquet_file = pq.ParquetFile(base_path+"/individual_samples/preEE/ttHtoGG_M_125/"+syst+"/events.parquet")
     all_columns = parquet_file.schema.names
-    weight_columns = [col for col in all_columns if 'weight' in col]
+    # weight_columns = [col for col in all_columns if 'weight' in col]
+    weight_columns = ["weight_tot"]
     dijet_mass_key = "nonResReg_dijet_mass_DNNreg"
     HH_mass_key = "nonResReg_HHbbggCandidate_mass"
-    columns = ["event", "run",
-            #"nonResReg_lead_bjet_hFlav", "nonResReg_sublead_bjet_hFlav",
-            "mass", dijet_mass_key, HH_mass_key, "lumi"]#, "is_boosted", "y_proba"] 
+
+    #"nonResReg_lead_bjet_hFlav", "nonResReg_sublead_bjet_hFlav", "event", "run", "lumi"]#, "is_boosted", "y_proba"] 
+    columns = [
+        "mass",
+        dijet_mass_key,
+        HH_mass_key,
+        # "eta",
+        # "lead_eta",
+        # "lead_phi",
+        # "lead_mvaID",
+        # "nonResReg_pholead_PtOverM",
+        # "sublead_eta",
+        # "sublead_phi",
+        # "sublead_mvaID",
+        # "nonResReg_phosublead_PtOverM",
+        # "nonResReg_lead_bjet_eta",
+        # "nonResReg_lead_bjet_phi",
+        # "nonResReg_lead_bjet_btagPNetB",
+        # "nonResReg_sublead_bjet_eta",
+        # "nonResReg_sublead_bjet_phi",
+        # "nonResReg_sublead_bjet_btagPNetB",
+        # "nonResReg_DeltaR_j1g1",
+        # "nonResReg_DeltaR_j2g1",
+        # "nonResReg_DeltaR_j1g2",
+        # "nonResReg_DeltaR_j2g2",
+        # "nonResReg_DeltaR_jg_min",
+        # "nonResReg_CosThetaStar_CS",
+        # "nonResReg_CosThetaStar_gg",
+        # "nonResReg_CosThetaStar_jj",
+        # "puppiMET_phi",
+        # "puppiMET_pt",
+        # "n_leptons",
+        # "n_jets",
+        # "nonResReg_chi_t0",
+        # "nonResReg_chi_t1",
+        # "nonResReg_DeltaPhi_j1MET",
+        # "nonResReg_DeltaPhi_j2MET",
+        # "VBF_first_jet_eta",
+        # "VBF_first_jet_phi",
+        # "VBF_second_jet_eta",
+        # "VBF_second_jet_phi",
+        # "VBF_first_jet_PtOverM",
+        # "VBF_second_jet_PtOverM",
+        # "VBF_jet_eta_prod",
+        # "VBF_jet_eta_diff",
+        # "VBF_jet_eta_sum",
+        # "VBF_DeltaR_j1b1",
+        # "VBF_DeltaR_j1b2",
+        # "VBF_DeltaR_j2b1",
+        # "VBF_DeltaR_j2b2",
+        # "VBF_DeltaR_j1g1",
+        # "VBF_DeltaR_j1g2",
+        # "VBF_DeltaR_j2g1",
+        # "VBF_DeltaR_j2g2",
+        # "VBF_DeltaR_jb_min",
+        # "VBF_DeltaR_jg_min",
+        # "VBF_dijet_mass",
+        # "nonResReg_HHbbggCandidate_eta",
+        # "diphoton_PtOverM_ggjj",
+        # "nonResReg_dijet_PtOverM_ggjj",
+        # "deltaR_gg",
+        # "nonResReg_lead_bjet_over_M_regressed",
+        # "nonResReg_sublead_bjet_over_M_regressed"
+        ]
 
     samples_input = {
-            "lumi": [],
-            "event": [],
-            "run": [],
+            # "lumi": [],
+            # "event": [],
+            # "run": [],
             #"nonResReg_lead_bjet_hFlav": [],
             #"nonResReg_sublead_bjet_hFlav": [],
             "mass": [], 
@@ -54,6 +116,63 @@ def load_samples(base_path, samples, data=False, syst=""):
             "ggHH_score":[],
             # "is_boosted": [],
             # "y_proba":[]
+            # "eta" : [],
+            # "lead_eta" : [],
+            # "lead_phi" : [],
+            # "lead_mvaID" : [],
+            # "nonResReg_pholead_PtOverM" : [],
+            # "sublead_eta" : [],
+            # "sublead_phi" : [],
+            # "sublead_mvaID" : [],
+            # "nonResReg_phosublead_PtOverM" : [],
+            # "nonResReg_lead_bjet_eta" : [],
+            # "nonResReg_lead_bjet_phi" : [],
+            # "nonResReg_lead_bjet_btagPNetB" : [],
+            # "nonResReg_sublead_bjet_eta" : [],
+            # "nonResReg_sublead_bjet_phi" : [],
+            # "nonResReg_sublead_bjet_btagPNetB" : [],
+            # "nonResReg_DeltaR_j1g1" : [],
+            # "nonResReg_DeltaR_j2g1" : [],
+            # "nonResReg_DeltaR_j1g2" : [],
+            # "nonResReg_DeltaR_j2g2" : [],
+            # "nonResReg_DeltaR_jg_min" : [],
+            # "nonResReg_CosThetaStar_CS" : [],
+            # "nonResReg_CosThetaStar_gg" : [],
+            # "nonResReg_CosThetaStar_jj" : [],
+            # "puppiMET_phi" : [],
+            # "puppiMET_pt" : [],
+            # "n_leptons" : [],
+            # "n_jets" : [],
+            # "nonResReg_chi_t0" : [],
+            # "nonResReg_chi_t1" : [],
+            # "nonResReg_DeltaPhi_j1MET" : [],
+            # "nonResReg_DeltaPhi_j2MET" : [],
+            # "VBF_first_jet_eta" : [],
+            # "VBF_first_jet_phi" : [],
+            # "VBF_second_jet_eta" : [],
+            # "VBF_second_jet_phi" : [],
+            # "VBF_first_jet_PtOverM" : [],
+            # "VBF_second_jet_PtOverM" : [],
+            # "VBF_jet_eta_prod" : [],
+            # "VBF_jet_eta_diff" : [],
+            # "VBF_jet_eta_sum" : [],
+            # "VBF_DeltaR_j1b1" : [],
+            # "VBF_DeltaR_j1b2" : [],
+            # "VBF_DeltaR_j2b1" : [],
+            # "VBF_DeltaR_j2b2" : [],
+            # "VBF_DeltaR_j1g1" : [],
+            # "VBF_DeltaR_j1g2" : [],
+            # "VBF_DeltaR_j2g1" : [],
+            # "VBF_DeltaR_j2g2" : [],
+            # "VBF_DeltaR_jb_min" : [],
+            # "VBF_DeltaR_jg_min" : [],
+            # "VBF_dijet_mass" : [],
+            # "nonResReg_HHbbggCandidate_eta" : [],
+            # "diphoton_PtOverM_ggjj" : [],
+            # "nonResReg_dijet_PtOverM_ggjj" : [],
+            # "deltaR_gg" : [],
+            # "nonResReg_lead_bjet_over_M_regressed" : [],
+            # "nonResReg_sublead_bjet_over_M_regressed" : [],
     }
     for weight in weight_columns:
         samples_input.update({weight: []})
@@ -89,23 +208,25 @@ def load_samples(base_path, samples, data=False, syst=""):
             y = np.load(y_path)
             samples_input["score"].append(y)
             
-            samples_input["lumi"].append(np.array(events['lumi']))
-            samples_input["event"].append(np.array(events['event']))
-            samples_input["run"].append(np.array(events['run']))
+            # samples_input["lumi"].append(np.array(events['lumi']))
+            # samples_input["event"].append(np.array(events['event']))
+            # samples_input["run"].append(np.array(events['run']))
 
             #samples_input["nonResReg_lead_bjet_hFlav"].append(np.array(events['nonResReg_lead_bjet_hFlav']))
             #samples_input["nonResReg_sublead_bjet_hFlav"].append(np.array(events['nonResReg_sublead_bjet_hFlav']))
 
-            samples_input["mass"].append(np.array(events['mass']))
+            # samples_input["mass"].append(np.array(events['mass']))
             samples_input["dijet_mass"].append(np.array(events[dijet_mass_key]))
             samples_input["HHbbggCandidate_mass"].append(np.array(events[HH_mass_key]))
+            for col in columns:
+                if (col != dijet_mass_key) & (col != HH_mass_key):
+                    samples_input[col].append(np.array(events[col]))
 
             if sample == "":
                 sample = "Data"
             if sample in ff_sampledict.keys():
                 sample = ff_sampledict[sample]
             print(sample)
-            print()
             samples_input["sample"].append(np.full(y.shape[0], sample))
 
             if "22" in era or "EE" in era:
@@ -126,14 +247,19 @@ def load_samples(base_path, samples, data=False, syst=""):
                     samples_input[weight].append(np.array(ak.ones_like(events['mass'])))  # Default weight if not provided
 
     # Concatenate all data
-    samples_input["lumi"] = np.concatenate(samples_input["lumi"], axis=0)
-    samples_input["event"] = np.concatenate(samples_input["event"], axis=0)
-    samples_input["run"] = np.concatenate(samples_input["run"], axis=0)
+    # samples_input["lumi"] = np.concatenate(samples_input["lumi"], axis=0)
+    # samples_input["event"] = np.concatenate(samples_input["event"], axis=0)
+    # samples_input["run"] = np.concatenate(samples_input["run"], axis=0)
     #samples_input["nonResReg_lead_bjet_hFlav"] = np.concatenate(samples_input["nonResReg_lead_bjet_hFlav"], axis=0)
     #samples_input["nonResReg_sublead_bjet_hFlav"] = np.concatenate(samples_input["nonResReg_sublead_bjet_hFlav"], axis=0)
-    samples_input["mass"] = np.concatenate(samples_input["mass"], axis=0)
+    # samples_input["mass"] = np.concatenate(samples_input["mass"], axis=0)
     samples_input["dijet_mass"] = np.concatenate(samples_input["dijet_mass"], axis=0)
     samples_input["HHbbggCandidate_mass"] = np.concatenate(samples_input["HHbbggCandidate_mass"], axis=0)
+
+    for col in columns:
+        if (col != dijet_mass_key) & (col != HH_mass_key):
+            samples_input[col] = np.concatenate(samples_input[col], axis=0)
+
     samples_input["sample"] = np.concatenate(samples_input["sample"], axis=0)
     samples_input["year"] = np.concatenate(samples_input["year"], axis=0)
     scores = np.concatenate(samples_input["score"], axis=0)
@@ -158,13 +284,13 @@ if __name__ == "__main__":
     print(base_path)
 
     samples = [
-            #"GGJets",
-            #"DDQCDGJET",
-            #"TTGG",
-            #"TT",
-            #"TTG_10_100",
-            #"TTG_100_200",
-            #"TTG_200",
+            "GGJets",
+            "DDQCDGJET",
+            "TTGG",
+            # "TT",
+            # "TTG_10_100",
+            "TTG_100_200",
+            "TTG_200",
             "ttHtoGG_M_125",
             "BBHto2G_M_125",
             "GluGluHToGG_M_125",

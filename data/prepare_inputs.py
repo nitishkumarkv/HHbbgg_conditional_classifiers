@@ -219,6 +219,41 @@ class PrepareInputs:
             "TTG_100_200": 0.44e3,
             "TTG_200": 0.12e3,
             "TT": 730e3,
+            "GluGlutoRadiontoHHto2B2G_M-300": 3.038,
+            "HH_loop_sm_twoscalar_SChan_eta0_M_300_RelWidth_0p1": 0.00002821,
+            "HH_loop_sm_twoscalar_BOX_SChan_eta0_inteference_M_300_RelWidth_0p1": -0.00001259,
+            "HH_loop_sm_twoscalar_SChan_h_SChan_eta0_inteference_M_300_RelWidth_0p1": 0.00000473,
+            "HH_loop_sm_twoscalar_SChan_h_SChan_eta0_inteference_M_300_RelWidth_0p001": 0.00000454,
+            "HH_loop_sm_twoscalar_SChan_h_SChan_eta0_inteference_M_300_RelWidth_0p01": 0.00000468,
+            "HH_loop_sm_twoscalar_SChan_h_SChan_eta0_inteference_M_300_RelWidth_0p05": 0.00000472,
+            "HH_loop_sm_twoscalar_SChan_h_SChan_eta0_inteference_M_300_RelWidth_0p1": 0.00000473,
+            "HH_loop_sm_twoscalar_SChan_h_SChan_eta0_inteference_M_300_RelWidth_0p2": 0.00000473,
+            "HH_loop_sm_twoscalar_SChan_h_SChan_eta0_inteference_M_300_RelWidth_0p3": 0.00000473,
+            "HH_loop_sm_twoscalar_SChan_eta0_M_300_RelWidth_0p001": 0.00314753,
+            "HH_loop_sm_twoscalar_SChan_eta0_M_300_RelWidth_0p01": 0.00031147,
+            "HH_loop_sm_twoscalar_SChan_eta0_M_300_RelWidth_0p05": 0.00005950,
+            "HH_loop_sm_twoscalar_SChan_eta0_M_300_RelWidth_0p1": 0.00002821,
+            "HH_loop_sm_twoscalar_SChan_eta0_M_300_RelWidth_0p2": 0.00002821,
+            "HH_loop_sm_twoscalar_SChan_eta0_M_300_RelWidth_0p3": 0.00002821,
+            "HH_loop_sm_twoscalar_BOX_SChan_eta0_inteference_M_300_RelWidth_0p001": -0.00001403,
+            "HH_loop_sm_twoscalar_BOX_SChan_eta0_inteference_M_300_RelWidth_0p01": -0.00001380,
+            "HH_loop_sm_twoscalar_BOX_SChan_eta0_inteference_M_300_RelWidth_0p05": -0.00001334,
+            "HH_loop_sm_twoscalar_BOX_SChan_eta0_inteference_M_300_RelWidth_0p1": -0.00001259,
+            "HH_loop_sm_twoscalar_BOX_SChan_eta0_inteference_M_300_RelWidth_0p2": -0.00001259,
+            "HH_loop_sm_twoscalar_BOX_SChan_eta0_inteference_M_300_RelWidth_0p3": -0.00001259,
+            "GluGlutoRadiontoHHto2B2G_M-250": 1.0,
+            "GluGlutoRadiontoHHto2B2G_M-260": 1.0,
+            "GluGlutoRadiontoHHto2B2G_M-270": 1.0,
+            "GluGlutoRadiontoHHto2B2G_M-280": 1.0,
+            "GluGlutoRadiontoHHto2B2G_M-300": 1.0,
+            "GluGlutoRadiontoHHto2B2G_M-350": 1.0,
+            "GluGlutoRadiontoHHto2B2G_M-450": 1.0,
+            "GluGlutoRadiontoHHto2B2G_M-550": 1.0,
+            "GluGlutoRadiontoHHto2B2G_M-600": 1.0,
+            "GluGlutoRadiontoHHto2B2G_M-650": 1.0,
+            "GluGlutoRadiontoHHto2B2G_M-700": 1.0,
+            "GluGlutoRadiontoHHto2B2G_M-800": 1.0,
+            "GluGlutoRadiontoHHto2B2G_M-1000": 1.0,
         }
         luminosities = {
         "preEE": 7.98,  # Integrated luminosity for preEE in fb^-1
@@ -521,7 +556,7 @@ class PrepareInputs:
         vars_to_load = vars_for_training + self.extra_vars
 
         for era in self.training_info["samples_info"]["eras"]:
-            for samples in self.sample_to_class.keys():                
+            for samples in self.sample_to_class.keys(): 
 
                 samples_path = self.training_info["samples_info"]["samples_path"]
                 parquet_path = self.training_info["samples_info"][era][samples]
@@ -680,7 +715,6 @@ class PrepareInputs:
 
                 # get relative weights according to cross section of the process
                 events = self.get_relative_xsec_weight(events, samples, era)
-                
                 # also save the event
                 full_path_to_save = f"{out_path}/{era}/{samples}/"
                 os.makedirs(full_path_to_save, exist_ok=True)
@@ -697,7 +731,6 @@ class PrepareInputs:
                 X = comb_inputs[vars_for_training]
                 #Y = comb_inputs[[cls for cls in self.classes]]
                 relative_weights = comb_inputs["rel_xsec_weight"]
-
                 # perform log transformation for variables if needed
                 # for var in vars_for_log:
                 #     X[var] = np.log(X[var])
@@ -709,7 +742,6 @@ class PrepareInputs:
                 # mask -999.0 to nan
                 mask = (X < -998.0)
                 X[mask] = np.nan
-
                 # get mean according to training data set
                 scale_file = f"{inputs_path}/mean_std_dict.pkl"
                 with open(scale_file, 'rb') as f:
@@ -717,10 +749,8 @@ class PrepareInputs:
 
                 mean = mean_std_dict["mean"]
                 std = mean_std_dict["std_dev"]
-
                 # transform all data set
                 X = self.standardize(X, mean, std)
-
                 # replace NaN with fill_nan value
                 X = np.nan_to_num(X, nan=fill_nan)
 

@@ -29,7 +29,8 @@ class OptunaCategorizer:
                 beta=0.1,
                 gamma_strategy="linear",
                 SR_strategy="sequential",
-                mHH_cats=[]
+                mHH_cats=[],
+                cat_signals=[]
                 ):
 
         self.base_path = base_path
@@ -48,6 +49,7 @@ class OptunaCategorizer:
         self.gamma_strategy = gamma_strategy
         self.SR_strategy = SR_strategy
         self.mHH_cats = mHH_cats
+        self.cat_signals = cat_signals
 
         if self.cat_folder is None:
             print("INFO: No output directory specified, using default: optuna_categorization")
@@ -62,7 +64,7 @@ class OptunaCategorizer:
         if self.signal_samples is None:
             self.signal_samples = ["GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00"]
 
-        print("Using signal samples: ", self.signal_samples)
+        # print("Using signal samples: ", self.signal_samples)
 
         self.apply_preselection = True
     
@@ -1548,6 +1550,13 @@ class OptunaCategorizer:
             else:
                 samples_input_cats = samples_input.loc[(samples_input["HHbbggCandidate_mass"] >= self.mHH_cats[i-1]) & (samples_input["HHbbggCandidate_mass"] < self.mHH_cats[i])]
                 mHH_bounds = [self.mHH_cats[i-1], self.mHH_cats[i]]
+
+            if len(self.cat_signals) > 0:
+                if (len(self.cat_signals) != len(self.mHH_cats) + 1):
+                    raise RuntimeError("Number of category signals is not equal to the number of categories.")
+                else:
+                    self.signal_samples = self.cat_signals[i]
+                    print(f"mHH category {i}, signal sample {self.signal_samples}")
                 
             if self.SR_strategy == "sequential":
                 best_params, best_sig_values, max_index = self.optmize_SR_sequential(samples_input_cats, mHH_cat=i)
@@ -1652,6 +1661,28 @@ class OptunaCategorizer:
         with open(best_params_json_path, "w") as f:
             json.dump(mHH_cat_dict, f, indent=4)
 
+        if len(self.cat_signals) > 0:
+            cat_signals_path = os.path.join(cat_path, "category_signals.txt")
+            with open(cat_signals_path, "w") as f:
+                f.write(f"Specified signals per mHH category")
+                j = 0
+                while j < len(cat_signals):
+                    f.write(f"Signal for mHH category {j}: {self.cat_signals[j]}\n")
+                    j += 1
+
+def parse_cat_signals(arg_cat_signals):
+    cat_signals = []
+    for sig in arg_cat_signals:
+        if (f"kl_1" in sig) | ("1" in sig):
+            cat_signals.append("GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00")
+        elif (f"kl_0" in sig) | ("0" in sig):
+            cat_signals.append("GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00")
+        elif (f"kl_2p45" in sig) | ("2.45" in sig):
+            cat_signals.append("GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00")
+        elif (f"kl_5" in sig) | ("5" in sig):
+            cat_signals.append("GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00")
+    
+    return cat_signals
 
 #############################################
 # Main execution
@@ -1668,14 +1699,38 @@ if __name__ == "__main__":
     parser.add_argument("--gamma_strategy", type=str, choices=["sqrt", "linear"], default="linear", help="Gamma strategy for TPE sampler")
     parser.add_argument("--side_band_threshold", type=int, default=10, help="Threshold for sideband requirements")
     parser.add_argument("--mHH_cats", type=int, nargs="+", default=[], help="Inner boundaries of mHH categories, if using. No lower or upper bound assumed.")
-    parser.add_argument("--use_kl", action="store_true", help="Use all kl samples to compute significance.")
+    parser.add_argument("--use_kl_all", action="store_true", help="Use all kl samples to compute significance.")
+    parser.add_argument("--cat_signals", type=str, nargs="+", default=[], help="kl values to use as signals, must have one more than argumetns for -mHH_cats if using. Assumes kl=1 if none provided")
+    parser.add_argument("--cat1_signals", type=str, nargs="+", default=[], help="kl values to use as signals in mHH category 1")
+    parser.add_argument("--cat2_signals", type=str, nargs="+", default=[], help="kl values to use as signals in mHH category 1")
+    parser.add_argument("--cat3_signals", type=str, nargs="+", default=[], help="kl values to use as signals in mHH category 1")
 
     args = parser.parse_args()
 
-    if args.use_kl:
+    if args.use_kl_all:
         signals = ["GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00"]
     else:
         signals = None
+
+    cat_signals = []
+    if len(args.cat_signals) > 0:
+        all_cat_signals = parse_cat_signals(args.cat_signals)
+        for sig in all_cat_signals:
+            cat_signals.append([sig])
+        print("Using signals per cat:", cat_signals)
+    else: 
+        if len(args.cat1_signals) > 0:
+            cat1_signals = parse_cat_signals(args.cat1_signals)
+            cat_signals.append(cat1_signals)
+        if len(args.cat2_signals) > 0:
+            cat2_signals = parse_cat_signals(args.cat2_signals)
+            cat_signals.append(cat2_signals)
+        if len(args.cat3_signals) > 0:
+            cat3_signals = parse_cat_signals(args.cat3_signals)
+            cat_signals.append(cat3_signals)
+            print("Using signals per cat:", cat_signals)
+
+
 
 
     categoriser = OptunaCategorizer(base_path=args.base_path,
@@ -1685,7 +1740,8 @@ if __name__ == "__main__":
                                     n_trials_optuna=args.n_trials,
                                     n_runs=args.n_runs,
                                     SR_strategy=args.SR_strategy,
-                                    mHH_cats=args.mHH_cats)
+                                    mHH_cats=args.mHH_cats,
+                                    cat_signals = cat_signals)
 
     if len(args.mHH_cats) > 0:
         categoriser.run_categorisation_mHH()
