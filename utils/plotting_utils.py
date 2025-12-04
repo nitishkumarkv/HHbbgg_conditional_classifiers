@@ -156,10 +156,17 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
     for sample in sim_samples:
         sample_combined = []
         for era in eras:
-            if os.path.exists(f"{sim_folder}/{era}/{sample}/events.parquet"):
-                events_ = ak.from_parquet(f"{sim_folder}/{era}/{sample}/events.parquet", columns=variables+["lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_genPartFlav", "sublead_genPartFlav", "weight_tot"])
+            if (era == "2024") & (sample == "VHtoGG_M_125"):
+                for VHsample in ["WmHtoGG", "WpHtoGG", "ZHtoGG"]:
+                    if os.path.exists(f"{sim_folder}/{era}/{sample}/events.parquet"):
+                        events_ = ak.from_parquet(f"{sim_folder}/{era}/{sample}/events.parquet", columns=variables+["lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_genPartFlav", "sublead_genPartFlav", "weight_tot"])
+                    else:
+                        events_ = ak.from_parquet(f"{events_path}/{samples_info[era][sample]}", columns=variables+["lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_genPartFlav", "sublead_genPartFlav", "weight_tot"])
             else:
-                events_ = ak.from_parquet(f"{events_path}/{samples_info[era][sample]}", columns=variables+["lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_genPartFlav", "sublead_genPartFlav", "weight_tot"])
+                if os.path.exists(f"{sim_folder}/{era}/{sample}/events.parquet"):
+                    events_ = ak.from_parquet(f"{sim_folder}/{era}/{sample}/events.parquet", columns=variables+["lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_genPartFlav", "sublead_genPartFlav", "weight_tot"])
+                else:
+                    events_ = ak.from_parquet(f"{events_path}/{samples_info[era][sample]}", columns=variables+["lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_genPartFlav", "sublead_genPartFlav", "weight_tot"])
 
         
             scores_ = np.load(f"{sim_folder}/{era}/{sample}/y.npy")
@@ -304,6 +311,7 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
         "postEE": 26.67,  # Integrated luminosity for postEE in fb^-1
         "preBPix": 17.794,  # Integrated luminosity for preEE in fb^-1
         "postBPix": 9.451  # Integrated luminosity for postEE in fb^-1
+        "2024": 108.95
         }
 
         lumi = 0

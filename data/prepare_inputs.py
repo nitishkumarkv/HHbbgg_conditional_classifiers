@@ -39,7 +39,9 @@ class PrepareInputs:
         #self.extra_vars = ["mass", "nonRes_dijet_mass", "Res_dijet_mass", "nonRes_has_two_btagged_jets", "weight", "pt", "nonRes_dijet_pt", "Res_dijet_pt", "Res_lead_bjet_pt", "Res_sublead_bjet_pt", "Res_lead_bjet_ptPNetCorr", "Res_sublead_bjet_ptPNetCorr", "nonRes_HHbbggCandidate_mass", "Res_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "Res_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "jet1_mass", "jet2_mass", "jet3_mass", "jet4_mass", "jet5_mass", "jet6_mass", "Res_lead_bjet_jet_idx", "Res_sublead_bjet_jet_idx", "jet1_index", "jet2_index", "jet3_index", "jet4_index", "jet5_index", "jet6_index",
         #                   "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet1_eta", "jet2_eta", "jet3_eta", "jet4_eta", "jet5_eta", "jet6_eta", "jet1_phi", "jet2_phi", "jet3_phi", "jet4_phi", "jet5_phi", "jet6_phi", "lead_phi", "sublead_phi"]
 
-        self.extra_vars = ["mass", "nonRes_dijet_mass", "nonResReg_dijet_mass", "nonResReg_dijet_mass_DNNreg", "nonResReg_HHbbggCandidate_mass", "nonResReg_dijet_pt", "nonResReg_lead_bjet_pt", "nonResReg_sublead_bjet_pt", "nonResReg_lead_bjet_eta", "nonResReg_DNNpair_dijet_mass", "nonResReg_DNNpair_dijet_mass_DNNreg", "weight", "pt", "nonRes_dijet_pt", "nonRes_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "lead_eta", "lead_phi", "sublead_eta", "sublead_phi", "lead_genPartFlav", "sublead_genPartFlav"]
+        self.extra_vars = ["year", "mass", "nonRes_dijet_mass", "nonResReg_dijet_mass", "nonResReg_dijet_mass_DNNreg", "nonResReg_HHbbggCandidate_mass", "weight", "pt", "nonResReg_dijet_pt", "nonResReg_lead_bjet_pt", "nonResReg_sublead_bjet_pt"]
+        
+        #   "nonResReg_lead_bjet_eta", "nonResReg_DNNpair_dijet_mass", "nonResReg_DNNpair_dijet_mass_DNNreg", "nonRes_dijet_pt", "nonRes_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "lead_eta", "lead_phi", "sublead_eta", "sublead_phi", "lead_genPartFlav", "sublead_genPartFlav"]
         
         # prepare process numbers for proccesses in each class
         num_process_each_class = {
@@ -209,6 +211,9 @@ class PrepareInputs:
             "GluGluHToGG_M_125": 52.23e3 * 0.00227,  # cross sectio of GluGluHToGG * BR(HToGG)
             "VBFHToGG_M_125": 4.078e3 * 0.00227,
             "VHtoGG_M_125": 2.4009e3 * 0.00227,
+            "WmHtoGG": 0.8889e3 * 0.00227,
+            "WpHtoGG": 0.5677e3 * 0.00227,
+            "ZHtoGG": 0.9439e3 * 0.00227,
             "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": 0.034e3 * 0.00227 * 0.582 * 2,#0.02964e3 * 0.00227 * 0.582 * 2,  # cross sectio of GluGluToHH * BR(HToGG) * BR(HToGG) * 2 for two combination ### have to recheck if this is correct. 
             "VBFHHto2B2G_CV_1_C2V_1_C3_1": 0.00173e3 * 0.00227 * 0.582 * 2,  # cross sectio of VBFToHH * BR(HToGG) * BR(HTobb) * 2 for two combination ### have to recheck if this is correct.
             "DDQCDGJET": 1.0,
@@ -224,7 +229,8 @@ class PrepareInputs:
         "preEE": 7.98,  # Integrated luminosity for preEE in fb^-1
         "postEE": 26.67,  # Integrated luminosity for postEE in fb^-1
         "preBPix": 17.794,  # Integrated luminosity for preEE in fb^-1
-        "postBPix": 9.451  # Integrated luminosity for postEE in fb^-1
+        "postBPix": 9.451,  # Integrated luminosity for postEE in fb^-1
+        "2024": 108.95
         }
 
         lumi = luminosities[era]
@@ -233,6 +239,9 @@ class PrepareInputs:
 
         events["rel_xsec_weight"] = (events.weight) * dict_xsec[sample_type] * lumi
         events["weight_tot"] = (events.weight) * dict_xsec[sample_type] * lumi
+
+        if (era == "2024") & (sample_type == "GGJets"):
+            events["weight_tot"] = (events.weight_tot) * 1.59
 
         return events
 
@@ -460,20 +469,28 @@ class PrepareInputs:
             data_to_plot_dict = {}
             range_list = []
             for sample in self.sample_to_class.keys():
+                
                 #if sample in ["DDQCDGJET", ]:
                 #    continue
+                print(var)
+                print(sample)
 
                 sample_events = comb_inputs[comb_inputs["sample_type"] == sample]
+                print(len(sample_events))
                 data_to_plot = sample_events[var]
                 mask = (data_to_plot > -998.0)
+                print(len(data_to_plot))
                 data_to_plot = data_to_plot[mask]
                 data_to_plot_dict[sample] = data_to_plot
 
-                if range_list == []:
-                    range_list = [min(data_to_plot), max(data_to_plot)]
+                if len(data_to_plot) == 0:
+                    print(f"No entries for {var}, {sample} when plotting variables.")
                 else:
-                    range_list[0] = min(range_list[0], min(data_to_plot))
-                    range_list[1] = max(range_list[1], max(data_to_plot))
+                    if range_list == []:
+                        range_list = [min(data_to_plot), max(data_to_plot)]
+                    else:
+                        range_list[0] = min(range_list[0], min(data_to_plot))
+                        range_list[1] = max(range_list[1], max(data_to_plot))
 
             for sample in self.sample_to_class.keys():
                 #if sample in ["DDQCDGJET", ]:
@@ -521,7 +538,8 @@ class PrepareInputs:
         vars_to_load = vars_for_training + self.extra_vars
 
         for era in self.training_info["samples_info"]["eras"]:
-            for samples in self.sample_to_class.keys():                
+            # for samples in self.sample_to_class.keys():                
+            for samples in self.training_info["samples_info"][era].keys():                
 
                 samples_path = self.training_info["samples_info"]["samples_path"]
                 parquet_path = self.training_info["samples_info"][era][samples]
@@ -555,14 +573,21 @@ class PrepareInputs:
                 self.corr_with_mgg_mjj(events, vars_for_training, corr_out_path)
 
                 print("INFO: Appending process samples to whole dataframe")
-                events = pd.DataFrame(ak.to_list(events))
-                comb_inputs = pd.concat([comb_inputs, events])
+
+                i = 0
+                while len(events) > 0:
+                    events_intermediate = events[:self.write_chunk]
+                    events = events[self.write_chunk:]
+                    comb_inputs = pd.concat([comb_inputs, pd.DataFrame(ak.to_list(events_intermediate))])
+                    i+=1
+
+                # events = pd.DataFrame(ak.to_list(events))
+                # comb_inputs = pd.concat([comb_inputs, events])
 
         print("INFO: Plotting variables")
         plot_path = f"{out_path}/var_plots/"
         os.makedirs(plot_path, exist_ok=True)
-        self.plot_variables(comb_inputs, vars_for_training, plot_path)
-
+        # self.plot_variables(comb_inputs, vars_for_training, plot_path)
         for cls in self.classes:
             print("\n", f"INFO: Number of events in {cls}: {sum(comb_inputs[cls])}")
 
@@ -570,39 +595,62 @@ class PrepareInputs:
         Y = comb_inputs[[cls for cls in self.classes]]
         relative_weights = comb_inputs["rel_xsec_weight"]
 
+        print(0)
+
         # perform log transformation for variables if needed
         # for var in vars_for_log:
         #     X[var] = np.log(X[var])
-
-        X = X.values
-        Y = Y.values
-        relative_weights = relative_weights.values
         process_number = comb_inputs["process_number"].values
+        print(0.01)
+        del comb_inputs
+        print(0.02)
+        X = X.values
+        print(0.1)
+        Y = Y.values
+        print(0.2)
+        relative_weights = relative_weights.values
+        print(0.3)
+        print(1)
         
         # mask -999.0 to nan
         mask = (X < -998.0)
         X[mask] = np.nan
+        print(2)
 
         X_train, X_val, X_test, y_train, y_val, y_test, rel_w_train, rel_w_val, rel_w_test, proc_num_train, proc_num_val, proc_num_test = self.train_test_split(X, Y, relative_weights, process_number)
+        print(3)
+        del process_number
+        del X
+        del Y
+        del relative_weights
+        print(3.1)
+
 
         # get mean according to training data set
         mean = np.nanmean(X_train, axis=0)
+        print(3.2)
         std = np.nanstd(X_train, axis=0)
+        print(4)
 
         # transform all data set
         X_train = self.standardize(X_train, mean, std)
         X_val = self.standardize(X_val, mean, std)
+        print(5)
 
         # replace NaN with fill_nan value
         X_train = np.nan_to_num(X_train, nan=fill_nan)
         X_val = np.nan_to_num(X_val, nan=fill_nan)
+        print(6)
 
         true_class_weights, class_weights_for_training_abs, class_weights_only_positive = self.get_weights_for_training(y_train, rel_w_train, proc_num_train)
         class_weights_for_val = self.get_weights_for_val_test(y_val, rel_w_val, proc_num_val)
+        print(7)
 
         if X_test is not None:
             X_test = self.standardize(X_test, mean, std)
+            print(8)
             X_test = np.nan_to_num(X_test, nan=fill_nan)
+            print(9)
             class_weights_for_test = self.get_weights_for_val_test(y_test, rel_w_test, proc_num_test)
         
         # save all the numpy arrays
@@ -872,14 +920,30 @@ class PrepareInputs:
                 events = ak.from_parquet(f"{samples_path}/{datas[data]}", columns=vars_to_load)
 
             sample_to_era = {"2022_EraE": "postEE", 
-                                 "2022_EraF": "postEE", 
-                                 "2022_EraG": "postEE", 
-                                 "2022_EraC": "preEE", 
-                                 "2022_EraD": "preEE",
-                                 "2023_EraCv1to3": "preBPix", 
-                                 "2023_EraCv4": "preBPix",
-                                 "2023_EraC": "preBPix",
-                                 "2023_EraD": "postBPix"}
+                            "2022_EraF": "postEE", 
+                            "2022_EraG": "postEE", 
+                            "2022_EraC": "preEE", 
+                            "2022_EraD": "preEE",
+                            "2023_EraCv1to3": "preBPix", 
+                            "2023_EraCv4": "preBPix",
+                            "2023_EraC": "preBPix",
+                            "2023_EraD": "postBPix",
+                            "2024_EraC_EG0": "2024",
+                            "2024_EraC_EG1": "2024",
+                            "2024_EraD_EG0": "2024",
+                            "2024_EraD_EG1": "2024",
+                            "2024_EraE_EG0": "2024",
+                            "2024_EraE_EG1": "2024",
+                            "2024_EraF_EG0": "2024",
+                            "2024_EraF_EG1": "2024",
+                            "2024_EraG_EG0": "2024",
+                            "2024_EraG_EG1": "2024",
+                            "2024_EraH_EG0": "2024",
+                            "2024_EraH_EG1": "2024",
+                            "2024_EraIv1_EG0": "2024",
+                            "2024_EraIv1_EG1": "2024",
+                            "2024_EraIv2_EG0": "2024",
+                            "2024_EraIv2_EG1": "2024"}
 
             # add preselection
             events = self.preselection_for_pred(events)

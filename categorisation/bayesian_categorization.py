@@ -123,7 +123,7 @@ class OptunaCategorizer:
             "weights", "labels", "sample"
         )}
 
-        eras = ("preEE", "postEE", "preBPix", "postBPix")
+        eras = ("preEE", "postEE", "preBPix", "postBPix", "2024")
         dijet_mass_key = "nonResReg_dijet_mass_DNNreg"
 
         for era in eras:
@@ -199,7 +199,7 @@ class OptunaCategorizer:
 
         return df
 
-    def plot_stacked_histogram(self, sim_folder, data_folder, sim_samples, variables, out_path, bins=40, mass_window=(120, 130), signal_scale=100, include_2023=True, mask=True):
+    def plot_stacked_histogram(self, sim_folder, data_folder, sim_samples, variables, out_path, bins=40, mass_window=(120, 130), signal_scale=100, include_2023=True, include_2024=True, mask=True):
         """
         Load data first, then loop over variables to plot stacked histograms with MC and Data, including ratio plots.
 
@@ -273,6 +273,7 @@ class OptunaCategorizer:
             "postEE": 26.67,  # Integrated luminosity for postEE in fb^-1
             "preBPix": 17.794,  # Integrated luminosity for preEE in fb^-1
             "postBPix": 9.451  # Integrated luminosity for postEE in fb^-1
+            "2024": 108.95
             }
 
             sample_postEE = ak.from_parquet(f"{sim_folder}/postEE/{sample}/events.parquet", columns=variables + ["weight_tot"])
@@ -290,6 +291,21 @@ class OptunaCategorizer:
                     sample_postBPix["weight_tot"] = sample_postBPix["weight_tot"] * luminosities["postBPix"] / luminosities["postEE"]
                 else:
                     sample_postBPix = ak.from_parquet(f"{sim_folder}/postBPix/{sample}/events.parquet", columns=variables + ["weight_tot"])
+
+            if include_2024:
+                if sample == "VHtoGG_M_125":
+                    for sample_VH in ["WmHtoGG", "WpHtoGG", "ZHtoGG"]:
+                        sample_2024 = ak.Array([])
+                        if not os.path.exists(f"{sim_folder}/2024/{sample}/events.parquet"):
+                            print(f"samples doesn't exist: {sample} 2024")
+                        else:
+                            sample_2024_i = ak.from_parquet(f"{sim_folder}/2024/{sample}/events.parquet", columns=variables + ["weight_tot"])
+                            sample_2024 = ak.concatenate([sample_2024, sample_2024_i])
+                else:
+                    if not os.path.exists(f"{sim_folder}/2024/{sample}/events.parquet"):
+                        print(f"samples doesn't exist: {sample} 2024")
+                    else:
+                        sample_2024 = ak.from_parquet(f"{sim_folder}/2024/{sample}/events.parquet", columns=variables + ["weight_tot"])
 
             if os.path.exists(f"{sim_folder}/preEE/{sample}/y.npy"):
                 score_preEE = np.load(f"{sim_folder}/preEE/{sample}/y.npy")
@@ -914,7 +930,7 @@ class OptunaCategorizer:
 
         columns = ["mass", dijet_mass_key, "lead_genPartFlav", "sublead_genPartFlav", "lead_mvaID", "sublead_mvaID", "weight_tot"]
 
-        for era in ["preEE", "postEE", "preBPix", "postBPix"]:
+        for era in ["preEE", "postEE", "preBPix", "postBPix", "2024"]:
             for sample in samples:
                 if not os.path.exists(f"{base_path}/individual_samples/{era}/{sample}"):
                     print(f"Skipping {sample} in {era} as it does not exist.")
@@ -1109,6 +1125,8 @@ class OptunaCategorizer:
                     ak.from_parquet(f"{path}/preBPix/{sample}/events.parquet",
                                     columns=["weight_tot","mass"]),
                     ak.from_parquet(f"{path}/postBPix/{sample}/events.parquet",
+                                    columns=["weight_tot","mass"]),
+                    ak.from_parquet(f"{path}/2024/{sample}/events.parquet",
                                     columns=["weight_tot","mass"])
                 ], axis=0)
 
