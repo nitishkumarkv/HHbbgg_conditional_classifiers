@@ -52,7 +52,6 @@ mlp:
     - VBF_DeltaR_jg_min
     - VBF_dijet_mass
     - nonResReg_HHbbggCandidate_eta
-    - year
     
     # variables added at preparation level which are not available in HiggsDNA output
     - diphoton_PtOverM_ggjj
@@ -60,3 +59,4 @@ mlp:
     - deltaR_gg
     - nonResReg_lead_bjet_over_M_regressed
     - nonResReg_sublead_bjet_over_M_regressed
+    - year

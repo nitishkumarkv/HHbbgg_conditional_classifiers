@@ -97,14 +97,16 @@ class PrepareInputs:
         # add deltaR between lead and sublead photon
         events["deltaR_gg"] = self.deltaR(events.lead_eta, events.lead_phi, events.sublead_eta, events.sublead_phi)
 
-        # if era == "preEE":
-        #     events["era"] = 0
-        # elif era == "postEE":
-        #     events["era"] = 1
-        # elif era == "preBPix":
-        #     events["era"] = 2
-        # elif era == "postBPix":
-        #     events["era"] = 3
+        if era == "preEE":
+            events["year"] = 0
+        elif era == "postEE":
+            events["year"] = 0
+        elif era == "preBPix":
+            events["year"] = 1
+        elif era == "postBPix":
+            events["year"] = 1
+        elif era == "2024":
+            events["year"] = 2
 
         # add jet related mass
             

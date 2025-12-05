@@ -27,7 +27,7 @@ weight_scheme_process: # how to weight each processes within a class
     is_non_resonant_bkg: xsec 
     is_ttH_bkg: xsec
     is_single_H_bkg: xsec
-    is_GluGluToHH_sig: xsec 
+    is_GluGluToHH_sig: equal_weight 
 
 # some info for training
 do_random_search: False
