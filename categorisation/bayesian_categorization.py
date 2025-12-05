@@ -199,7 +199,7 @@ class OptunaCategorizer:
 
         return df
 
-    def plot_stacked_histogram(self, sim_folder, data_folder, sim_samples, variables, out_path, bins=40, mass_window=(120, 130), signal_scale=100, include_2023=True, include_2024=True, mask=True):
+    def plot_stacked_histogram(self, sim_folder, data_folder, sim_samples, variables, out_path, bins=40, mass_window=(120, 130), signal_scale=100, include_2023=True, mask=True):
         """
         Load data first, then loop over variables to plot stacked histograms with MC and Data, including ratio plots.
 
@@ -291,21 +291,6 @@ class OptunaCategorizer:
                     sample_postBPix["weight_tot"] = sample_postBPix["weight_tot"] * luminosities["postBPix"] / luminosities["postEE"]
                 else:
                     sample_postBPix = ak.from_parquet(f"{sim_folder}/postBPix/{sample}/events.parquet", columns=variables + ["weight_tot"])
-
-            if include_2024:
-                if sample == "VHtoGG_M_125":
-                    for sample_VH in ["WmHtoGG", "WpHtoGG", "ZHtoGG"]:
-                        sample_2024 = ak.Array([])
-                        if not os.path.exists(f"{sim_folder}/2024/{sample}/events.parquet"):
-                            print(f"samples doesn't exist: {sample} 2024")
-                        else:
-                            sample_2024_i = ak.from_parquet(f"{sim_folder}/2024/{sample}/events.parquet", columns=variables + ["weight_tot"])
-                            sample_2024 = ak.concatenate([sample_2024, sample_2024_i])
-                else:
-                    if not os.path.exists(f"{sim_folder}/2024/{sample}/events.parquet"):
-                        print(f"samples doesn't exist: {sample} 2024")
-                    else:
-                        sample_2024 = ak.from_parquet(f"{sim_folder}/2024/{sample}/events.parquet", columns=variables + ["weight_tot"])
 
             if os.path.exists(f"{sim_folder}/preEE/{sample}/y.npy"):
                 score_preEE = np.load(f"{sim_folder}/preEE/{sample}/y.npy")

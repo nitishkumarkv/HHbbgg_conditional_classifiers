@@ -595,62 +595,43 @@ class PrepareInputs:
         Y = comb_inputs[[cls for cls in self.classes]]
         relative_weights = comb_inputs["rel_xsec_weight"]
 
-        print(0)
-
         # perform log transformation for variables if needed
         # for var in vars_for_log:
         #     X[var] = np.log(X[var])
         process_number = comb_inputs["process_number"].values
-        print(0.01)
         del comb_inputs
-        print(0.02)
         X = X.values
-        print(0.1)
         Y = Y.values
-        print(0.2)
         relative_weights = relative_weights.values
-        print(0.3)
-        print(1)
         
         # mask -999.0 to nan
         mask = (X < -998.0)
         X[mask] = np.nan
-        print(2)
 
         X_train, X_val, X_test, y_train, y_val, y_test, rel_w_train, rel_w_val, rel_w_test, proc_num_train, proc_num_val, proc_num_test = self.train_test_split(X, Y, relative_weights, process_number)
-        print(3)
         del process_number
         del X
         del Y
         del relative_weights
-        print(3.1)
-
 
         # get mean according to training data set
         mean = np.nanmean(X_train, axis=0)
-        print(3.2)
         std = np.nanstd(X_train, axis=0)
-        print(4)
 
         # transform all data set
         X_train = self.standardize(X_train, mean, std)
         X_val = self.standardize(X_val, mean, std)
-        print(5)
 
         # replace NaN with fill_nan value
         X_train = np.nan_to_num(X_train, nan=fill_nan)
         X_val = np.nan_to_num(X_val, nan=fill_nan)
-        print(6)
 
         true_class_weights, class_weights_for_training_abs, class_weights_only_positive = self.get_weights_for_training(y_train, rel_w_train, proc_num_train)
         class_weights_for_val = self.get_weights_for_val_test(y_val, rel_w_val, proc_num_val)
-        print(7)
 
         if X_test is not None:
             X_test = self.standardize(X_test, mean, std)
-            print(8)
             X_test = np.nan_to_num(X_test, nan=fill_nan)
-            print(9)
             class_weights_for_test = self.get_weights_for_val_test(y_test, rel_w_test, proc_num_test)
         
         # save all the numpy arrays
