@@ -180,9 +180,9 @@ def load_samples(base_path, samples, data=False, syst=""):
     for weight in weight_columns:
         samples_input.update({weight: []})
 
-    eras = ["preEE", "postEE", "preBPix", "postBPix"]
+    eras = ["preEE", "postEE", "preBPix", "postBPix", "2024"]
     if data:
-        eras = ["2022_EraC","2022_EraD","2022_EraE","2022_EraF","2022_EraG","2023_EraC","2023_EraD"]
+        eras = ["2022_EraC","2022_EraD","2022_EraE","2022_EraF","2022_EraG","2023_EraC","2023_EraD", "2024_EraC_EG0", "2024_EraC_EG1", "2024_EraD_EG0", "2024_EraD_EG1", "2024_EraE_EG0", "2024_EraE_EG1", "2024_EraF_EG0", "2024_EraF_EG1", "2024_EraG_EG0", "2024_EraG_EG1", "2024_EraH_EG0", "2024_EraH_EG1", "2024_EraIv1_EG0", "2024_EraC_Iv1G1", "2024_EraIv2_EG0", "2024_EraIv2_EG1"]
 
     for era in eras:
         print("###########")
@@ -192,23 +192,43 @@ def load_samples(base_path, samples, data=False, syst=""):
         for sample in samples:
             if (sample in ["GGJets", "DDQCDGJET", "TTGG", "TT", "TTG_10_100", "TTG_100_200", "TTG_200"]) and (syst != ""):
                 continue
-            
-            if era != "postEE":
-              if ("TTG_" in sample) or (sample == "TT"):
-                continue
-            if data:
-                path = os.path.join(base_path, "individual_samples_data", era, sample)
-            else:
-                path = os.path.join(base_path, "individual_samples"+"/", era, sample, syst)
-            y_path = os.path.join(path, 'y.npy')
-            w_path = os.path.join(path, 'rel_w.npy')
-            events = ak.from_parquet(os.path.join(path, 'events.parquet'), columns=columns+weight_columns)  # Load events
 
-            # Check if files exist
-            if not (os.path.exists(y_path)):
-                print(f"Missing y for {path}. Skipping.")
-                continue
-            y = np.load(y_path)
+            if (era == "2024") & (sample == "VHtoGG_M_125"):
+                VHsample = "WmHtoGG"
+                path_VH = os.path.join(base_path, "individual_samples"+"/", era, VHsample, syst)
+                y_path_VH = os.path.join(path_VH, 'y.npy')
+                w_path_VH = os.path.join(path_VH, 'rel_w.npy')
+                events = ak.from_parquet(os.path.join(path_VH, 'events.parquet'), columns=columns+weight_columns)
+                y = np.load(y_path_VH)
+
+                for VHsample in ["WpHtoGG", "ZHtoGG"]:
+                    path_VH = os.path.join(base_path, "individual_samples"+"/", era, VHsample, syst)
+                    y_path_VH = os.path.join(path_VH, 'y.npy')
+                    w_path_VH = os.path.join(path_VH, 'rel_w.npy')
+                    events_VH = ak.from_parquet(os.path.join(path_VH, 'events.parquet'), columns=columns+weight_columns)
+                    y_VH = np.load(y_path_VH)
+
+                    events = ak.concatenate([events, events_VH])
+                    y = np.concatenate([y, y_VH])
+                
+            else:
+                if era != "postEE":
+                    if ("TTG_" in sample) or (sample == "TT"):
+                        continue
+                if data:
+                    path = os.path.join(base_path, "individual_samples_data", era, sample)
+                else:
+                    path = os.path.join(base_path, "individual_samples"+"/", era, sample, syst)
+                y_path = os.path.join(path, 'y.npy')
+                w_path = os.path.join(path, 'rel_w.npy')
+                events = ak.from_parquet(os.path.join(path, 'events.parquet'), columns=columns+weight_columns)  # Load events
+
+                # Check if files exist
+                if not (os.path.exists(y_path)):
+                    print(f"Missing y for {path}. Skipping.")
+                    continue
+                y = np.load(y_path)
+
             samples_input["score"].append(y)
             
             # samples_input["lumi"].append(np.array(events['lumi']))
