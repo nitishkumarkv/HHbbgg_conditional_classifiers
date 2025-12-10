@@ -336,7 +336,7 @@ class OptunaCategorizer:
             "preEE": 7.98,  # Integrated luminosity for preEE in fb^-1
             "postEE": 26.67,  # Integrated luminosity for postEE in fb^-1
             "preBPix": 17.794,  # Integrated luminosity for preEE in fb^-1
-            "postBPix": 9.451  # Integrated luminosity for postEE in fb^-1
+            "postBPix": 9.451,  # Integrated luminosity for postEE in fb^-1
             "2024": 108.95
             }
 
@@ -1240,9 +1240,9 @@ class OptunaCategorizer:
 
         for category in category_list:
             path = f"{base_dir}/{category}"
-                if not os.path.isdir(path):
-                    print(f"Skipping {category} as it does not exist.")
-                    continue
+            if not os.path.isdir(path):
+                print(f"Skipping {category} as it does not exist.")
+                continue
 
             # ----- Monte Carlo -----
             total_mc, total_mc_err2 = 0.0, 0.0
