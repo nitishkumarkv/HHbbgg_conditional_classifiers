@@ -259,6 +259,7 @@ def load_samples(base_path, samples, data=False, syst=""):
             else:
                 raise ValueError(f"Unknown era: {era}")
             samples_input["year"].append(np.full(y.shape[0], year))
+            samples_input["era"].append(np.full(y.shape[0], era))
 
             # samples_input["is_boosted"].append(np.array(events["is_boosted"]))  
             # samples_input["y_proba"].append(np.array(events['y_proba']))
