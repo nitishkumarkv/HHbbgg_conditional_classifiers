@@ -33,7 +33,7 @@ def load_samples(base_path, samples, data=False, syst=""):
     parquet_file = pq.ParquetFile(base_path+"/individual_samples/preEE/ttHtoGG_M_125/"+syst+"/events.parquet")
     all_columns = parquet_file.schema.names
     # weight_columns = [col for col in all_columns if 'weight' in col]
-    weight_columns = ["weight_tot"]
+    weight_columns = ["weight_tot", "weight"]
     dijet_mass_key = "nonResReg_dijet_mass_DNNreg"
     HH_mass_key = "nonResReg_HHbbggCandidate_mass"
 
@@ -112,6 +112,7 @@ def load_samples(base_path, samples, data=False, syst=""):
             "HHbbggCandidate_mass": [],
             "sample": [],
             "year": [],
+            "era": [],
             "score": [],
             "nonRes_score": [],
             "ttH_score": [],
@@ -182,7 +183,7 @@ def load_samples(base_path, samples, data=False, syst=""):
 
     eras = ["preEE", "postEE", "preBPix", "postBPix", "2024"]
     if data:
-        eras = ["2022_EraC","2022_EraD","2022_EraE","2022_EraF","2022_EraG","2023_EraC","2023_EraD", "2024_EraC_EG0", "2024_EraC_EG1", "2024_EraD_EG0", "2024_EraD_EG1", "2024_EraE_EG0", "2024_EraE_EG1", "2024_EraF_EG0", "2024_EraF_EG1", "2024_EraG_EG0", "2024_EraG_EG1", "2024_EraH_EG0", "2024_EraH_EG1", "2024_EraIv1_EG0", "2024_EraC_Iv1G1", "2024_EraIv2_EG0", "2024_EraIv2_EG1"]
+        eras = ["2022_EraC","2022_EraD","2022_EraE","2022_EraF","2022_EraG","2023_EraC","2023_EraD", "2024_EraC_EG0", "2024_EraC_EG1", "2024_EraD_EG0", "2024_EraD_EG1", "2024_EraE_EG0", "2024_EraE_EG1", "2024_EraF_EG0", "2024_EraF_EG1", "2024_EraG_EG0", "2024_EraG_EG1", "2024_EraH_EG0", "2024_EraH_EG1", "2024_EraIv1_EG0", "2024_EraIv1_EG1", "2024_EraIv2_EG0", "2024_EraIv2_EG1"]
 
     for era in eras:
         print("###########")
@@ -256,6 +257,8 @@ def load_samples(base_path, samples, data=False, syst=""):
                 year = 2022
             elif "23" in era or "BPix" in era:
                 year = 2023
+            elif "24" in era:
+                year = 2024
             else:
                 raise ValueError(f"Unknown era: {era}")
             samples_input["year"].append(np.full(y.shape[0], year))
@@ -286,6 +289,7 @@ def load_samples(base_path, samples, data=False, syst=""):
 
     samples_input["sample"] = np.concatenate(samples_input["sample"], axis=0)
     samples_input["year"] = np.concatenate(samples_input["year"], axis=0)
+    samples_input["era"] = np.concatenate(samples_input["era"], axis=0)
     scores = np.concatenate(samples_input["score"], axis=0)
     samples_input["score"] = [row for row in scores]
     samples_input["nonRes_score"] = [row[0] for row in scores]
@@ -313,8 +317,8 @@ if __name__ == "__main__":
             "TTGG",
             # "TT",
             # "TTG_10_100",
-            "TTG_100_200",
-            "TTG_200",
+            # "TTG_100_200",
+            # "TTG_200",
             "ttHtoGG_M_125",
             "BBHto2G_M_125",
             "GluGluHToGG_M_125",
