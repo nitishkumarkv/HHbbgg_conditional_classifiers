@@ -11,18 +11,22 @@ mlp:
     - nonResReg_phosublead_PtOverM
     - nonResReg_lead_bjet_eta
     - nonResReg_lead_bjet_phi
-    - nonResReg_lead_bjet_btagPNetB_WP_L
-    - nonResReg_lead_bjet_btagPNetB_WP_M
-    - nonResReg_lead_bjet_btagPNetB_WP_T
-    - nonResReg_lead_bjet_btagPNetB_WP_XT
-    - nonResReg_lead_bjet_btagPNetB_WP_XXT
+    #- nonResReg_lead_bjet_btagPNetB
+    #- nonResReg_lead_bjet_btagUParTAK4B
+    - nonResReg_lead_bjet_btag_WP_L
+    - nonResReg_lead_bjet_btag_WP_M
+    - nonResReg_lead_bjet_btag_WP_T
+    - nonResReg_lead_bjet_btag_WP_XT
+    - nonResReg_lead_bjet_btag_WP_XXT
     - nonResReg_sublead_bjet_eta
     - nonResReg_sublead_bjet_phi
-    - nonResReg_sublead_bjet_btagPNetB_WP_L
-    - nonResReg_sublead_bjet_btagPNetB_WP_M
-    - nonResReg_sublead_bjet_btagPNetB_WP_T
-    - nonResReg_sublead_bjet_btagPNetB_WP_XT
-    - nonResReg_sublead_bjet_btagPNetB_WP_XXT
+    #- nonResReg_sublead_bjet_btagPNetB
+    #- nonResReg_sublead_bjet_btagUParTAK4B
+    - nonResReg_sublead_bjet_btag_WP_L
+    - nonResReg_sublead_bjet_btag_WP_M
+    - nonResReg_sublead_bjet_btag_WP_T
+    - nonResReg_sublead_bjet_btag_WP_XT
+    - nonResReg_sublead_bjet_btag_WP_XXT
     - nonResReg_DeltaR_j1g1
     - nonResReg_DeltaR_j2g1
     - nonResReg_DeltaR_j1g2
