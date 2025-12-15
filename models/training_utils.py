@@ -4,13 +4,14 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import ReduceLROnPlateau, OneCycleLR
 from torch.utils.data import Dataset, DataLoader
 from tqdm.auto import tqdm
 import copy
 from mlp import MLP
 import torch.nn.functional as F
 import yaml
+from torch.cuda.amp import autocast, GradScaler
 
 
 # Define custom dataset
@@ -32,7 +33,7 @@ class CustomDataset(Dataset):
 
 
 # Training and evaluation functions
-def train_one_epoch(model, optimizer, data_loader, loss_fn, device):
+def train_one_epoch(model, optimizer, data_loader, loss_fn, device, scaler, scheduler=None):
     model.train()
     batch_losses = []
     batch_accs = []
@@ -46,13 +47,25 @@ def train_one_epoch(model, optimizer, data_loader, loss_fn, device):
         weights_batch_no = weights_batch_no.to(device)
 
         optimizer.zero_grad()
-        y_pred = model(X_batch)
-        loss = loss_fn(y_pred, y_batch)
-        weighted_loss = (loss * weights_batch).sum() / weights_batch.sum()
-        weighted_loss.backward()
-        optimizer.step()
 
-        weighted_loss_no_abs = (loss * weights_batch_no).sum() / weights_batch_no.sum()
+        # Use autocast and scaler to optimize variable precision for training speed
+        # Mixed precision forward pass
+        with autocast():
+            y_pred = model(X_batch)
+            loss = loss_fn(y_pred, y_batch)
+            weighted_loss = (loss * weights_batch).sum() / weights_batch.sum()
+
+            # Also compute monitoring loss (no backprop needed for this)
+            weighted_loss_no_abs = (loss * weights_batch_no).sum() / weights_batch_no.sum()
+
+        # Mixed precision backward pass
+        scaler.scale(weighted_loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
+
+        # Step scheduler (for per-batch schedulers like OneCycleLR)
+        if scheduler is not None:
+            scheduler.step()
 
         # compute weighted accuracy
         correct = (torch.argmax(y_pred, dim=1) == y_batch).float()
@@ -83,9 +96,12 @@ def evaluate(model, data_loader, loss_fn, device):
             y_batch = y_batch.to(device)
             weights_batch = weights_batch.to(device)
 
-            y_pred = model(X_batch)
-            loss = loss_fn(y_pred, y_batch)
-            weighted_loss = (loss * weights_batch).sum() / weights_batch.sum()
+            # Use autocast and scaler to optimize variable precision for evaluation speed
+            # Mixed precision inference
+            with autocast():
+                y_pred = model(X_batch)
+                loss = loss_fn(y_pred, y_batch)
+                weighted_loss = (loss * weights_batch).sum() / weights_batch.sum()
 
             # compute weighted accuracy
             correct = (torch.argmax(y_pred, dim=1) == y_batch).float()
@@ -235,22 +251,45 @@ if __name__ == "__main__":
 
     # Create data loaders
     g = torch.Generator().manual_seed(seed)
-    batch_size = 1024 #16384 # 8192 # 32768 # 1024 #16384
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, generator=g)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    # 1024 batch size optimized for prp-gpu-1
+    batch_size = 1024 #2048 #8192 #16384 #32768
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, generator=g,
+                              num_workers=4, pin_memory=True, persistent_workers=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False,
+                            num_workers=4, pin_memory=True, persistent_workers=True)
 
     # Define model, loss function, optimizer, and scheduler
     best_model = MLP(input_size, best_num_layers, best_num_nodes, output_size, best_act_fn, best_dropout_prob).to(device)
     loss_fn = nn.CrossEntropyLoss(reduction='none')
     best_optimizer = optim.Adam(best_model.parameters(), lr=best_lr, weight_decay=best_weight_decay)
-    best_scheduler = ReduceLROnPlateau(best_optimizer, mode='min', factor=0.5, patience=15, min_lr=1e-6)
+    n_epochs = 500
+
+    useOneCycleLR = True
+    if useOneCycleLR:
+        # OneCycleLR scheduler with warmup for faster convergence
+        # max_lr is set higher than base lr for better exploration during warmup
+        best_scheduler = OneCycleLR(
+            best_optimizer,
+            max_lr=1e-04,  # Peak learning rate (5x base lr)
+            epochs=n_epochs,
+            steps_per_epoch=len(train_loader),
+            pct_start=0.3,  # 30% of training for warmup
+            anneal_strategy='cos',  # Cosine annealing after peak
+            div_factor=25.0,  # initial_lr = max_lr/25 = 4e-06
+            final_div_factor=1e4  # final_lr = initial_lr/1e4 = 4e-10
+        )
+    else:
+        # If ReduceLROnPlateau is used, use scheduler=None in train_one_epoch
+        best_scheduler = ReduceLROnPlateau(best_optimizer, mode='min', factor=0.5, patience=15, min_lr=1e-6)
+
+    # Initialize mixed precision scaler
+    scaler = GradScaler()
 
     # Training loop parameters
-    n_epochs = 500
     print(f"INFO: Training for {n_epochs} epochs", '\n')
     best_loss = np.inf
     best_weights = None
-    patience = 50
+    patience = 30  # Reduced from 50 for faster early stopping
     counter = 0
 
     train_loss_hist = []
@@ -262,8 +301,8 @@ if __name__ == "__main__":
 
     # Training loop
     for epoch in range(n_epochs):
-        # Training
-        train_loss, train_acc, train_loss_no_absolute = train_one_epoch(best_model, best_optimizer, train_loader, loss_fn, device)
+        # Training (scheduler is stepped inside train_one_epoch for OneCycleLR)
+        train_loss, train_acc, train_loss_no_absolute = train_one_epoch(best_model, best_optimizer, train_loader, loss_fn, device, scaler, best_scheduler if useOneCycleLR else None)
         train_loss_hist.append(train_loss)
         train_acc_hist.append(train_acc)
         train_loss_hist_no_absolute_weights.append(train_loss_no_absolute)
@@ -273,8 +312,9 @@ if __name__ == "__main__":
         val_loss_hist.append(val_loss)
         val_acc_hist.append(val_acc)
 
-        # Scheduler step
-        best_scheduler.step(val_loss)
+        # OneCycleLR updates per batch, so no need to step here
+        if not useOneCycleLR:
+            best_scheduler.step(val_loss)
         current_lr = best_optimizer.param_groups[0]['lr']
         lr_hist.append(current_lr)
         print(f"Epoch {epoch}: Current learning rate = {current_lr}")
@@ -304,11 +344,10 @@ if __name__ == "__main__":
 
     # Save predictions (optional)
     best_model.eval()
-    batch_size = 1024
     y_pred_train_probs = []
     for i in range(0, len(X_train), batch_size):
         X_batch = X_train[i:i + batch_size].to(device)
-        with torch.no_grad():
+        with torch.no_grad(), autocast():
             y_batch = best_model(X_batch)
             y_batch = F.softmax(y_batch, dim=1)
             y_pred_train_probs.append(y_batch.cpu().numpy())
@@ -317,7 +356,7 @@ if __name__ == "__main__":
     y_pred_val_probs = []
     for i in range(0, len(X_val), batch_size):
         X_batch = X_val[i:i + batch_size].to(device)
-        with torch.no_grad():
+        with torch.no_grad(), autocast():
             y_batch = best_model(X_batch)
             y_batch = F.softmax(y_batch, dim=1)
             y_pred_val_probs.append(y_batch.cpu().numpy())
