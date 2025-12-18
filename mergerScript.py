@@ -352,7 +352,7 @@ if __name__ == "__main__":
     merged_samples_data = load_samples(base_path, [""] ,data=True)
 
     merged_samples = pd.concat([merged_samples_MC, merged_samples_data], ignore_index=True)
-    merged_samples.to_parquet("merged_samples.parquet", engine='pyarrow')
+    merged_samples.to_parquet(f"{base_path}/merged_samples.parquet", engine='pyarrow')
 
     for syst in systs:
         print(syst)
