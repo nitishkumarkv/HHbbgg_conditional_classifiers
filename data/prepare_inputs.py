@@ -201,6 +201,7 @@ class PrepareInputs:
 
     def get_relative_xsec_weight(self, events, sample_type, era):
 
+        # for kl samples: https://twiki.cern.ch/twiki/bin/view/LHCPhysics/LHCHWGHH?redirectedfrom=LHCPhysics.LHCHXSWGHH#Latest_recommendations_for_gluon
         dict_xsec = {
             "GGJets": 88.75e3,
             "GJetPt20To40": 242.5e3,
@@ -217,9 +218,9 @@ class PrepareInputs:
             "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": 0.034e3 * 0.00227 * 0.582 * 2,#0.02964e3 * 0.00227 * 0.582 * 2,  # cross sectio of GluGluToHH * BR(HToGG) * BR(HToGG) * 2 for two combination ### have to recheck if this is correct. 
             "VBFHHto2B2G_CV_1_C2V_1_C3_1": 0.00173e3 * 0.00227 * 0.582 * 2,  # cross sectio of VBFToHH * BR(HToGG) * BR(HTobb) * 2 for two combination ### have to recheck if this is correct.
             "DDQCDGJET": 1.0,
-            "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": 0.08373e3 * 0.00227 * 0.582 * 2,
-            "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": 0.06531e3 * 0.00227 * 0.582 * 2,
-            "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": 0.01285e3 * 0.00227 * 0.582 * 2,
+            "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": 0.09965e3 * 0.00227 * 0.582 * 2,
+            "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": 0.07575e3 * 0.00227 * 0.582 * 2,
+            "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": 0.01491e3 * 0.00227 * 0.582 * 2, #using formula listed above the table to extrapolate
             "TTG_10_100": 4.334e3,
             "TTG_100_200": 0.44e3,
             "TTG_200": 0.12e3,
