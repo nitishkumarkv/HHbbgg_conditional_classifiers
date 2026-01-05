@@ -134,3 +134,6 @@ systematics:
 save_all_columns_sim_nominal : True
 save_all_columns_data : True
 save_all_columns_sim_systematics : False
+
+# Chunk size for converting akward arrays to pandas dataframes to alleviate memory pressure
+write_chunk : 50000

@@ -123,38 +123,102 @@ class OptunaCategorizer:
             "weights", "labels", "sample"
         )}
 
-        eras = ("preEE", "postEE", "preBPix", "postBPix")
+        eras = ("preEE", "postEE", "preBPix", "postBPix", "2024")
         dijet_mass_key = "nonResReg_dijet_mass_DNNreg"
 
         for era in eras:
             for sample in self.samples_list:
-                samp_dir = os.path.join(
-                    self.base_path, "individual_samples", era, sample
-                )
-                y_file   = os.path.join(samp_dir, "y.npy")
-                evt_file = os.path.join(samp_dir, "events.parquet")
 
-                # Skip if either file is missing
-                if not (os.path.exists(y_file) and os.path.exists(evt_file)):
-                    print(f"[load_samples] WARNING: missing files for {samp_dir}, skipping.")
-                    continue
-
-                try:
-                    y = np.load(y_file)
-                    events = ak.from_parquet(
-                        evt_file,
-                        columns=[
-                            "mass", dijet_mass_key,
-                            "lead_genPartFlav", "sublead_genPartFlav",
-                            "weight_tot",
-                            "lead_mvaID", "sublead_mvaID",
-                        ],
+                if (era == "2024") & (sample == "VHtoGG_M_125"):
+                    VHsample = "WmHtoGG"
+                    samp_dir = os.path.join(
+                        self.base_path, "individual_samples", era, VHsample
                     )
-                    if self.apply_preselection:
-                        events, y = self.preselection(events, y)
-                except Exception as exc:
-                    print(f"[load_samples] ERROR while reading {samp_dir}: {exc}")
-                    continue
+                    y_file   = os.path.join(samp_dir, "y.npy")
+                    evt_file = os.path.join(samp_dir, "events.parquet")
+
+                    # Skip if either file is missing
+                    if not (os.path.exists(y_file) and os.path.exists(evt_file)):
+                        print(f"[load_samples] WARNING: missing files for {samp_dir}, skipping.")
+                        continue
+
+                    try:
+                        y = np.load(y_file)
+                        events = ak.from_parquet(
+                            evt_file,
+                            columns=[
+                                "mass", dijet_mass_key,
+                                "lead_genPartFlav", "sublead_genPartFlav",
+                                "weight_tot",
+                                "lead_mvaID", "sublead_mvaID",
+                            ],
+                        )
+                        if self.apply_preselection:
+                            events, y = self.preselection(events, y)
+                    except Exception as exc:
+                        print(f"[load_samples] ERROR while reading {samp_dir}: {exc}")
+                        continue
+
+                    for VHsample in ["WpHtoGG", "ZHtoGG"]:
+                        samp_dir = os.path.join(
+                            self.base_path, "individual_samples", era, VHsample
+                        )
+                        y_file   = os.path.join(samp_dir, "y.npy")
+                        evt_file = os.path.join(samp_dir, "events.parquet")
+
+                        # Skip if either file is missing
+                        if not (os.path.exists(y_file) and os.path.exists(evt_file)):
+                            print(f"[load_samples] WARNING: missing files for {samp_dir}, skipping.")
+                            continue
+
+                        try:
+                            y_VH = np.load(y_file)
+                            events_VH = ak.from_parquet(
+                                evt_file,
+                                columns=[
+                                    "mass", dijet_mass_key,
+                                    "lead_genPartFlav", "sublead_genPartFlav",
+                                    "weight_tot",
+                                    "lead_mvaID", "sublead_mvaID",
+                                ],
+                            )
+                            if self.apply_preselection:
+                                events_VH, y_VH = self.preselection(events_VH, y_VH)
+                        except Exception as exc:
+                            print(f"[load_samples] ERROR while reading {samp_dir}: {exc}")
+                            continue
+
+                        events = ak.concatenate([events, events_VH])
+                        y = ak.concatenate([y, y_VH])
+
+                else:            
+                    samp_dir = os.path.join(
+                        self.base_path, "individual_samples", era, sample
+                    )
+                    y_file   = os.path.join(samp_dir, "y.npy")
+                    evt_file = os.path.join(samp_dir, "events.parquet")
+
+                    # Skip if either file is missing
+                    if not (os.path.exists(y_file) and os.path.exists(evt_file)):
+                        print(f"[load_samples] WARNING: missing files for {samp_dir}, skipping.")
+                        continue
+
+                    try:
+                        y = np.load(y_file)
+                        events = ak.from_parquet(
+                            evt_file,
+                            columns=[
+                                "mass", dijet_mass_key,
+                                "lead_genPartFlav", "sublead_genPartFlav",
+                                "weight_tot",
+                                "lead_mvaID", "sublead_mvaID",
+                            ],
+                        )
+                        if self.apply_preselection:
+                            events, y = self.preselection(events, y)
+                    except Exception as exc:
+                        print(f"[load_samples] ERROR while reading {samp_dir}: {exc}")
+                        continue
 
                 # Prompt-photon requirement for tt̄γ‐like samples
                 if sample.startswith("TTG_") or sample in {"TT", "TTGG"}:
@@ -272,7 +336,8 @@ class OptunaCategorizer:
             "preEE": 7.98,  # Integrated luminosity for preEE in fb^-1
             "postEE": 26.67,  # Integrated luminosity for postEE in fb^-1
             "preBPix": 17.794,  # Integrated luminosity for preEE in fb^-1
-            "postBPix": 9.451  # Integrated luminosity for postEE in fb^-1
+            "postBPix": 9.451,  # Integrated luminosity for postEE in fb^-1
+            "2024": 108.95
             }
 
             sample_postEE = ak.from_parquet(f"{sim_folder}/postEE/{sample}/events.parquet", columns=variables + ["weight_tot"])
@@ -291,6 +356,33 @@ class OptunaCategorizer:
                 else:
                     sample_postBPix = ak.from_parquet(f"{sim_folder}/postBPix/{sample}/events.parquet", columns=variables + ["weight_tot"])
 
+            if sample == "VHtoGG_M_125":
+                VHsample = "WmHtoGG"
+                if not os.path.exists(f"{sim_folder}/2024/{VHsample}/events.parquet"):
+                    print(f"samples doesn't exist: {VHsample} 2024")
+                    sample_2024 = ak.from_parquet(f"{sim_folder}/postEE/{VHsample}/events.parquet", columns=variables + ["weight_tot"])
+                    sample_2024["weight_tot"] = sample_2024["weight_tot"] * luminosities["2024"] / luminosities["postEE"]
+                else:
+                    sample_2024 = ak.from_parquet(f"{sim_folder}/2024/{VHsample}/events.parquet", columns=variables + ["weight_tot"])
+                
+                for VHsample in ["WpHtoGG", "ZHtoGG"]:
+                    if not os.path.exists(f"{sim_folder}/2024/{VHsample}/events.parquet"):
+                        print(f"samples doesn't exist: {VHsample} 2024")
+                        sample_VH = ak.from_parquet(f"{sim_folder}/postEE/{VHsample}/events.parquet", columns=variables + ["weight_tot"])
+                        sample_VH["weight_tot"] = sample_VH["weight_tot"] * luminosities["2024"] / luminosities["postEE"]
+                    else:
+                        sample_VH = ak.from_parquet(f"{sim_folder}/2024/{VHsample}/events.parquet", columns=variables + ["weight_tot"])
+                    
+                    sample_2024 = ak.concatenate([sample_2024, sample_VH])
+
+            else:
+                if not os.path.exists(f"{sim_folder}/2024/{sample}/events.parquet"):
+                    print(f"samples doesn't exist: {sample} 2024")
+                    sample_2024 = ak.from_parquet(f"{sim_folder}/postEE/{sample}/events.parquet", columns=variables + ["weight_tot"])
+                    sample_2024["weight_tot"] = sample_2024["weight_tot"] * luminosities["2024"] / luminosities["postEE"]
+                else:
+                    sample_2024 = ak.from_parquet(f"{sim_folder}/2024/{sample}/events.parquet", columns=variables + ["weight_tot"])
+
             if os.path.exists(f"{sim_folder}/preEE/{sample}/y.npy"):
                 score_preEE = np.load(f"{sim_folder}/preEE/{sample}/y.npy")
                 score_postEE = np.load(f"{sim_folder}/postEE/{sample}/y.npy")
@@ -298,12 +390,22 @@ class OptunaCategorizer:
                     score_preBPix = np.load(f"{sim_folder}/preBPix/{sample}/y.npy")
                     score_postBPix = np.load(f"{sim_folder}/postBPix/{sample}/y.npy")
 
+                if sample == "VHtoGG_M_125":
+                    VHsample = "WmHtoGG"
+                    score_2024 = np.load(f"{sim_folder}/2024/{VHsample}/y.npy")
+                    for VHsample in ["WpHtoGG", "ZHtoGG"]:
+                        score_VH = np.load(f"{sim_folder}/2024/{VHsample}/y.npy")
+                        score_2024 = ak.concatenate([score_2024, score_VH])
+                else:
+                    score_2024 = np.load(f"{sim_folder}/2024/{sample}/y.npy")
+
                 num_classes = score_preEE.shape[1]
 
                 for i, class_name in enumerate(class_names):
                     if i < num_classes:
                         sample_preEE[class_name] = score_preEE[:, i]
                         sample_postEE[class_name] = score_postEE[:, i]
+                        sample_2024[class_name] = score_2024[:, i]
                         if include_2023:
                             sample_preBPix[class_name] = score_preBPix[:, i]
                             sample_postBPix[class_name] = score_postBPix[:, i]
@@ -311,9 +413,9 @@ class OptunaCategorizer:
 
             # Merge preEE and postEE
             if include_2023:
-                sample_combined = ak.concatenate([sample_preEE, sample_postEE, sample_preBPix, sample_postBPix], axis=0)
+                sample_combined = ak.concatenate([sample_preEE, sample_postEE, sample_preBPix, sample_postBPix, sample_2024], axis=0)
             else:
-                sample_combined = ak.concatenate([sample_preEE, sample_postEE], axis=0)
+                sample_combined = ak.concatenate([sample_preEE, sample_postEE, sample_2024], axis=0)
             if "minMVAID" in variables:
                 sample_combined["minMVAID"] = np.min([sample_combined.lead_mvaID, sample_combined.sublead_mvaID], axis = 0)
                 sample_combined["maxMVAID"] = np.max([sample_combined.lead_mvaID, sample_combined.sublead_mvaID], axis = 0)
@@ -333,9 +435,9 @@ class OptunaCategorizer:
 
         # Load Data First
         if include_2023:
-            data_samples = ["2022_EraE", "2022_EraF", "2022_EraG", "2022_EraC", "2022_EraD", "2023_EraC", "2023_EraD"]
+            data_samples = ["2022_EraE", "2022_EraF", "2022_EraG", "2022_EraC", "2022_EraD", "2023_EraC", "2023_EraD", "2024_EraC_EG0", "2024_EraC_EG1", "2024_EraD_EG0", "2024_EraD_EG1", "2024_EraE_EG0", "2024_EraE_EG1", "2024_EraF_EG0", "2024_EraF_EG1", "2024_EraG_EG0", "2024_EraG_EG1", "2024_EraH_EG0", "2024_EraH_EG1", "2024_EraIv1_EG0", "2024_EraIv1_EG1", "2024_EraIv2_EG0", "2024_EraIv2_EG1"]
         else:
-            data_samples = ["2022_EraE", "2022_EraF", "2022_EraG", "2022_EraC", "2022_EraD"]
+            data_samples = ["2022_EraE", "2022_EraF", "2022_EraG", "2022_EraC", "2022_EraD", "2024_EraC_EG0", "2024_EraC_EG1", "2024_EraD_EG0", "2024_EraD_EG1", "2024_EraE_EG0", "2024_EraE_EG1", "2024_EraF_EG0", "2024_EraF_EG1", "2024_EraG_EG0", "2024_EraG_EG1", "2024_EraH_EG0", "2024_EraH_EG1", "2024_EraIv1_EG0", "2024_EraIv1_EG1", "2024_EraIv2_EG0", "2024_EraIv2_EG1"]
         data_combined = None
 
         for data_sample in data_samples:
@@ -914,17 +1016,46 @@ class OptunaCategorizer:
 
         columns = ["mass", dijet_mass_key, "lead_genPartFlav", "sublead_genPartFlav", "lead_mvaID", "sublead_mvaID", "weight_tot"]
 
-        for era in ["preEE", "postEE", "preBPix", "postBPix"]:
+        for era in ["preEE", "postEE", "preBPix", "postBPix", "2024"]:
             for sample in samples:
-                if not os.path.exists(f"{base_path}/individual_samples/{era}/{sample}"):
-                    print(f"Skipping {sample} in {era} as it does not exist.")
-                    continue
-                inputs_path = f"{base_path}/individual_samples/{era}/{sample}"
-                print(f"Processing {inputs_path}")
 
-                # Load events
-                events = ak.from_parquet(f"{inputs_path}/events.parquet", columns=columns)
-                scores = np.load(f"{inputs_path}/y.npy")
+                if (era == "2024") & (sample == "VHtoGG_M_125"):
+                    VHsample = "WmHtoGG"
+                    if not os.path.exists(f"{base_path}/individual_samples/{era}/{sample}"):
+                        print(f"Skipping {sample} in {era} as it does not exist.")
+                        continue
+                    inputs_path = f"{base_path}/individual_samples/{era}/{sample}"
+                    print(f"Processing {inputs_path}")
+
+                    # Load events
+                    events = ak.from_parquet(f"{inputs_path}/events.parquet", columns=columns)
+                    scores = np.load(f"{inputs_path}/y.npy")
+
+                    for VHsample in ["WpHtoGG", "ZHtoGG"]:
+                        if not os.path.exists(f"{base_path}/individual_samples/{era}/{VHsample}"):
+                            print(f"Skipping {VHsample} in {era} as it does not exist.")
+                            continue
+                        inputs_path = f"{base_path}/individual_samples/{era}/{VHsample}"
+                        print(f"Processing {inputs_path}")
+
+                        # Load events
+                        events_VH = ak.from_parquet(f"{inputs_path}/events.parquet", columns=columns)
+                        scores_VH = np.load(f"{inputs_path}/y.npy")
+
+                        events = ak.concatenate([events, events_VH])
+                        scores = ak.concatenate([scores, scores_VH])
+
+                else:
+                    if not os.path.exists(f"{base_path}/individual_samples/{era}/{sample}"):
+                        print(f"Skipping {sample} in {era} as it does not exist.")
+                        continue
+                    inputs_path = f"{base_path}/individual_samples/{era}/{sample}"
+                    print(f"Processing {inputs_path}")
+
+                    # Load events
+                    events = ak.from_parquet(f"{inputs_path}/events.parquet", columns=columns)
+                    scores = np.load(f"{inputs_path}/y.npy")
+
                 # Apply selection if needed
                 if self.apply_preselection:
                     events, scores = self.preselection(events, scores)
@@ -975,7 +1106,23 @@ class OptunaCategorizer:
             "2022_EraC",
             "2022_EraD",
             "2023_EraC",
-            "2023_EraD"
+            "2023_EraD",
+            "2024_EraC_EG0",
+            "2024_EraC_EG1",
+            "2024_EraD_EG0",
+            "2024_EraD_EG1",
+            "2024_EraE_EG0",
+            "2024_EraE_EG1",
+            "2024_EraF_EG0",
+            "2024_EraF_EG1",
+            "2024_EraG_EG0",
+            "2024_EraG_EG1",
+            "2024_EraH_EG0",
+            "2024_EraH_EG1",
+            "2024_EraIv1_EG0",
+            "2024_EraIv1_EG1",
+            "2024_EraIv2_EG0",
+            "2024_EraIv2_EG1"
         ]
         for data_sample in data_samples:
             inputs_path = f"{base_path}/individual_samples_data/{data_sample}"
@@ -1079,7 +1226,7 @@ class OptunaCategorizer:
         ]
         data_samples = [
             "2022_EraE","2022_EraF","2022_EraG","2022_EraC","2022_EraD",
-            "2023_EraC","2023_EraD"
+            "2023_EraC","2023_EraD", "2024_EraC_EG0", "2024_EraC_EG1", "2024_EraD_EG0", "2024_EraD_EG1", "2024_EraE_EG0", "2024_EraE_EG1", "2024_EraF_EG0", "2024_EraF_EG1", "2024_EraG_EG0", "2024_EraG_EG1", "2024_EraH_EG0", "2024_EraH_EG1", "2024_EraIv1_EG0", "2024_EraIv1_EG1", "2024_EraIv2_EG0", "2024_EraIv2_EG1"
         ]
         folder_to_region = {
             "cat1":"SR1","cat2":"SR2","cat3":"SR3",
@@ -1092,13 +1239,23 @@ class OptunaCategorizer:
             m_low, m_high = mass_range
 
         for category in category_list:
+            path = f"{base_dir}/{category}"
+            if not os.path.isdir(path):
+                print(f"Skipping {category} as it does not exist.")
+                continue
+
             # ----- Monte Carlo -----
             total_mc, total_mc_err2 = 0.0, 0.0
             for sample in samples:
-                path = f"{base_dir}/{category}"
-                if not os.path.isdir(path):
-                    print(f"Skipping {category} as it does not exist.")
-                    continue
+
+                if sample == "VHtoGG_M_125":
+                    VHsample = "WmHtoGG"
+                    sample_2024 = ak.from_parquet(f"{path}/2024/{VHsample}/events.parquet", columns=["weight_tot","mass"])
+                    for VHsample in ["WpHtoGG", "ZHtoGG"]:
+                        sample_VH = ak.from_parquet(f"{path}/2024/{VHsample}/events.parquet", columns=["weight_tot","mass"])
+                        sample_2024 = ak.concatenate([sample_2024, sample_VH])
+                else:
+                    sample_2024 = ak.from_parquet(f"{path}/2024/{sample}/events.parquet", columns=["weight_tot","mass"])
 
                 # load both weight and mass
                 ev = ak.concatenate([
@@ -1109,8 +1266,9 @@ class OptunaCategorizer:
                     ak.from_parquet(f"{path}/preBPix/{sample}/events.parquet",
                                     columns=["weight_tot","mass"]),
                     ak.from_parquet(f"{path}/postBPix/{sample}/events.parquet",
-                                    columns=["weight_tot","mass"])
-                ], axis=0)
+                                    columns=["weight_tot","mass"]),
+                    sample_2024
+                    ], axis=0)
 
                 # apply the mass cut if requested
                 if mass_range is not None:
@@ -1297,16 +1455,18 @@ class OptunaCategorizer:
         postEE = ak.from_parquet(f"{folder}/individual_samples/postEE/GGJets/events.parquet", columns=columns_to_load)
         preBPix = ak.from_parquet(f"{folder}/individual_samples/preBPix/GGJets/events.parquet", columns=columns_to_load)
         postBPix = ak.from_parquet(f"{folder}/individual_samples/postBPix/GGJets/events.parquet", columns=columns_to_load)
+        y2024 = ak.from_parquet(f"{folder}/individual_samples/2024/GGJets/events.parquet", columns=columns_to_load)
         # concatenate the samples
-        presel_GGjets = ak.concatenate([preEE, postEE, preBPix, postBPix], axis=0)
+        presel_GGjets = ak.concatenate([preEE, postEE, preBPix, postBPix, y2024], axis=0)
 
         # load TTGG
         preEE = ak.from_parquet(f"{folder}/individual_samples/preEE/TTGG/events.parquet", columns=columns_to_load)
         postEE = ak.from_parquet(f"{folder}/individual_samples/postEE/TTGG/events.parquet", columns=columns_to_load)
         preBPix = ak.from_parquet(f"{folder}/individual_samples/preBPix/TTGG/events.parquet", columns=columns_to_load)
         postBPix = ak.from_parquet(f"{folder}/individual_samples/postBPix/TTGG/events.parquet", columns=columns_to_load)
+        y2024 = ak.from_parquet(f"{folder}/individual_samples/2024/TTGG/events.parquet", columns=columns_to_load)
         # concatenate the samples
-        presel = ak.concatenate([preEE, postEE, preBPix, postBPix, presel_GGjets], axis=0)
+        presel = ak.concatenate([preEE, postEE, preBPix, postBPix, y2024, presel_GGjets], axis=0)
 
         cat_to_label = {
             "cat1": "SR1",
@@ -1322,15 +1482,17 @@ class OptunaCategorizer:
             postEE = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/postEE/GGJets/events.parquet", columns=columns_to_load)
             preBPix = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/preBPix/GGJets/events.parquet", columns=columns_to_load)
             postBPix = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/postBPix/GGJets/events.parquet", columns=columns_to_load)
+            y2024 = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/2024/GGJets/events.parquet", columns=columns_to_load)
 
             # load TTGG
             preEE_ttgg = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/preEE/TTGG/events.parquet", columns=columns_to_load)
             postEE_ttgg = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/postEE/TTGG/events.parquet", columns=columns_to_load)
             preBPix_ttgg = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/preBPix/TTGG/events.parquet", columns=columns_to_load)
             postBPix_ttgg = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/postBPix/TTGG/events.parquet", columns=columns_to_load)
+            y2024_ttgg = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/2024/TTGG/events.parquet", columns=columns_to_load)
 
             # concatenate the samples
-            events_nonRes = ak.concatenate([preEE, postEE, preBPix, postBPix, preEE_ttgg, postEE_ttgg, preBPix_ttgg, postBPix_ttgg], axis=0)
+            events_nonRes = ak.concatenate([preEE, postEE, preBPix, postBPix, y2024, preEE_ttgg, postEE_ttgg, preBPix_ttgg, postBPix_ttgg, y2024_ttgg], axis=0)
             cat_events[cat] = events_nonRes
 
 

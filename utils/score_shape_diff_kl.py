@@ -37,15 +37,17 @@ def plot_score_shape_diff_kl(folder):
         postEE = ak.from_parquet(f"{folder}/postEE/{sample}/events.parquet", columns=["weight_tot", "mass", "nonResReg_dijet_mass_DNNreg", "lead_mvaID", "sublead_mvaID"])
         preBPix = ak.from_parquet(f"{folder}/preBPix/{sample}/events.parquet", columns=["weight_tot", "mass", "nonResReg_dijet_mass_DNNreg", "lead_mvaID", "sublead_mvaID"])
         postBPix = ak.from_parquet(f"{folder}/postBPix/{sample}/events.parquet", columns=["weight_tot", "mass", "nonResReg_dijet_mass_DNNreg", "lead_mvaID", "sublead_mvaID"])
+        y2024 = ak.from_parquet(f"{folder}/2024/{sample}/events.parquet", columns=["weight_tot", "mass", "nonResReg_dijet_mass_DNNreg", "lead_mvaID", "sublead_mvaID"])
         
-        events = ak.concatenate([preEE, postEE, preBPix, postBPix], axis=0)
+        events = ak.concatenate([preEE, postEE, preBPix, postBPix, y2024], axis=0)
 
         score_preEE = np.load(f"{folder}/preEE/{sample}/y.npy")
         score_postEE = np.load(f"{folder}/postEE/{sample}/y.npy")
         score_preBPix = np.load(f"{folder}/preBPix/{sample}/y.npy")
         score_postBPix = np.load(f"{folder}/postBPix/{sample}/y.npy")
+        score_2024 = np.load(f"{folder}/2024/{sample}/y.npy")
         
-        score = np.concatenate([score_preEE, score_postEE, score_preBPix, score_postBPix], axis=0)
+        score = np.concatenate([score_preEE, score_postEE, score_preBPix, score_postBPix, score_2024], axis=0)
 
         # apply preselection
         events, score = preselection(events, score)

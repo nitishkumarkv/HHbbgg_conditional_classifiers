@@ -139,14 +139,14 @@ if __name__ == "__main__":
         args.prep_inputs_for_training = True
         args.prepare_inputs_pred_sim = True
         args.prepare_inputs_pred_data = True
-        args.prepare_inputs_pred_sys = True
+        args.prepare_inputs_pred_sys = False
 
     if args.perform_training:
         args.train_best_model = True
         args.plot_training_results = True
-        args.get_permutation_importance = True
+        args.get_permutation_importance = False
         args.get_predictions = True
-        args.get_predictions_sys = True
+        args.get_predictions_sys = False
         args.test_mass_sculpting = True
         args.get_data_mc_plots = True
         args.get_score_shape_diff_kl = True

@@ -24,9 +24,11 @@ def get_prediction(model_dict_path, model_path, X):
     input_size = X.shape[1]
     output_size = 4
 
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
     model = MLP(input_size, best_num_layers, best_num_nodes, output_size, best_act_fn, best_dropout_prob).to(device)
     model.to(device)
-    model_state = torch.load(model_path, weights_only=False)
+    model_state = torch.load(model_path, weights_only=False, map_location=torch.device(device))
     model.load_state_dict(model_state['model_state_dict'])
 
     model.eval()
