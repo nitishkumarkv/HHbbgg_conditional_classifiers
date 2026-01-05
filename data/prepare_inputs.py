@@ -21,6 +21,8 @@ class PrepareInputs:
         training_info: Optional[Dict[str, Any]] = None,
         outpath: Optional[Dict[str, Any]] = None,
         predict_parquet_info: Optional[Dict[str, Any]] = None,
+        mhh_var: Optional[str] = None,
+        mhh_range: Optional[List[float]] = None,
         ) -> None:
         self.model_type = "mlp"
         self.input_var_json = input_var_json
@@ -62,6 +64,19 @@ class PrepareInputs:
         self.save_all_columns_sim_nominal = training_info["save_all_columns_sim_nominal"]
         self.save_all_columns_data = training_info["save_all_columns_data"]
         self.save_all_columns_sim_systematics = training_info["save_all_columns_sim_systematics"]
+
+        # mHH binning options (variable name and [min,max])
+        self.mhh_var = mhh_var
+        # store as tuple (min, max) where max can be math.inf
+        if mhh_range is not None:
+            import math as _math
+            lo = float(mhh_range[0])
+            hi = float(mhh_range[1]) if len(mhh_range) > 1 else _math.inf
+            if hi == float('inf'):
+                hi = _math.inf
+            self.mhh_range = (lo, hi)
+        else:
+            self.mhh_range = None
         
 
     def load_vars(self, path):
@@ -195,6 +210,34 @@ class PrepareInputs:
         #        selected_jets.eta[:, j], selected_jets.phi[:, j]
         #    )
         #    events[f"deltaR_{name}"] = ak.where(valid, delta_r, -999.0)
+
+        return events
+
+    def _apply_mhh_filter(self, events):
+        """Apply mHH variable range filter to events if configured.
+
+        Keeps events where mhh_var is > -998 and within [lo, hi) (hi may be inf).
+        If the configured variable is missing, raises a ValueError.
+        """
+        if (self.mhh_var is None) or (self.mhh_range is None):
+            return events
+
+        var = self.mhh_var
+        lo, hi = self.mhh_range
+
+        # ensure variable exists in the events
+        try:
+            vals = events[var]
+        except Exception:
+            raise ValueError(f"mHH binning variable '{var}' not found in events")
+
+        # build mask excluding sentinel values
+        if np.isfinite(hi):
+            mask = (vals > -998.0) & (vals >= lo) & (vals < hi)
+        else:
+            mask = (vals > -998.0) & (vals >= lo)
+
+        events = events[mask]
 
         return events
 

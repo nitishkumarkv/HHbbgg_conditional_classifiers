@@ -3,11 +3,12 @@ import os
 import argparse
 import subprocess
 import yaml
+import math
 
-def prepare_inputs(args):
+def prepare_inputs(args, out_path_override=None, mhh_var=None, mhh_range=None):
 
     config_path = args.config_path
-    out_path = args.out_path
+    out_path = out_path_override or args.out_path
 
     # create the output directory
     os.makedirs(out_path, exist_ok=True)
@@ -20,7 +21,9 @@ def prepare_inputs(args):
 
     prep_inputs = PrepareInputs(input_var_json=input_vars_path,
                                 training_info = training_config,
-                                outpath=out_path,)
+                                outpath=out_path,
+                                mhh_var=mhh_var,
+                                mhh_range=mhh_range)
     
     # prepare the inputs for training
     if args.prep_inputs_for_training:
@@ -121,6 +124,8 @@ if __name__ == "__main__":
     parser.add_argument('--get_data_mc_plots', action='store_true', help='Get data-MC plots')
     parser.add_argument('--perform_categorisation', action='store_true', help='Perform categorisation')
     parser.add_argument('--prepare_inputs', action='store_true', help='Prepare all inputs')
+    parser.add_argument('--no_auto_prep_phase', action='store_true', help='Do not auto-run training-prep for all bins when downstream steps are requested')
+    parser.add_argument('--mhh_bin', type=str, default=None, help='(Optional) Process only this mHH bin. Can be the bin index (0-based) or the bin name like "mHH_bin_0_to_350"')
     parser.add_argument('--get_score_shape_diff_kl', action='store_true', help='Get score shape differences using kl samples')
     parser.add_argument('--do_all', action='store_true', help='Perform all steps')
     args = parser.parse_args()
@@ -146,11 +151,125 @@ if __name__ == "__main__":
         args.get_data_mc_plots = True
         args.get_score_shape_diff_kl = True
 
-    # prepare inputs
-    prepare_inputs(args)
+    # load training config to check for mHH binning
+    training_config_path = f"{args.config_path}/training_config.yaml"
+    with open(training_config_path, 'r') as f:
+        training_config = yaml.safe_load(f)
 
-    # perform training
-    perform_training(args)
+    mhh_binning = training_config.get('mHH_binning', None)
 
-    # perform categorisation
-    perform_categorisation(args)
+    if mhh_binning is None:
+        # normal single-run behavior
+        prepare_inputs(args)
+        perform_training(args)
+        perform_categorisation(args)
+    else:
+    # build bin edges: assume edges list defines internal edges, with implicit 0 and inf
+        variable = mhh_binning.get('variable', None)
+        edges = mhh_binning.get('edges', [])
+
+        # validate edges
+        if not isinstance(edges, list):
+            raise ValueError('mHH_binning.edges must be a list of numbers')
+
+        # construct boundaries [0, *edges, inf]
+        boundaries = [0.0] + [float(x) for x in edges] + [math.inf]
+
+        # Build a small list of bins (index, lo, hi, name) so we can select a specific bin if requested
+        bins = []
+        for i in range(len(boundaries)-1):
+            lo = boundaries[i]
+            hi = boundaries[i+1]
+            hi_name = 'inf' if not math.isfinite(hi) else str(int(hi))
+            bin_name = f"mHH_bin_{int(lo)}_to_{hi_name}"
+            bins.append((i, lo, hi, bin_name))
+
+        # If user specified --mhh_bin, resolve it to a single bin index list
+        selected_bin_indices = [b[0] for b in bins]
+        if args.mhh_bin is not None:
+            key = args.mhh_bin
+            found = None
+            # try integer index
+            try:
+                idx = int(key)
+                if 0 <= idx < len(bins):
+                    found = idx
+            except Exception:
+                pass
+
+            # try exact bin name
+            if found is None:
+                for (i, lo, hi, name) in bins:
+                    if name == key or name.replace('mHH_bin_', '') == key:
+                        found = i
+                        break
+
+            # try simple lo_hi form like "0_350" or "0-350"
+            if found is None:
+                key2 = key.replace('-', '_')
+                for (i, lo, hi, name) in bins:
+                    simple = f"{int(lo)}_{'inf' if not math.isfinite(hi) else int(hi)}"
+                    if key2 == simple:
+                        found = i
+                        break
+
+            if found is None:
+                raise ValueError(f'Could not resolve --mhh_bin={args.mhh_bin} to any bin. Known bins: {[b[3] for b in bins]}')
+
+            selected_bin_indices = [found]
+
+        # Decide whether downstream work is requested (training/prediction/plots/etc.)
+        needs_downstream = (
+            args.prepare_inputs_pred_sim or args.prepare_inputs_pred_data or args.prepare_inputs_pred_sys
+            or args.perform_training or args.train_best_model or args.plot_training_results
+            or args.get_permutation_importance or args.get_predictions or args.get_predictions_sys
+            or args.test_mass_sculpting or args.get_data_mc_plots or args.get_score_shape_diff_kl
+        )
+
+        # Phase 1: if downstream work is requested but the user did not explicitly ask for
+        # training-prep, create training-prep artifacts for ALL bins first so later
+        # prediction/training steps won't fail due to missing files. This can be disabled
+        # with --no_auto_prep_phase.
+        if needs_downstream and not args.prep_inputs_for_training and not args.no_auto_prep_phase:
+            print("INFO: Detected downstream steps that require training input artifacts.")
+            print("      Running training input preparation for all mHH bins (phase 1).")
+            for (i, lo, hi, bin_name) in bins:
+                # respect selected_bin_indices when user requested a specific bin
+                if i not in selected_bin_indices:
+                    continue
+
+                per_bin_out = os.path.join(args.out_path, bin_name)
+
+                print(f"INFO: Preparing training inputs for bin {bin_name}: {lo} <= {variable} < {hi}")
+
+                # Build a temporary args object that only requests the training-prep step.
+                tmp_args = argparse.Namespace(**vars(args))
+                tmp_args.prep_inputs_for_training = True
+                tmp_args.prepare_inputs_pred_sim = False
+                tmp_args.prepare_inputs_pred_data = False
+                tmp_args.prepare_inputs_pred_sys = False
+
+                prepare_inputs(tmp_args, out_path_override=per_bin_out, mhh_var=variable, mhh_range=(lo, hi))
+
+        # Phase 2: run the requested per-bin pipeline (may include prepare_inputs for
+        # prediction, perform_training, and plotting). Default per-bin folder name is
+        # `mHH_bin_{lo}_to_{hi}`.
+        for (i, lo, hi, bin_name) in bins:
+            # skip bins not requested when --mhh_bin was provided
+            if i not in selected_bin_indices:
+                continue
+
+            per_bin_out = os.path.join(args.out_path, bin_name)
+
+            print(f"INFO: Running pipeline for bin {bin_name}: {lo} <= {variable} < {hi}")
+
+            # Prepare inputs for this bin (pass mhh var/range into PrepareInputs via prepare_inputs wrapper)
+            prepare_inputs(args, out_path_override=per_bin_out, mhh_var=variable, mhh_range=(lo, hi))
+
+            # Run training and post-processing using this per-bin output directory
+            # Temporarily override args.out_path for training steps
+            old_out = args.out_path
+            args.out_path = per_bin_out
+            perform_training(args)
+            perform_categorisation(args)
+            args.out_path = old_out
