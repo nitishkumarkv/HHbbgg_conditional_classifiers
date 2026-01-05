@@ -555,6 +555,13 @@ class PrepareInputs:
                 # get relative weights according to cross section of the process
                 events = self.get_relative_xsec_weight(events, samples, era)
 
+                # apply mHH bin filter (if configured) and skip sample if empty
+                if self.mhh_var is not None and self.mhh_range is not None:
+                    events = self._apply_mhh_filter(events)
+                    if len(events) == 0:
+                        print(f"WARNING: No events left in sample {samples} for era {era} after mHH filter {self.mhh_range}. Skipping.")
+                        continue
+
                 print(f"INFO: Number of MC events in {samples} after selection for {era}: {len(events)}")
                 print(f"INFO: Sum of weight_tot in {samples} after selection for {era}: {sum(events.weight_tot)}")
 
@@ -711,6 +718,13 @@ class PrepareInputs:
 
                 # get relative weights according to cross section of the process
                 events = self.get_relative_xsec_weight(events, samples, era)
+
+                # apply mHH bin filter (if configured) and skip sample if empty
+                if self.mhh_var is not None and self.mhh_range is not None:
+                    events = self._apply_mhh_filter(events)
+                    if len(events) == 0:
+                        print(f"WARNING: No events left in sample {samples} for era {era} after mHH filter {self.mhh_range}. Skipping.")
+                        continue
                 
                 # also save the event
                 full_path_to_save = f"{out_path}/{era}/{samples}/"
@@ -816,6 +830,13 @@ class PrepareInputs:
 
                     # get relative weights according to cross section of the process
                     events = self.get_relative_xsec_weight(events, samples, era)
+
+                    # apply mHH bin filter (if configured) and skip sample if empty
+                    if self.mhh_var is not None and self.mhh_range is not None:
+                        events = self._apply_mhh_filter(events)
+                        if len(events) == 0:
+                            print(f"WARNING: No events left in sample {samples} for era {era} after mHH filter {self.mhh_range}. Skipping.")
+                            continue
 
                     # also save the event
                     full_path_to_save = f"{out_path}/{era}/{samples}/{sys}/"
