@@ -20,6 +20,9 @@ def preselection(events, score):
     return events, score
 
 def plot_score_shape_diff_kl(folder):
+    save_folder = folder.split('/')[0]
+    if len(folder.split('/')) == 4:
+        save_folder += f"/{folder.split('/')[1]}"
 
     kl_sample_list = ["GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00"]
 
@@ -69,7 +72,7 @@ def plot_score_shape_diff_kl(folder):
         plt.ylabel("a.u.", fontsize=16)
         plt.legend(fontsize=16)
         plt.yscale('log')
-        plt.savefig(f"{folder.split('/')[0]}/ggHH_score_dist_{score_names[score_idx]}.png", bbox_inches='tight')
+        plt.savefig(f"{save_folder}/ggHH_score_dist_{score_names[score_idx]}.png", bbox_inches='tight')
         plt.clf()
 
     
