@@ -1594,37 +1594,37 @@ class OptunaCategorizer:
         elif self.SR_strategy == "simultaneous":
             raise NotImplementedError("Simultaneous SR strategy is not implemented yet.")
 
-        # load the best cut values
-        with open(f"{self.base_path}/{self.cat_folder}/best_cut_params.json", "r") as f:
-            best_cut_values = json.load(f)
+        # # load the best cut values
+        # with open(f"{self.base_path}/{self.cat_folder}/best_cut_params.json", "r") as f:
+        #     best_cut_values = json.load(f)
 
-        self.store_categorization_events_with_score(
-            self.base_path,
-            best_cut_values,
-            folder_name=self.cat_folder,
-            )
+        # self.store_categorization_events_with_score(
+        #     self.base_path,
+        #     best_cut_values,
+        #     folder_name=self.cat_folder,
+        #     )
         
-        folder_list = [f"cat{i}" for i in range(1, 4)]
+        # folder_list = [f"cat{i}" for i in range(1, 4)]
 
-        # plots for sculpting test
-        # print("Testing mass sculpting...")
-        # self.test_mass_sculpting(f"{self.base_path}/", folder_list, self.cat_folder)
+        # # plots for sculpting test
+        # # print("Testing mass sculpting...")
+        # # self.test_mass_sculpting(f"{self.base_path}/", folder_list, self.cat_folder)
 
-        # plot data-MC for SRs
-        sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET", "TTG_100_200", "TTG_200"]
-        variables = ["mass", "nonResReg_dijet_mass_DNNreg"]
-        for folder in folder_list:
-            sim_folder = f"{self.base_path}/{self.cat_folder}/{folder}"
-            data_folder = f"{self.base_path}/{self.cat_folder}/{folder}"
-            out_path = f"{self.base_path}/{self.cat_folder}/{folder}"
-            self.plot_stacked_histogram(sim_folder, data_folder, sim_samples, variables, out_path, signal_scale=100)
+        # # plot data-MC for SRs
+        # sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET", "TTG_100_200", "TTG_200"]
+        # variables = ["mass", "nonResReg_dijet_mass_DNNreg"]
+        # for folder in folder_list:
+        #     sim_folder = f"{self.base_path}/{self.cat_folder}/{folder}"
+        #     data_folder = f"{self.base_path}/{self.cat_folder}/{folder}"
+        #     out_path = f"{self.base_path}/{self.cat_folder}/{folder}"
+        #     self.plot_stacked_histogram(sim_folder, data_folder, sim_samples, variables, out_path, signal_scale=100)
 
-        # collect event yields
-        self.collect_event_yields(
-            f"{self.base_path}/{self.cat_folder}/",
-            folder_list,
-            mass_range=(100, 180)  # Example mass range, adjust as needed
-        )
+        # # collect event yields
+        # self.collect_event_yields(
+        #     f"{self.base_path}/{self.cat_folder}/",
+        #     folder_list,
+        #     mass_range=(100, 180)  # Example mass range, adjust as needed
+        # )
 
 
 
