@@ -972,6 +972,8 @@ class OptunaCategorizer:
               The name you want to give each CR category (e.g. ["CR_ttH", "CR_singleH"]).
         """
 
+        nsr = 3
+
         out_dir = f"{base_path}/{folder_name}/"
         os.makedirs(out_dir, exist_ok=True)
 
@@ -1069,28 +1071,28 @@ class OptunaCategorizer:
                 selected_events = events
                 selected_scores = scores
 
-                # # ============= SR Categories (cat1, cat2, cat3) =============
-                # for i in range(self.n_categories):
-                #     score_cuts = best_cut_values[i]
+                # ============= SR Categories (cat1, cat2, cat3) =============
+                for i in range(nsr):
+                    score_cuts = best_cut_values[i]
 
-                #     mask = (selected_scores[:, 3] > score_cuts["th_signal"])
-                #     for b in [0, 1, 2]:
-                #         mask &= (selected_scores[:, b] < score_cuts[f"th_bg_{b}"])
+                    mask = (selected_scores[:, 3] > score_cuts["th_signal"])
+                    for b in [0, 1, 2]:
+                        mask &= (selected_scores[:, b] < score_cuts[f"th_bg_{b}"])
 
-                #     cat_outdir = f"{out_dir}/cat{i+1}/{era}/{sample}"
-                #     os.makedirs(cat_outdir, exist_ok=True)
+                    cat_outdir = f"{out_dir}/cat{i+1}/{era}/{sample}"
+                    os.makedirs(cat_outdir, exist_ok=True)
 
-                #     cat_events = selected_events[mask]
-                #     ak.to_parquet(cat_events, f"{cat_outdir}/events.parquet")
-                #     np.save(f"{cat_outdir}/y.npy", selected_scores[mask])
+                    cat_events = selected_events[mask]
+                    ak.to_parquet(cat_events, f"{cat_outdir}/events.parquet")
+                    np.save(f"{cat_outdir}/y.npy", selected_scores[mask])
 
-                #     # Update yields (combine era)
-                #     cat_name = f"cat{i+1}"
-                #     update_yields_info(sample, cat_name, cat_events)
+                    # Update yields (combine era)
+                    cat_name = f"cat{i+1}"
+                    update_yields_info(sample, cat_name, cat_events)
 
-                #     # Remove from leftover
-                #     selected_events = selected_events[~mask]
-                #     selected_scores = selected_scores[~mask]
+                    # Remove from leftover
+                    selected_events = selected_events[~mask]
+                    selected_scores = selected_scores[~mask]
 
         # ----------------------
         # Process Data samples
@@ -1138,26 +1140,26 @@ class OptunaCategorizer:
             selected_events = events
             selected_scores = scores
 
-            # # ============= SR (cat1, cat2, cat3) =============
-            # for i in range(self.n_categories):
-            #     score_cuts = best_cut_values[i]
-            #     mask = (selected_scores[:, 3] > score_cuts["th_signal"])
-            #     for b in [0, 1, 2]:
-            #         mask &= (selected_scores[:, b] < score_cuts[f"th_bg_{b}"])
+            # ============= SR (cat1, cat2, cat3) =============
+            for i in range(nsr):
+                score_cuts = best_cut_values[i]
+                mask = (selected_scores[:, 3] > score_cuts["th_signal"])
+                for b in [0, 1, 2]:
+                    mask &= (selected_scores[:, b] < score_cuts[f"th_bg_{b}"])
 
-            #     cat_outdir = f"{out_dir}/cat{i+1}/{data_sample}"
-            #     os.makedirs(cat_outdir, exist_ok=True)
+                cat_outdir = f"{out_dir}/cat{i+1}/{data_sample}"
+                os.makedirs(cat_outdir, exist_ok=True)
 
-            #     cat_events = selected_events[mask]
-            #     ak.to_parquet(cat_events, f"{cat_outdir}/events.parquet")
-            #     np.save(f"{cat_outdir}/y.npy", selected_scores[mask])
+                cat_events = selected_events[mask]
+                ak.to_parquet(cat_events, f"{cat_outdir}/events.parquet")
+                np.save(f"{cat_outdir}/y.npy", selected_scores[mask])
 
-            #     # Update yields 
-            #     cat_name = f"cat{i+1}"
-            #     update_yields_info(data_sample, cat_name, cat_events)
+                # Update yields 
+                cat_name = f"cat{i+1}"
+                update_yields_info(data_sample, cat_name, cat_events)
 
-            #     selected_events = selected_events[~mask]
-            #     selected_scores = selected_scores[~mask]
+                selected_events = selected_events[~mask]
+                selected_scores = selected_scores[~mask]
 
         # ----------------------
         # Write combined yields to a text file, grouped by category
