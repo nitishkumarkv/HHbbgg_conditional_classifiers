@@ -995,6 +995,13 @@ class PrepareInputs:
             # add preselection
             events = self.preselection_for_pred(events)
 
+            # apply mHH bin filter (if configured) and skip sample if empty
+            if self.mhh_var is not None and self.mhh_range is not None:
+                events = self._apply_mhh_filter(events)
+                if len(events) == 0:
+                    print(f"WARNING: No events left in sample {samples} for era {era} after mHH filter {self.mhh_range}. Skipping.")
+                    continue
+
             # add more variables
             events = self.add_var(events, sample_to_era[data])
 
