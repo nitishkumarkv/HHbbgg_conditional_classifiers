@@ -251,7 +251,7 @@ class OptunaCategorizer:
 
         # Assemble DataFrame
         df = pd.DataFrame(data)
-        df["score"] = list(scores)          # store per-event score vectors
+        df["score"] = scores.to_list()          # store per-event score vectors
         df["arg_max_score"] = argmax
 
         # Quick bookkeeping
