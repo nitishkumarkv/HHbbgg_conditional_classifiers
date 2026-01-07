@@ -357,19 +357,17 @@ class OptunaCategorizer:
                     sample_postBPix = ak.from_parquet(f"{sim_folder}/postBPix/{sample}/events.parquet", columns=variables + ["weight_tot"])
 
             if sample == "VHtoGG_M_125":
-                VHsample = "WmHtoGG"
+                VHsample = "ZHtoGG"
                 if not os.path.exists(f"{sim_folder}/2024/{VHsample}/events.parquet"):
-                    print(f"samples doesn't exist: {VHsample} 2024")
-                    sample_2024 = ak.from_parquet(f"{sim_folder}/postEE/{VHsample}/events.parquet", columns=variables + ["weight_tot"])
+                    print(f"samples doesn't exist: {VHsample} 2024, path: {sim_folder}/2024/{VHsample}/events.parquet")
+                    sample_2024 = ak.from_parquet(f"{sim_folder}/postEE/ZHtoGG_M_125/events.parquet", columns=variables + ["weight_tot"])
                     sample_2024["weight_tot"] = sample_2024["weight_tot"] * luminosities["2024"] / luminosities["postEE"]
                 else:
                     sample_2024 = ak.from_parquet(f"{sim_folder}/2024/{VHsample}/events.parquet", columns=variables + ["weight_tot"])
                 
-                for VHsample in ["WpHtoGG", "ZHtoGG"]:
+                for VHsample in ["WmHtoGG", "WpHtoGG"]:
                     if not os.path.exists(f"{sim_folder}/2024/{VHsample}/events.parquet"):
-                        print(f"samples doesn't exist: {VHsample} 2024")
-                        sample_VH = ak.from_parquet(f"{sim_folder}/postEE/{VHsample}/events.parquet", columns=variables + ["weight_tot"])
-                        sample_VH["weight_tot"] = sample_VH["weight_tot"] * luminosities["2024"] / luminosities["postEE"]
+                        print(f"samples doesn't exist: {VHsample} 2024, path: {sim_folder}/2024/{VHsample}/events.parquet")
                     else:
                         sample_VH = ak.from_parquet(f"{sim_folder}/2024/{VHsample}/events.parquet", columns=variables + ["weight_tot"])
                     
@@ -974,8 +972,6 @@ class OptunaCategorizer:
               The name you want to give each CR category (e.g. ["CR_ttH", "CR_singleH"]).
         """
 
-        nsr = 3
-
         out_dir = f"{base_path}/{folder_name}/"
         os.makedirs(out_dir, exist_ok=True)
 
@@ -1021,10 +1017,10 @@ class OptunaCategorizer:
 
                 if (era == "2024") & (sample == "VHtoGG_M_125"):
                     VHsample = "WmHtoGG"
-                    if not os.path.exists(f"{base_path}/individual_samples/{era}/{sample}"):
+                    if not os.path.exists(f"{base_path}/individual_samples/{era}/{VHsample}"):
                         print(f"Skipping {sample} in {era} as it does not exist.")
                         continue
-                    inputs_path = f"{base_path}/individual_samples/{era}/{sample}"
+                    inputs_path = f"{base_path}/individual_samples/{era}/{VHsample}"
                     print(f"Processing {inputs_path}")
 
                     # Load events
@@ -1073,28 +1069,28 @@ class OptunaCategorizer:
                 selected_events = events
                 selected_scores = scores
 
-                # ============= SR Categories (cat1, cat2, cat3) =============
-                for i in range(nsr):
-                    score_cuts = best_cut_values[i]
+                # # ============= SR Categories (cat1, cat2, cat3) =============
+                # for i in range(self.n_categories):
+                #     score_cuts = best_cut_values[i]
 
-                    mask = (selected_scores[:, 3] > score_cuts["th_signal"])
-                    for b in [0, 1, 2]:
-                        mask &= (selected_scores[:, b] < score_cuts[f"th_bg_{b}"])
+                #     mask = (selected_scores[:, 3] > score_cuts["th_signal"])
+                #     for b in [0, 1, 2]:
+                #         mask &= (selected_scores[:, b] < score_cuts[f"th_bg_{b}"])
 
-                    cat_outdir = f"{out_dir}/cat{i+1}/{era}/{sample}"
-                    os.makedirs(cat_outdir, exist_ok=True)
+                #     cat_outdir = f"{out_dir}/cat{i+1}/{era}/{sample}"
+                #     os.makedirs(cat_outdir, exist_ok=True)
 
-                    cat_events = selected_events[mask]
-                    ak.to_parquet(cat_events, f"{cat_outdir}/events.parquet")
-                    np.save(f"{cat_outdir}/y.npy", selected_scores[mask])
+                #     cat_events = selected_events[mask]
+                #     ak.to_parquet(cat_events, f"{cat_outdir}/events.parquet")
+                #     np.save(f"{cat_outdir}/y.npy", selected_scores[mask])
 
-                    # Update yields (combine era)
-                    cat_name = f"cat{i+1}"
-                    update_yields_info(sample, cat_name, cat_events)
+                #     # Update yields (combine era)
+                #     cat_name = f"cat{i+1}"
+                #     update_yields_info(sample, cat_name, cat_events)
 
-                    # Remove from leftover
-                    selected_events = selected_events[~mask]
-                    selected_scores = selected_scores[~mask]
+                #     # Remove from leftover
+                #     selected_events = selected_events[~mask]
+                #     selected_scores = selected_scores[~mask]
 
         # ----------------------
         # Process Data samples
@@ -1142,26 +1138,26 @@ class OptunaCategorizer:
             selected_events = events
             selected_scores = scores
 
-            # ============= SR (cat1, cat2, cat3) =============
-            for i in range(nsr):
-                score_cuts = best_cut_values[i]
-                mask = (selected_scores[:, 3] > score_cuts["th_signal"])
-                for b in [0, 1, 2]:
-                    mask &= (selected_scores[:, b] < score_cuts[f"th_bg_{b}"])
+            # # ============= SR (cat1, cat2, cat3) =============
+            # for i in range(self.n_categories):
+            #     score_cuts = best_cut_values[i]
+            #     mask = (selected_scores[:, 3] > score_cuts["th_signal"])
+            #     for b in [0, 1, 2]:
+            #         mask &= (selected_scores[:, b] < score_cuts[f"th_bg_{b}"])
 
-                cat_outdir = f"{out_dir}/cat{i+1}/{data_sample}"
-                os.makedirs(cat_outdir, exist_ok=True)
+            #     cat_outdir = f"{out_dir}/cat{i+1}/{data_sample}"
+            #     os.makedirs(cat_outdir, exist_ok=True)
 
-                cat_events = selected_events[mask]
-                ak.to_parquet(cat_events, f"{cat_outdir}/events.parquet")
-                np.save(f"{cat_outdir}/y.npy", selected_scores[mask])
+            #     cat_events = selected_events[mask]
+            #     ak.to_parquet(cat_events, f"{cat_outdir}/events.parquet")
+            #     np.save(f"{cat_outdir}/y.npy", selected_scores[mask])
 
-                # Update yields 
-                cat_name = f"cat{i+1}"
-                update_yields_info(data_sample, cat_name, cat_events)
+            #     # Update yields 
+            #     cat_name = f"cat{i+1}"
+            #     update_yields_info(data_sample, cat_name, cat_events)
 
-                selected_events = selected_events[~mask]
-                selected_scores = selected_scores[~mask]
+            #     selected_events = selected_events[~mask]
+            #     selected_scores = selected_scores[~mask]
 
         # ----------------------
         # Write combined yields to a text file, grouped by category
@@ -1609,8 +1605,8 @@ class OptunaCategorizer:
         folder_list = [f"cat{i}" for i in range(1, 4)]
 
         # plots for sculpting test
-        print("Testing mass sculpting...")
-        self.test_mass_sculpting(f"{self.base_path}/", folder_list, self.cat_folder)
+        # print("Testing mass sculpting...")
+        # self.test_mass_sculpting(f"{self.base_path}/", folder_list, self.cat_folder)
 
         # plot data-MC for SRs
         sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET", "TTG_100_200", "TTG_200"]
