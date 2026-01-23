@@ -16,14 +16,24 @@ import argparse
 # }
 
 # Example for a mHH bins, training per mHH bin
-base_path = "/home/mmcginni/HHbbgg_conditional_classifiers/out_Version_20251203_inc2024_kl_year_350_650/"
+# base_path = "/home/mmcginni/HHbbgg_conditional_classifiers/out_Version_20251203_inc2024_kl_year_350_650/"
+# dict_inputs = {
+#                 "input_file": ["mHH_bin_0_to_350/optuna_categorization/best_cut_params.json", "mHH_bin_350_to_650/optuna_categorization/best_cut_params.json", "mHH_bin_650_to_inf/optuna_categorization/best_cut_params.json"],
+#                 "output_file": ["best_cut_params_350_650_finalfits.json"],
+#                 "n_cats": 3,
+#                 "do_mjjcut": True,
+#                 "mHH_bins": [-1, 350, 650, -1]
+# }
+
+base_path = "/eos/user/m/mmcginni/Documents/HHtobbgg/HHbbgg_conditional_classifiers_TRAINONGPU/out_Version_20251203_inc2024_year/optuna_categorization_baseline/"
 dict_inputs = {
-                "input_file": ["mHH_bin_0_to_350/optuna_categorization/best_cut_params.json", "mHH_bin_350_to_650/optuna_categorization/best_cut_params.json", "mHH_bin_650_to_inf/optuna_categorization/best_cut_params.json"],
-                "output_file": ["best_cut_params_350_650_finalfits.json"],
-                "n_cats": 3,
-                "do_mjjcut": True,
-                "mHH_bins": [-1, 350, 650, -1]
+                "input_file": ["best_cut_params.json"],
+                "output_file": ["best_cut_params_finalfits_nomjjcut.json"], #leave empty to have the same as input, with _finalfits at the end
+                "n_cats": 5,
+                "do_mjjcut": False, #True or False
+                "mHH_bins": [] #bin edges include upper and lowermost bins, -1 for no bound, leave emptry if not doing mHH bins. Should have N input_files + 1
 }
+
 # --------------------------- #
 
 
