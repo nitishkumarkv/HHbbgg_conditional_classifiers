@@ -109,17 +109,22 @@ class PrepareInputs:
 
         # add deltaR between lead and sublead photon
         events["deltaR_gg"] = self.deltaR(events.lead_eta, events.lead_phi, events.sublead_eta, events.sublead_phi)
-
-        if era == "preEE":
+        if "2016" in era:
             events["year"] = 0
-        elif era == "postEE":
-            events["year"] = 0
-        elif era == "preBPix":
+        elif era == "2017":
             events["year"] = 1
-        elif era == "postBPix":
-            events["year"] = 1
-        elif era == "2024":
+        elif era == "2018":
             events["year"] = 2
+        elif era == "preEE":
+            events["year"] = 3
+        elif era == "postEE":
+            events["year"] = 3
+        elif era == "preBPix":
+            events["year"] = 4
+        elif era == "postBPix":
+            events["year"] = 4
+        elif era == "2024":
+            events["year"] = 5
 
         # add jet related mass
             
@@ -270,6 +275,10 @@ class PrepareInputs:
             "TT": 730e3,
         }
         luminosities = {
+        "2016preVFP": 19.5,
+        "2016postVFP": 16.8,
+        "2017": 42.07,
+        "2018": 59.56,
         "preEE": 7.98,  # Integrated luminosity for preEE in fb^-1
         "postEE": 26.67,  # Integrated luminosity for postEE in fb^-1
         "preBPix": 17.794,  # Integrated luminosity for preEE in fb^-1
@@ -966,7 +975,12 @@ class PrepareInputs:
             else:
                 events = ak.from_parquet(f"{samples_path}/{datas[data]}", columns=vars_to_load)
 
-            sample_to_era = {"2022_EraE": "postEE", 
+            sample_to_era = {
+                            "2016preVFP": "preVFP",
+                            "2016postVFP": "postVFP",
+                            "2017": "2017",
+                            "2018": "2018",
+                            "2022_EraE": "postEE", 
                             "2022_EraF": "postEE", 
                             "2022_EraG": "postEE", 
                             "2022_EraC": "preEE", 

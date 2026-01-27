@@ -149,7 +149,7 @@ if __name__ == "__main__":
         args.get_predictions_sys = False
         args.test_mass_sculpting = True
         args.get_data_mc_plots = True
-        args.get_score_shape_diff_kl = True
+        args.get_score_shape_diff_kl = False
 
     # load training config to check for mHH binning
     training_config_path = f"{args.config_path}/training_config.yaml"

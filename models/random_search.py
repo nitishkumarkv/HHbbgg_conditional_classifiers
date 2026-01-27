@@ -50,7 +50,7 @@ def objective(trial):
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=15, min_lr=1e-6)
 
-    n_epochs = 100
+    n_epochs = 2
     # n_epochs = 500
     batch_size = 1024
     batches_per_epoch = len(X_train) // batch_size
