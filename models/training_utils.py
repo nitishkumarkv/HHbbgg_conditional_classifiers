@@ -246,7 +246,7 @@ if __name__ == "__main__":
     best_scheduler = ReduceLROnPlateau(best_optimizer, mode='min', factor=0.5, patience=15, min_lr=1e-6)
 
     # Training loop parameters
-    n_epochs = 2
+    n_epochs = 100
     # n_epochs = 500
     print(f"INFO: Training for {n_epochs} epochs", '\n')
     best_loss = np.inf
