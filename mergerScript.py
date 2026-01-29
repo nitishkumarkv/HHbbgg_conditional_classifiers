@@ -183,7 +183,7 @@ def load_samples(base_path, samples, data=False, syst=""):
 
     eras = ["preEE", "postEE", "preBPix", "postBPix", "2024"]
     if data:
-        eras = ["2022_EraC","2022_EraD","2022_EraE","2022_EraF","2022_EraG","2023_EraC","2023_EraD", "2024_EraC_EG0", "2024_EraC_EG1", "2024_EraD_EG0", "2024_EraD_EG1", "2024_EraE_EG0", "2024_EraE_EG1", "2024_EraF_EG0", "2024_EraF_EG1", "2024_EraG_EG0", "2024_EraG_EG1", "2024_EraH_EG0", "2024_EraH_EG1", "2024_EraIv1_EG0", "2024_EraIv1_EG1", "2024_EraIv2_EG0", "2024_EraIv2_EG1"]
+        eras = ["2022_EraC","2022_EraD","2022_EraE","2022_EraF","2022_EraG","2023_EraC","2023_EraD", "2024_EraC_EG0", "2024_EraC_EG1", "2024_EraD_EG0", "2024_EraD_EG1", "2024_EraE_EG0", "2024_EraE_EG1", "2024_EraF_EG0", "2024_EraF_EG1", "2024_EraG_EG0", "2024_EraG_EG1", "2024_EraH_EG0", "2024_EraH_EG1", "2024_EraIv1_EG0", "2024_EraIv1_EG1", "2024_EraIv2_EG0", "2024_EraIv2_EG1", "2025_EraC", "2025_EraD", "2025_EraE", "2025_EraF"]
 
     for era in eras:
         print("###########")
@@ -259,6 +259,8 @@ def load_samples(base_path, samples, data=False, syst=""):
                 year = 2023
             elif "24" in era:
                 year = 2024
+            elif "25" in era:
+                year = 2025
             else:
                 raise ValueError(f"Unknown era: {era}")
             samples_input["year"].append(np.full(y.shape[0], year))

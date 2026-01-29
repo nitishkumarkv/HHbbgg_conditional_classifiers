@@ -120,6 +120,8 @@ class PrepareInputs:
             events["year"] = 1
         elif era == "2024":
             events["year"] = 2
+        elif era == "2025":
+            events["year"] = 2 #same as 2024 since we are repeating MC
 
         # add jet related mass
             
@@ -964,6 +966,8 @@ class PrepareInputs:
             if self.save_all_columns_data:
                 events = ak.from_parquet(f"{samples_path}/{datas[data]}")
             else:
+                print(samples_path)
+                print(datas[data])
                 events = ak.from_parquet(f"{samples_path}/{datas[data]}", columns=vars_to_load)
 
             sample_to_era = {"2022_EraE": "postEE", 
@@ -990,7 +994,11 @@ class PrepareInputs:
                             "2024_EraIv1_EG0": "2024",
                             "2024_EraIv1_EG1": "2024",
                             "2024_EraIv2_EG0": "2024",
-                            "2024_EraIv2_EG1": "2024"}
+                            "2024_EraIv2_EG1": "2024",
+                            "2025_EraC": "2025",
+                            "2025_EraD": "2025",
+                            "2025_EraE": "2025",
+                            "2025_EraF": "2025"}
 
             # add preselection
             events = self.preselection_for_pred(events)
