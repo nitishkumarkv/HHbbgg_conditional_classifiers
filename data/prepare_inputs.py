@@ -77,6 +77,12 @@ class PrepareInputs:
             self.mhh_range = (lo, hi)
         else:
             self.mhh_range = None
+
+        self.has2025 = False
+        for era in self.training_info["samples_info"]["eras"]:
+            if "2025" in era:
+                self.has2025 = True
+                break
         
 
     def load_vars(self, path):
@@ -278,6 +284,9 @@ class PrepareInputs:
         "postBPix": 9.451,  # Integrated luminosity for postEE in fb^-1
         "2024": 108.95
         }
+
+        if self.has2025:
+            luminosities["2024"] = luminosities["2024"] + 88.24
 
         lumi = luminosities[era]
         if sample_type == "DDQCDGJET":

@@ -124,7 +124,11 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
 
     data_samples = training_config["samples_info"]["data"]
 
+    has2025 = False
     for data_sample, path in data_samples.items():
+        if "2025" in data_sample:
+            has2025 = True
+
         if os.path.exists(f"{data_folder}/{data_sample}/events.parquet"):
             print(f"Loading data from {data_folder}/{data_sample}/events.parquet")
             data_part = ak.from_parquet(f"{data_folder}/{data_sample}/events.parquet", columns=variables+["lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE"])
@@ -182,6 +186,7 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
                     scores_ = np.concatenate((scores_, scores_vh))
             else:
                 scores_ = np.load(f"{sim_folder}/{era}/{sample}/y.npy")
+
             # select prompt photons for TTG and TT samples
             #if (("TTG_" in sample) or (sample == "TT")):
             #    print("selecting prompt photons for TTG and TT samples")
@@ -274,8 +279,6 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
         # Histogram binning
         bin_edges = np.linspace(*var_config[variable]["range"], var_config[variable]["bins"] + 1)
 
-
-
         # Compute MC histograms with weights
         mc_hist = []
         mc_err = np.zeros(len(bin_edges) - 1)
@@ -330,6 +333,9 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
         for era in eras:
             if era in luminosities:
                 lumi += luminosities[era]
+
+        if has2025:
+            lumi += 88.24 #2024 MC is already scaled if including 2025 data
 
         # set luminosity, CMS label, and legend
         hep.cms.label(data=True, lumi=lumi, ax=ax, loc=0, fontsize=16, label="Private Work", com=13.6)
