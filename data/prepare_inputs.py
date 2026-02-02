@@ -79,7 +79,7 @@ class PrepareInputs:
             self.mhh_range = None
 
         self.has2025 = False
-        for era in self.training_info["samples_info"]["eras"]:
+        for era in self.training_info["samples_info"]["data"]:
             if "2025" in era:
                 self.has2025 = True
                 break
@@ -290,7 +290,11 @@ class PrepareInputs:
 
         lumi = luminosities[era]
         if sample_type == "DDQCDGJET":
-            lumi = 1.0
+            if era == "2024":
+            # lumi = 1.0
+                lumi = 1.81 # (24 + 25)lumi / 24lumi
+            else:
+                lumi = 1.0
 
         events["rel_xsec_weight"] = (events.weight) * dict_xsec[sample_type] * lumi
         events["weight_tot"] = (events.weight) * dict_xsec[sample_type] * lumi
