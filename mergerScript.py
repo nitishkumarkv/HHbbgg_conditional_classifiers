@@ -98,7 +98,23 @@ def load_samples(base_path, samples, data=False, syst=""):
         # "nonResReg_dijet_PtOverM_ggjj",
         # "deltaR_gg",
         # "nonResReg_lead_bjet_over_M_regressed",
-        # "nonResReg_sublead_bjet_over_M_regressed"
+        # "nonResReg_sublead_bjet_over_M_regressed",
+        "n_jets",
+        "n_electrons",
+        "n_muons",
+        "jet1_pt",
+        "jet2_pt",
+        "jet3_pt",
+        "jet4_pt",
+        "jet5_pt",
+        "jet6_pt",
+        "jet7_pt",
+        "jet8_pt",
+        "jet9_pt",
+        "jet10_pt",
+        "nBTight",
+        "nBLoose",
+        "nBMedium"
         ]
 
     samples_input = {
@@ -107,7 +123,7 @@ def load_samples(base_path, samples, data=False, syst=""):
             # "run": [],
             #"nonResReg_lead_bjet_hFlav": [],
             #"nonResReg_sublead_bjet_hFlav": [],
-            "mass": [], 
+            "mass": [],
             "dijet_mass": [], 
             "HHbbggCandidate_mass": [],
             "sample": [],
@@ -177,6 +193,22 @@ def load_samples(base_path, samples, data=False, syst=""):
             # "deltaR_gg" : [],
             # "nonResReg_lead_bjet_over_M_regressed" : [],
             # "nonResReg_sublead_bjet_over_M_regressed" : [],
+            "n_jets" : [],
+            "n_electrons" : [],
+            "n_muons" : [],
+            "jet1_pt" : [],
+            "jet2_pt" : [],
+            "jet3_pt" : [],
+            "jet4_pt" : [],
+            "jet5_pt" : [],
+            "jet6_pt" : [],
+            "jet7_pt" : [],
+            "jet8_pt" : [],
+            "jet9_pt" : [],
+            "jet10_pt" : [],
+            "nBTight" : [],
+            "nBLoose" : [],
+            "nBMedium" : []
     }
     for weight in weight_columns:
         samples_input.update({weight: []})
