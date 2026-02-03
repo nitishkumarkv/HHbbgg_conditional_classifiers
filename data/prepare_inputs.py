@@ -34,14 +34,17 @@ class PrepareInputs:
             self.classes = self.training_info["classes"]
             self.random_seed = self.training_info["random_seed"]
             self.weight_scheme_process = self.training_info["weight_scheme_process"]
+            self.var_prefix = self.training_info.get("var_prefix", "nonResReg")  # default to "nonResReg" for backwards compatibility
+        else:
+            self.var_prefix = "nonResReg"
         self.fill_nan = -9
 
         #self.extra_vars = ["mass", "nonRes_dijet_mass", "Res_dijet_mass", "nonRes_has_two_btagged_jets", "weight", "pt", "nonRes_dijet_pt", "Res_dijet_pt", "Res_lead_bjet_pt", "Res_sublead_bjet_pt", "Res_lead_bjet_ptPNetCorr", "Res_sublead_bjet_ptPNetCorr", "nonRes_HHbbggCandidate_mass", "Res_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "Res_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "jet1_mass", "jet2_mass", "jet3_mass", "jet4_mass", "jet5_mass", "jet6_mass", "Res_lead_bjet_jet_idx", "Res_sublead_bjet_jet_idx", "jet1_index", "jet2_index", "jet3_index", "jet4_index", "jet5_index", "jet6_index",
         #                   "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet1_eta", "jet2_eta", "jet3_eta", "jet4_eta", "jet5_eta", "jet6_eta", "jet1_phi", "jet2_phi", "jet3_phi", "jet4_phi", "jet5_phi", "jet6_phi", "lead_phi", "sublead_phi"]
 
-        self.extra_vars = ["mass", "nonRes_dijet_mass", "nonResReg_dijet_mass", "nonResReg_dijet_mass_DNNreg", "nonResReg_HHbbggCandidate_mass", "nonResReg_dijet_pt", "nonResReg_lead_bjet_pt", "nonResReg_sublead_bjet_pt", "nonResReg_lead_bjet_eta", "nonResReg_DNNpair_dijet_mass", "nonResReg_DNNpair_dijet_mass_DNNreg", "nonResReg_lead_bjet_btagPNetB", "nonResReg_sublead_bjet_btagPNetB", "nonResReg_lead_bjet_btagUParTAK4B", "nonResReg_sublead_bjet_btagUParTAK4B", "weight", "pt", "nonRes_dijet_pt", "nonRes_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "lead_eta", "lead_phi", "sublead_eta", "sublead_phi"] # "lead_genPartFlav", "sublead_genPartFlav", "weight_tot" added for sim predictions only in the dedicated functions
+        self.extra_vars = ["mass", "nonRes_dijet_mass", f"{self.var_prefix}_dijet_mass", f"{self.var_prefix}_dijet_mass_DNNreg", f"{self.var_prefix}_HHbbggCandidate_mass", f"{self.var_prefix}_dijet_pt", f"{self.var_prefix}_lead_bjet_pt", f"{self.var_prefix}_sublead_bjet_pt", f"{self.var_prefix}_lead_bjet_eta", f"{self.var_prefix}_DNNpair_dijet_mass", f"{self.var_prefix}_DNNpair_dijet_mass_DNNreg", f"{self.var_prefix}_lead_bjet_btagPNetB", f"{self.var_prefix}_sublead_bjet_btagPNetB", f"{self.var_prefix}_lead_bjet_btagUParTAK4B", f"{self.var_prefix}_sublead_bjet_btagUParTAK4B", "weight", "pt", "nonRes_dijet_pt", "nonRes_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "lead_eta", "lead_phi", "sublead_eta", "sublead_phi"] # "lead_genPartFlav", "sublead_genPartFlav", "weight_tot" added for sim predictions only in the dedicated functions
 
-        self.vars_for_boosted = ['sublead_mvaID', 'fatjet3_tau2', 'fatjet3_particleNet_XbbVsQCD', 'fatjet4_subjet2_eta', 'sublead_eta', 'fatjet2_phi', 'fatjet1_mass', 'nonResReg_CosThetaStar_gg', 'fatjet4_particleNet_XbbVsQCD', 'lead_phi', 'fatjet4_pt', 'fatjet4_tau1', 'fatjet4_tau2', 'fatjet2_particleNet_XbbVsQCD', 'fatjet3_subjet1_eta', 'fatjet1_subjet1_eta', 'lead_eta', 'fatjet3_msoftdrop', 'fatjet4_mass', 'fatjet4_particleNet_massCorr', 'fatjet1_tau1', 'eta', 'fatjet2_pt', 'phi', 'fatjet1_subjet2_phi', 'fatjet3_eta', 'fatjet1_subjet2_eta', 'nonResReg_phosublead_PtOverM', 'fatjet4_subjet1_phi', 'fatjet3_subjet2_phi', 'fatjet3_subjet1_phi', 'fatjet2_tau2', 'n_jets', 'fatjet2_msoftdrop', 'fatjet2_subjet2_phi', 'fatjet3_pt', 'fatjet2_eta', 'fatjet3_tau1', 'fatjet4_eta', 'fatjet1_eta', 'fatjet3_mass', 'n_fatjets', 'fatjet1_pt', 'fatjet3_subjet2_eta', 'fatjet1_subjet1_phi', 'fatjet1_msoftdrop', 'lead_mvaID', 'fatjet4_subjet1_eta', 'nonResReg_pholead_PtOverM', 'fatjet2_tau1', 'fatjet2_mass', 'fatjet2_subjet2_eta', 'fatjet3_phi', 'n_leptons', 'fatjet1_particleNet_massCorr', 'fatjet2_subjet1_phi', 'fatjet4_subjet2_phi', 'fatjet1_tau2', 'fatjet1_phi', 'fatjet2_subjet1_eta', 'fatjet4_phi', 'fatjet1_particleNet_XbbVsQCD', 'fatjet3_particleNet_massCorr', 'fatjet4_msoftdrop', 'sublead_phi', 'fatjet2_particleNet_massCorr']
+        self.vars_for_boosted = ['sublead_mvaID', 'fatjet3_tau2', 'fatjet3_particleNet_XbbVsQCD', 'fatjet4_subjet2_eta', 'sublead_eta', 'fatjet2_phi', 'fatjet1_mass', f'{self.var_prefix}_CosThetaStar_gg', 'fatjet4_particleNet_XbbVsQCD', 'lead_phi', 'fatjet4_pt', 'fatjet4_tau1', 'fatjet4_tau2', 'fatjet2_particleNet_XbbVsQCD', 'fatjet3_subjet1_eta', 'fatjet1_subjet1_eta', 'lead_eta', 'fatjet3_msoftdrop', 'fatjet4_mass', 'fatjet4_particleNet_massCorr', 'fatjet1_tau1', 'eta', 'fatjet2_pt', 'phi', 'fatjet1_subjet2_phi', 'fatjet3_eta', 'fatjet1_subjet2_eta', f'{self.var_prefix}_phosublead_PtOverM', 'fatjet4_subjet1_phi', 'fatjet3_subjet2_phi', 'fatjet3_subjet1_phi', 'fatjet2_tau2', 'n_jets', 'fatjet2_msoftdrop', 'fatjet2_subjet2_phi', 'fatjet3_pt', 'fatjet2_eta', 'fatjet3_tau1', 'fatjet4_eta', 'fatjet1_eta', 'fatjet3_mass', 'n_fatjets', 'fatjet1_pt', 'fatjet3_subjet2_eta', 'fatjet1_subjet1_phi', 'fatjet1_msoftdrop', 'lead_mvaID', 'fatjet4_subjet1_eta', f'{self.var_prefix}_pholead_PtOverM', 'fatjet2_tau1', 'fatjet2_mass', 'fatjet2_subjet2_eta', 'fatjet3_phi', 'n_leptons', 'fatjet1_particleNet_massCorr', 'fatjet2_subjet1_phi', 'fatjet4_subjet2_phi', 'fatjet1_tau2', 'fatjet1_phi', 'fatjet2_subjet1_eta', 'fatjet4_phi', 'fatjet1_particleNet_XbbVsQCD', 'fatjet3_particleNet_massCorr', 'fatjet4_msoftdrop', 'sublead_phi', 'fatjet2_particleNet_massCorr']
         
         # prepare process numbers for proccesses in each class
         num_process_each_class = {
@@ -70,6 +73,18 @@ class PrepareInputs:
         with open(path, 'r') as f:
             vars = yaml.safe_load(f)
         return vars
+
+    def substitute_var_prefix(self, var_list):
+        """
+        Replace generic 'regcol_' prefix with the actual var_prefix.
+
+        Args:
+            var_list: List of variable names (may contain 'regcol_' prefix)
+
+        Returns:
+            List of variable names with 'regcol_' replaced by self.var_prefix
+        """
+        return [var.replace("regcol_", f"{self.var_prefix}_") if "regcol_" in var else var for var in var_list]
 
     def load_and_process_sample(self, samples_path, parquet_path, samples, era, vars_to_load, preselection_func, save_all_columns=False, systematic=None, apply_xsec_weights=True):
         """
@@ -181,11 +196,11 @@ class PrepareInputs:
 
     def add_var(self, events, era):
 
-        events["diphoton_PtOverM_ggjj"] = events.pt / events.nonResReg_HHbbggCandidate_mass
-        events["nonResReg_dijet_PtOverM_ggjj"] = events.nonResReg_dijet_pt / events.nonResReg_HHbbggCandidate_mass
+        events["diphoton_PtOverM_ggjj"] = events.pt / events[f"{self.var_prefix}_HHbbggCandidate_mass"]
+        events[f"{self.var_prefix}_dijet_PtOverM_ggjj"] = events[f"{self.var_prefix}_dijet_pt"] / events[f"{self.var_prefix}_HHbbggCandidate_mass"]
 
-        events["nonResReg_lead_bjet_over_M_regressed"] = events.nonResReg_lead_bjet_pt / events.nonResReg_dijet_mass_DNNreg
-        events["nonResReg_sublead_bjet_over_M_regressed"] = events.nonResReg_sublead_bjet_pt / events.nonResReg_dijet_mass_DNNreg
+        events[f"{self.var_prefix}_lead_bjet_over_M_regressed"] = events[f"{self.var_prefix}_lead_bjet_pt"] / events[f"{self.var_prefix}_dijet_mass_DNNreg"]
+        events[f"{self.var_prefix}_sublead_bjet_over_M_regressed"] = events[f"{self.var_prefix}_sublead_bjet_pt"] / events[f"{self.var_prefix}_dijet_mass_DNNreg"]
 
         # add deltaR between lead and sublead photon
         events["deltaR_gg"] = self.deltaR(events.lead_eta, events.lead_phi, events.sublead_eta, events.sublead_phi)
@@ -193,60 +208,71 @@ class PrepareInputs:
         # add b-tagging working points
         btagVariable = "btag"
         if era == "preEE":
-            events["nonResReg_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.047, int)
-            events["nonResReg_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.245, int)
-            events["nonResReg_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.6734, int)
-            events["nonResReg_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.7862, int)
-            events["nonResReg_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.961, int)
-            events["nonResReg_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.047, int)
-            events["nonResReg_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.245, int)
-            events["nonResReg_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.6734, int)
-            events["nonResReg_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.7862, int)
-            events["nonResReg_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.961, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.047, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.245, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.6734, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.7862, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.961, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.047, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.245, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.6734, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.7862, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.961, int)
         elif era == "postEE":
-            events["nonResReg_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.0499, int)
-            events["nonResReg_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.2605, int)
-            events["nonResReg_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.6915, int)
-            events["nonResReg_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.8033, int)
-            events["nonResReg_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.9664, int)
-            events["nonResReg_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.0499, int)
-            events["nonResReg_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.2605, int)
-            events["nonResReg_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.6915, int)
-            events["nonResReg_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.8033, int)
-            events["nonResReg_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.9664, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.0499, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.2605, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.6915, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.8033, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.9664, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.0499, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.2605, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.6915, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.8033, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.9664, int)
         elif era == "preBPix":
-            events["nonResReg_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.0358, int)
-            events["nonResReg_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.1917, int)
-            events["nonResReg_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.6172, int)
-            events["nonResReg_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.7515, int)
-            events["nonResReg_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.9659, int)
-            events["nonResReg_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.0358, int)
-            events["nonResReg_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.1917, int)
-            events["nonResReg_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.6172, int)
-            events["nonResReg_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.7515, int)
-            events["nonResReg_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.9659, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.0358, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.1917, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.6172, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.7515, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.9659, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.0358, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.1917, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.6172, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.7515, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.9659, int)
         elif era == "postBPix":
-            events["nonResReg_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.0359, int)
-            events["nonResReg_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.1919, int)
-            events["nonResReg_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.6133, int)
-            events["nonResReg_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.7544, int)
-            events["nonResReg_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_lead_bjet_btagPNetB"] > 0.9688, int)
-            events["nonResReg_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.0359, int)
-            events["nonResReg_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.1919, int)
-            events["nonResReg_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.6133, int)
-            events["nonResReg_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.7544, int)
-            events["nonResReg_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_sublead_bjet_btagPNetB"] > 0.9688, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.0359, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.1919, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.6133, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.7544, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.9688, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.0359, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.1919, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.6133, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.7544, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.9688, int)
         elif era == "2024" or era == "2025":
-            events["nonResReg_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_lead_bjet_btagUParTAK4B"] > 0.0246, int)
-            events["nonResReg_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_lead_bjet_btagUParTAK4B"] > 0.1272, int)
-            events["nonResReg_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_lead_bjet_btagUParTAK4B"] > 0.4648, int)
-            events["nonResReg_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_lead_bjet_btagUParTAK4B"] > 0.6298, int)
-            events["nonResReg_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_lead_bjet_btagUParTAK4B"] > 0.9739, int)
-            events["nonResReg_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_sublead_bjet_btagUParTAK4B"] > 0.0246, int)
-            events["nonResReg_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_sublead_bjet_btagUParTAK4B"] > 0.1272, int)
-            events["nonResReg_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_sublead_bjet_btagUParTAK4B"] > 0.4648, int)
-            events["nonResReg_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_sublead_bjet_btagUParTAK4B"] > 0.6298, int)
-            events["nonResReg_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_sublead_bjet_btagUParTAK4B"] > 0.9739, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.0246, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.1272, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.4648, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.6298, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.9739, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.0246, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.1272, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.4648, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.6298, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.9739, int)
+        else: # Accounts for Run 2 inclusively, copying the 2024 WPs for now
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.0246, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.1272, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.4648, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.6298, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.9739, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.0246, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.1272, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.4648, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.6298, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.9739, int)
 
         # add jet related mass
             
@@ -345,20 +371,21 @@ class PrepareInputs:
 
         dict_xsec = {
             # Accounting for the template fit factor which is not included in the parquet weight in 2024 and 2025
-            "GGJets": (88.75e3 * 1.59) if (era=="2024" or era=="2025") else 88.75e3,
+            "GGJets": 86.96e3 if ("201" in era) else (88.75e3 * 1.59) if (era=="2024" or era=="2025") else 88.75e3,
             "GJetPt20To40": 242.5e3,
             "GJetPt40": 919.1e3,
-            "TTGG": 0.02391e3,  # cross sectio of TTGG 0.01696, copilot: 0.502
-            "ttHtoGG_M_125": 0.5700e3 * 0.00227,  # cross sectio of ttH * BR(HToGG)
+            "TTGG": 0.01696e3 if ("201" in era) else 0.02391e3,  # cross sectio of TTGG 0.01696, copilot: 0.502
+            "ttHtoGG_M_125": 0.0011e3 if ("201" in era) else (0.5700e3 * 0.00227),  # cross sectio of ttH * BR(HToGG)
             "BBHto2G_M_125": 0.4385e3 * 0.00227,  # cross sectio of BBH * BR(HToGG)
-            "GluGluHToGG_M_125": 52.23e3 * 0.00227,  # cross sectio of GluGluHToGG * BR(HToGG)
-            "VBFHToGG_M_125": 4.078e3 * 0.00227,
-            "VHtoGG_M_125": 2.4009e3 * 0.00227,
+            "GluGluHToGG_M_125": 0.1103e3 if ("201" in era) else (52.23e3 * 0.00227),  # cross sectio of GluGluHToGG * BR(HToGG)
+            "VBFHToGG_M_125": 0.00855e3 if ("201" in era) else (4.078e3 * 0.00227),
+            "VHtoGG_M_125": 0.00508e3 if ("201" in era) else (2.4009e3 * 0.00227),
             "WpHtoGG_M_125": 0.880114e3 * 0.00227,
             "WmHtoGG_M_125": 0.562032e3 * 0.00227,
             "ZHtoGG_M_125": 0.9361e3 * 0.00227,
-            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": 0.034e3 * 0.00227 * 0.582 * 2,#0.02964e3 * 0.00227 * 0.582 * 2,  # cross sectio of GluGluToHH * BR(HToGG) * BR(HToGG) * 2 for two combination ### have to recheck if this is correct. 
-            "VBFHH_CV_1p000_C2V_1p000_C3_1p000": 0.00173e3 * 0.00227 * 0.582 * 2,  # cross sectio of VBFToHH * BR(HToGG) * BR(HTobb) * 2 for two combination ### have to recheck if this is correct.
+            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": 8.1e-02 if ("201" in era) else (0.034e3 * 0.00227 * 0.582 * 2), #0.02964e3 * 0.00227 * 0.582 * 2,  # cross sectio of GluGluToHH * BR(HToGG) * BR(HToGG) * 2 for two combination
+            # Needs to be fixed according to recommendations: https://twiki.cern.ch/twiki/bin/view/LHCPhysics/LHCHWGHH?redirectedfrom=LHCPhysics.LHCHXSWGHH#HHjj_VBF
+            "VBFHH_CV_1p000_C2V_1p000_C3_1p000": 0.00173e3 * 0.00227 * 0.582 * 2,  # cross sectio of VBFToHH * BR(HToGG) * BR(HTobb) * 2 for two combination
             "DDQCDGJET": 1.0,
             "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": 0.09965e3 * 0.00227 * 0.582 * 2,
             "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": 0.07575e3 * 0.00227 * 0.582 * 2,
@@ -369,12 +396,16 @@ class PrepareInputs:
             "TT": 730e3,
         }
         luminosities = {
-        "preEE": 7.98,  # Integrated luminosity in fb^-1
+        "2016preVFP": 19.5,  # Integrated luminosity for preEE in fb^-1
+        "2016postVFP": 16.8,  # Integrated luminosity for preEE in fb^-1
+        "2017": 42.07,  # Integrated luminosity for preEE in fb^-1
+        "2018": 59.56, # Integrated luminosity in fb^-1
+        "preEE": 7.98, # Integrated luminosity in fb^-1
         "postEE": 26.67,  # Integrated luminosity in fb^-1
         "preBPix": 17.794,  # Integrated luminosity in fb^-1
         "postBPix": 9.451,  # Integrated luminosity in fb^-1
-        "2024": 109.08,  # Integrated luminosity in fb^-1
-        "2025": 115.65  # Integrated luminosity in fb^-1
+        "2024": 108.95,  # Integrated luminosity in fb^-1
+        "2025": 110.73  # Integrated luminosity in fb^-1
         }
 
         lumi = luminosities[era]
@@ -498,7 +529,7 @@ class PrepareInputs:
 
     def corr_with_mgg_mjj(self, events, vars_for_training, out_path):
 
-        "nonResReg_dijet_mass", "nonResReg_dijet_mass_DNNreg"
+        f"{self.var_prefix}_dijet_mass", f"{self.var_prefix}_dijet_mass_DNNreg"
 
         corr_matrix = np.zeros([len(vars_for_training), 4])
         for i in range(len(vars_for_training)):
@@ -514,15 +545,15 @@ class PrepareInputs:
             var_values = events[var][mask]
             corr_matrix[i, 1] = np.corrcoef(nonRes_dijet_mass, var_values)[0, 1]
 
-            mask = ((events[var] > -998.0) & (events.nonResReg_dijet_mass > -998.0))
-            nonResReg_dijet_mass = events.nonResReg_dijet_mass[mask]
+            mask = ((events[var] > -998.0) & (events[f"{self.var_prefix}_dijet_mass"] > -998.0))
+            reg_dijet_mass = events[f"{self.var_prefix}_dijet_mass"][mask]
             var_values = events[var][mask]
-            corr_matrix[i, 2] = np.corrcoef(nonResReg_dijet_mass, var_values)[0, 1]
+            corr_matrix[i, 2] = np.corrcoef(reg_dijet_mass, var_values)[0, 1]
 
-            mask = ((events[var] > -998.0) & (events.nonResReg_dijet_mass_DNNreg > -998.0))
-            nonResReg_dijet_mass_DNNreg = events.nonResReg_dijet_mass_DNNreg[mask]
+            mask = ((events[var] > -998.0) & (events[f"{self.var_prefix}_dijet_mass_DNNreg"] > -998.0))
+            reg_dijet_mass_DNNreg = events[f"{self.var_prefix}_dijet_mass_DNNreg"][mask]
             var_values = events[var][mask]
-            corr_matrix[i, 3] = np.corrcoef(nonResReg_dijet_mass_DNNreg, var_values)[0, 1]
+            corr_matrix[i, 3] = np.corrcoef(reg_dijet_mass_DNNreg, var_values)[0, 1]
 
         # plot the correlation matrix
         plt.figure(figsize=(18, len(vars_for_training)))
@@ -533,7 +564,7 @@ class PrepareInputs:
                 # format the value to 2 decimal places
                 plt.text(j, i, f"{corr_matrix[i, j]:.2f}", ha='center', va='center', color='b')
 
-        plt.xticks([0, 1, 2, 3], ['mass', 'nonRes_dijet_mass', 'nonResReg_dijet_mass', 'nonResReg_dijet_mass_DNNreg'], rotation=90)
+        plt.xticks([0, 1, 2, 3], ['mass', 'nonRes_dijet_mass', f'{self.var_prefix}_dijet_mass', f'{self.var_prefix}_dijet_mass_DNNreg'], rotation=90)
         plt.yticks(range(len(vars_for_training)), vars_for_training)
         plt.colorbar()
         plt.savefig(f'{out_path}', dpi=300, )
@@ -541,9 +572,9 @@ class PrepareInputs:
 
     
     def preselection(self, events):
-        
+
         mass_bool = ((events.mass > 100) & (events.mass < 180))
-        dijet_mass_bool = ((events.nonResReg_dijet_mass_DNNreg > 70) & (events.nonResReg_dijet_mass_DNNreg < 190))
+        dijet_mass_bool = ((events[f"{self.var_prefix}_dijet_mass_DNNreg"] > 70) & (events[f"{self.var_prefix}_dijet_mass_DNNreg"] < 190))
 
         lead_mvaID_bool = (events.lead_mvaID > -0.7)
         sublead_mvaID_bool = (events.sublead_mvaID > -0.7)
@@ -551,9 +582,9 @@ class PrepareInputs:
         events = events[mass_bool & dijet_mass_bool & lead_mvaID_bool & sublead_mvaID_bool]
 
         return events
-    
+
     def preselection_for_pred(self, events):
-        
+
         mass_bool = ((events.mass > 100) & (events.mass < 180))
 
         lead_mvaID_bool = (events.lead_mvaID > -0.7)
@@ -679,7 +710,8 @@ class PrepareInputs:
         # get the variables required for training
         vars_config = self.load_vars(self.input_var_json)[self.model_type]
 
-        vars_for_training = vars_config["vars"] 
+        # Substitute generic 'regcol_' prefix with actual var_prefix
+        vars_for_training = self.substitute_var_prefix(vars_config["vars"])
         # vars_for_log = vars_config["vars_for_log_transform"]
 
         vars_to_load = vars_for_training + self.extra_vars
@@ -833,17 +865,6 @@ class PrepareInputs:
         out_path = f"{inputs_path}/individual_samples/"
         os.makedirs(out_path, exist_ok=True)
 
-        # get the variables required for training
-        vars_config = self.load_vars(self.input_var_json)[self.model_type]
-
-        with open(f"{inputs_path}/input_vars.txt", 'r') as f:
-            vars = json.load(f)
-        vars_for_training = vars
-
-        # vars_for_log = vars_config["vars_for_log_transform"]
-
-        vars_to_load = vars_for_training + self.extra_vars + self.vars_for_boosted + ["lead_genPartFlav", "sublead_genPartFlav", "weight_tot"]
-
         samples_path = training_info["samples_info"]["samples_path"]
 
         # Load mean/std once for all samples
@@ -854,6 +875,22 @@ class PrepareInputs:
         std = mean_std_dict["std_dev"]
 
         for era in training_info["samples_info"]["eras"]:
+            # get the variables required for training
+            vars_config = self.load_vars(self.input_var_json)[self.model_type]
+
+            with open(f"{inputs_path}/input_vars.txt", 'r') as f:
+                vars = json.load(f)
+            # Variables should already have the correct prefix from training, no need to substitute again
+            vars_for_training = vars
+            # vars_for_log = vars_config["vars_for_log_transform"]
+
+            vars_to_load = vars_for_training + self.extra_vars + self.vars_for_boosted + ["lead_genPartFlav", "sublead_genPartFlav", "weight_tot"]
+
+            # Temporary fix for v4p5 version of Run 2
+            if ("201" in era) or ("EE" in era) or ("BPix" in era):
+                vars_for_training = [var.replace(f"{self.var_prefix}_", "") if "VBF" in var else var for var in vars_for_training]
+                vars_to_load = [var.replace(f"{self.var_prefix}_", "") if "VBF" in var else var for var in vars_to_load]
+
             for samples in training_info["samples_info"][era].keys():
 
                 parquet_path = training_info["samples_info"][era][samples]
@@ -902,8 +939,17 @@ class PrepareInputs:
                 np.save(f"{full_path_to_save}/X", X)
                 np.save(f"{full_path_to_save}/rel_w", relative_weights)
 
-                # also save the event
-                ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
+                # Save events to parquet
+                # Convert each field individually to avoid Arrow schema conversion issues
+                arrays = []
+                names = []
+                for field in events.fields:
+                    arrow_array = ak.to_arrow(events[field])
+                    arrays.append(arrow_array)
+                    names.append(field)
+
+                arrow_table = pa.table(dict(zip(names, arrays)))
+                pq.write_table(arrow_table, f"{full_path_to_save}/events.parquet")
 
                 # Explicitly free memory
                 del X, relative_weights, events, mask
@@ -932,6 +978,7 @@ class PrepareInputs:
 
         with open(f"{inputs_path}/input_vars.txt", 'r') as f:
             vars = json.load(f)
+        # Variables should already have the correct prefix from training, no need to substitute again
         vars_for_training = vars
 
         # vars_for_log = vars_config["vars_for_log_transform"]
@@ -1029,16 +1076,6 @@ class PrepareInputs:
         out_path = f"{inputs_path}/individual_samples_data/"
         os.makedirs(out_path, exist_ok=True)
 
-        # get the variables required for training
-        vars_config = self.load_vars(self.input_var_json)[self.model_type]
-        with open(f"{inputs_path}/input_vars.txt", 'r') as f:
-            vars = json.load(f)
-        vars_for_training = vars
-
-        # vars_for_log = vars_config["vars_for_log_transform"]
-
-        vars_to_load = vars_for_training + self.extra_vars + self.vars_for_boosted
-
         samples_path = training_info["samples_info"]["samples_path"]
         datas = training_info["samples_info"]["data"]
 
@@ -1049,7 +1086,11 @@ class PrepareInputs:
         mean = mean_std_dict["mean"]
         std = mean_std_dict["std_dev"]
 
-        sample_to_era = {"2022_EraE": "postEE",
+        sample_to_era = {"2016preVFP": "2016preVFP",
+                         "2016postVFP": "2016postVFP",
+                         "2017": "2017",
+                         "2018": "2018",
+                         "2022_EraE": "postEE",
                          "2022_EraF": "postEE",
                          "2022_EraG": "postEE",
                          "2022_EraC": "preEE",
@@ -1062,6 +1103,21 @@ class PrepareInputs:
                          "2025": "2025"}
 
         for data in datas:
+            # Temporary fix for v4p5 version of Run 2
+            # get the variables required for training
+            vars_config = self.load_vars(self.input_var_json)[self.model_type]
+            with open(f"{inputs_path}/input_vars.txt", 'r') as f:
+                vars = json.load(f)
+            # Variables should already have the correct prefix from training, no need to substitute again
+            vars_for_training = vars
+            # vars_for_log = vars_config["vars_for_log_transform"]
+
+            vars_to_load = vars_for_training + self.extra_vars + self.vars_for_boosted
+
+            if ("201" in data) or ("2022" in data) or ("2023" in data):
+                vars_for_training = [var.replace(f"{self.var_prefix}_", "") if "VBF" in var else var for var in vars_for_training]
+                vars_to_load = [var.replace(f"{self.var_prefix}_", "") if "VBF" in var else var for var in vars_to_load]
+
             # Load and process sample with apply_xsec_weights=False for data
             events = self.load_and_process_sample(
                 samples_path=samples_path,

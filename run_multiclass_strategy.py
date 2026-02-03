@@ -67,7 +67,7 @@ def perform_training(args):
     # plot the training results
     if args.plot_training_results:
         print('INFO: Getting the results plots')
-        subprocess.run(f"python3 models/mlp_plotter.py --input_path {out_path}", shell=True)
+        subprocess.run(f"python3 models/mlp_plotter.py --input_path {out_path} --config_path {config_path}/training_config.yaml", shell=True)
         
     # get permutaion importance
     if args.get_permutation_importance:

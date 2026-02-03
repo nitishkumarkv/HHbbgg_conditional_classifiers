@@ -6,11 +6,23 @@ import mplhep as hep
 import awkward as ak
 import yaml
 
+#def substitute_var_prefix(var_list):
+#    """
+#    Replace generic 'regcol_' prefix with the actual var_prefix.
+#
+#    Args:
+#        var_list: List of variable names (may contain 'regcol_' prefix)
+#
+#    Returns:
+#        List of variable names with 'regcol_' replaced by self.var_prefix
+#    """
+#
+
 # Apply CMS style
 hep.style.use("CMS")
 
 
-def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, bins=40, mass_window=(120, 130), mjj_mass_window=(110, 140), signal_scale=100, only_MC=False):
+def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, bins=40, mass_window=(120, 130), mjj_mass_window=(110, 140), signal_scale=100, only_MC=False, var_prefix="nonResReg"):
     """
     Load data first, then loop over variables to plot stacked histograms with MC and Data, including ratio plots.
 
@@ -92,11 +104,11 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
         
     def add_var(events):
 
-        events["diphoton_PtOverM_ggjj"] = events.pt / events.nonResReg_HHbbggCandidate_mass
-        events["nonResReg_dijet_PtOverM_ggjj"] = events.nonResReg_dijet_pt / events.nonResReg_HHbbggCandidate_mass
+        events["diphoton_PtOverM_ggjj"] = events.pt / events[f"{var_prefix}_HHbbggCandidate_mass"]
+        events[f"{var_prefix}_dijet_PtOverM_ggjj"] = events[f"{var_prefix}_dijet_pt"] / events[f"{var_prefix}_HHbbggCandidate_mass"]
 
-        events["nonResReg_lead_bjet_over_M_regressed"] = events.nonResReg_lead_bjet_pt / events.nonResReg_dijet_mass_DNNreg
-        events["nonResReg_sublead_bjet_over_M_regressed"] = events.nonResReg_sublead_bjet_pt / events.nonResReg_dijet_mass_DNNreg
+        events[f"{var_prefix}_lead_bjet_over_M_regressed"] = events[f"{var_prefix}_lead_bjet_pt"] / events[f"{var_prefix}_dijet_mass_DNNreg"]
+        events[f"{var_prefix}_sublead_bjet_over_M_regressed"] = events[f"{var_prefix}_sublead_bjet_pt"] / events[f"{var_prefix}_dijet_mass_DNNreg"]
 
         # add deltaR between lead and sublead photon
         events["deltaR_gg"] = deltaR(events.lead_eta, events.lead_phi, events.sublead_eta, events.sublead_phi)
@@ -106,7 +118,7 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
 
     def add_preselection(events):
         mass_bool = ((events.mass > 100) & (events.mass < 180))
-        dijet_mass_bool = ((events.nonResReg_dijet_mass_DNNreg > 70) & (events.nonResReg_dijet_mass_DNNreg < 190))
+        dijet_mass_bool = ((events[f"{var_prefix}_dijet_mass_DNNreg"] > 70) & (events[f"{var_prefix}_dijet_mass_DNNreg"] < 190))
 
         lead_mvaID_bool = (events.lead_mvaID > -0.7)
         sublead_mvaID_bool = (events.sublead_mvaID > -0.7)
@@ -117,7 +129,11 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
 
         return events
 
-    class_names = ["non_resonant_bkg_score", "ttH_score", "other_single_H_score", "GluGluToHH_score", "VBFToHH_sig_score"]
+    # Load class names from training config and append "_score" suffix
+    class_names_raw = training_config["classes"]
+    class_names = [f"{class_name}_score" for class_name in class_names_raw]
+    print(f"Loaded class names from config: {class_names}")
+
     events_path = samples_info["samples_path"]
 
     # Load Data First
@@ -204,17 +220,12 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
         "nonRes_dijet_mass": {"label": r"$m_{jj}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
         "dijet_mass": {"label": r"$m_{jj}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
         "nonRes_mjj_regressed": {"label": r"$m_{jj}^{reg}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
-        "nonResReg_dijet_mass": {"label": r"$m_{jj}^{reg}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
-        "nonResReg_dijet_mass_DNNreg": {"label": r"$m_{jj}^{reg}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
-        "nonResReg_DNNpair_dijet_mass": {"label": r"$m_{jj}^{reg}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
-        "nonResReg_DNNpair_dijet_mass_DNNreg": {"label": r"$m_{jj}^{reg}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
+        f"{var_prefix}_dijet_mass": {"label": r"$m_{jj}^{reg}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
+        f"{var_prefix}_dijet_mass_DNNreg": {"label": r"$m_{jj}^{reg}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
+        f"{var_prefix}_DNNpair_dijet_mass": {"label": r"$m_{jj}^{reg}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
+        f"{var_prefix}_DNNpair_dijet_mass_DNNreg": {"label": r"$m_{jj}^{reg}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
         "Res_mjj_regressed": {"label": r"Resonant $m_{jj}^{reg}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
         "Res_dijet_mass": {"label": r" Resonant $m_{jj}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
-        "non_resonant_bkg_score": {"label": "non_resonant_bkg_score", "bins": 30, "range": (0, 1), "log": True},
-        "ttH_score": {"label": "ttH_score", "bins": 30, "range": (0, 1), "log": True},
-        "other_single_H_score": {"label": "other_single_H_score", "bins": 30, "range": (0, 1), "log": True},
-        "GluGluToHH_score": {"label": "GluGluToHH_score", "bins": 30, "range": (0, 1), "log": True},
-        "VBFToHH_sig_score": {"label": "VBFToHH_sig_score", "bins": 30, "range": (0, 1), "log": True},
         "minMVAID": {"label": "minMVAID", "bins": 30, "range": (-0.7, 1), "log": True},
         "maxMVAID": {"label": "maxMVAID", "bins": 30, "range": (-0.7, 1), "log": True},
         "n_jets": {"label": "n_jets", "bins": 10, "range": (0, 10), "log": False},
@@ -227,6 +238,10 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
         "lead_mvaID": {"label": "lead_mvaID", "bins": 30, "range": (-0.7, 1), "log": True},
         "sublead_mvaID": {"label": "sublead_mvaID", "bins": 30, "range": (-0.7, 1), "log": True},
     }
+
+    # Dynamically add score variables to var_config
+    for class_name in class_names:
+        var_config[class_name] = {"label": class_name, "bins": 30, "range": (0, 1), "log": True}
 
     # Loop Over Variables and Create Plots
     for variable in variables:
@@ -299,6 +314,10 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
             ax, ax_ratio = axs
 
         luminosities = {
+        "2016preVFP": 19.5,  # Integrated luminosity for preEE in fb^-1
+        "2016postVFP": 16.8,  # Integrated luminosity for preEE in fb^-1
+        "2017": 42.07,  # Integrated luminosity for preEE in fb^-1
+        "2018": 59.56,  # Integrated luminosity for preEE in fb^-1
         "preEE": 7.98,  # Integrated luminosity for preEE in fb^-1
         "postEE": 26.67,  # Integrated luminosity for postEE in fb^-1
         "preBPix": 17.794,  # Integrated luminosity for preEE in fb^-1
@@ -447,12 +466,16 @@ if __name__ == "__main__":
     sim_folder = f"{base_path}/individual_samples"
     data_folder = f"{base_path}/individual_samples_data"
 
+    # Get var_prefix from training config, default to "nonResReg" for backwards compatibility
+    var_prefix = training_config.get("var_prefix", "nonResReg")
+
     #sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET", "TTG_100_200", "TTG_200"]
-    sim_samples = ["VBFHToGG_M_125", "WmHtoGG_M_125", "WpHtoGG_M_125", "ZHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "VBFHH_CV_1p000_C2V_1p000_C3_1p000", "TTGG", "GGJets", "DDQCDGJET"]
-    variables_ = [] # ["Res_mjj_regressed", "Res_dijet_mass", "nonRes_mjj_regressed", "mass", "nonRes_dijet_mass", "minMVAID", "maxMVAID", "n_jets", "sublead_eta", "lead_eta", "sublead_pt", "lead_pt", "pt", "eta", "lead_mvaID", "sublead_mvaID", "nonResReg_dijet_mass_DNNreg", "nonResReg_HHbbggCandidate_mass", "nonResReg_dijet_pt", "nonResReg_lead_bjet_eta", "nonResReg_sublead_bjet_eta", "nonResReg_lead_bjet_pt", "nonResReg_sublead_bjet_pt"]
+    #sim_samples = ["VBFHToGG_M_125", "WmHtoGG_M_125", "WpHtoGG_M_125", "ZHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "VBFHH_CV_1p000_C2V_1p000_C3_1p000", "TTGG", "GGJets", "DDQCDGJET"]
+    sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "VBFHH_CV_1p000_C2V_1p000_C3_1p000", "TTGG", "GGJets", "DDQCDGJET"]
+    variables_ = ["mass", f"{var_prefix}_dijet_mass_DNNreg", "pt", f"{var_prefix}_HHbbggCandidate_mass", f"{var_prefix}_dijet_pt", f"{var_prefix}_lead_bjet_pt", f"{var_prefix}_sublead_bjet_pt"] # ["Res_mjj_regressed", "Res_dijet_mass", "nonRes_mjj_regressed", "mass", "nonRes_dijet_mass", "minMVAID", "maxMVAID", "n_jets", "sublead_eta", "lead_eta", "sublead_pt", "lead_pt", "pt", "eta", "lead_mvaID", "sublead_mvaID", f"{var_prefix}_dijet_mass_DNNreg", f"{var_prefix}_HHbbggCandidate_mass", f"{var_prefix}_dijet_pt", f"{var_prefix}_lead_bjet_eta", f"{var_prefix}_sublead_bjet_eta", f"{var_prefix}_lead_bjet_pt", f"{var_prefix}_sublead_bjet_pt"]
     extra_vars = [] # ["mass", "nonRes_dijet_mass", "Res_dijet_mass", "weight", "pt", "nonRes_dijet_pt", "Res_dijet_pt", "Res_lead_bjet_pt", "Res_sublead_bjet_pt", "Res_lead_bjet_ptPNetCorr", "Res_sublead_bjet_ptPNetCorr", "nonRes_HHbbggCandidate_mass", "Res_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "Res_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "jet1_mass", "jet2_mass", "jet3_mass", "jet4_mass", "jet5_mass", "jet6_mass", "Res_lead_bjet_jet_idx", "Res_sublead_bjet_jet_idx", "jet1_index", "jet2_index", "jet3_index", "jet4_index", "jet5_index", "jet6_index", "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet1_eta", "jet2_eta", "jet3_eta", "jet4_eta", "jet5_eta", "jet6_eta", "jet1_phi", "jet2_phi", "jet3_phi", "jet4_phi", "jet5_phi", "jet6_phi"]
 
-    # variables_ = ["mass", "nonRes_dijet_mass", "nonResReg_dijet_mass", "nonResReg_dijet_mass_DNNreg", "nonResReg_DNNpair_dijet_mass", "nonResReg_DNNpair_dijet_mass_DNNreg", "pt", "nonRes_dijet_pt", "nonRes_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "lead_eta", "lead_phi", "sublead_eta", "sublead_phi"]
+    # variables_ = ["mass", "nonRes_dijet_mass", f"{var_prefix}_dijet_mass", f"{var_prefix}_dijet_mass_DNNreg", f"{var_prefix}_DNNpair_dijet_mass", f"{var_prefix}_DNNpair_dijet_mass_DNNreg", "pt", "nonRes_dijet_pt", "nonRes_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "lead_eta", "lead_phi", "sublead_eta", "sublead_phi"]
 
     for BSM_sample in ["GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00"]:
         if BSM_sample in training_config["sample_to_class"].keys():
@@ -462,11 +485,13 @@ if __name__ == "__main__":
     with open(input_vars_path, "r") as f:
         input_vars = yaml.safe_load(f)
     
-    variables = variables_ + extra_vars + input_vars["mlp"]["vars"]
+    # Need to potentially revise the logic, as different data sets have different names for some variables => Not guaranteed to work for each era!
+    input_vars = [var.replace("regcol_", f"{var_prefix}_") if "regcol_" in var else var for var in input_vars["mlp"]["vars"]]
+    variables = variables_ + extra_vars + input_vars # substitute_var_prefix(input_vars["mlp"]["vars"])
     # remove duplicate variables in this
     variables = list(set(variables))
 
 
     out_path = f"{base_path}/"
-    plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, signal_scale=1000)
-    plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, signal_scale=1000, only_MC=True)
+    plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, signal_scale=1000, var_prefix=var_prefix)
+    plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, signal_scale=1000, only_MC=True, var_prefix=var_prefix)

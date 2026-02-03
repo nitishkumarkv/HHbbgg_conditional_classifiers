@@ -7,7 +7,7 @@ import torch.nn.functional as F
 import yaml
 
 
-def get_prediction(model_dict_path, model_path, X):
+def get_prediction(model_dict_path, model_path, X, output_size=None):
 
     if isinstance(model_dict_path, str):
         with open(model_dict_path, 'r') as f:
@@ -22,11 +22,33 @@ def get_prediction(model_dict_path, model_path, X):
     best_act_fn = getattr(nn, best_act_fn_name)
     best_dropout_prob = best_params['dropout_prob']
     input_size = X.shape[1]
-    output_size = 4
+
+    # Determine output_size: priority order: parameter > best_params > infer from checkpoint
+    model_state = None
+    if output_size is None:
+        if 'output_size' in best_params:
+            output_size = best_params['output_size']
+            print(f"Using output_size from best_params: {output_size}")
+        else:
+            # Infer from model checkpoint
+            model_state = torch.load(model_path, weights_only=False)
+            # Find the last linear layer in state dict
+            for key in reversed(list(model_state['model_state_dict'].keys())):
+                if 'weight' in key and 'layers' in key:
+                    output_size = model_state['model_state_dict'][key].shape[0]
+                    print(f"Inferred output_size from checkpoint: {output_size}")
+                    break
+            if output_size is None:
+                raise ValueError("Could not determine output_size. Please provide it as a parameter.")
+    else:
+        print(f"Using provided output_size: {output_size}")
 
     model = MLP(input_size, best_num_layers, best_num_nodes, output_size, best_act_fn, best_dropout_prob).to(device)
     model.to(device)
-    model_state = torch.load(model_path, weights_only=False)
+
+    # Load model state (reuse if already loaded for inference)
+    if model_state is None:
+        model_state = torch.load(model_path, weights_only=False)
     model.load_state_dict(model_state['model_state_dict'])
 
     model.eval()
@@ -81,12 +103,12 @@ def get_prediction_binary(model_dict_path, model_path, X):
 
     return y
 
-def get_prediction_parquet(model_dict_path, model_path, X_path):
+def get_prediction_parquet(model_dict_path, model_path, X_path, output_size=None):
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     X = torch.tensor(np.load(X_path), dtype=torch.float32).to(device)
     print(f"Getting prediction for {X_path}")
-    pred = get_prediction(model_dict_path, model_path, X)
+    pred = get_prediction(model_dict_path, model_path, X, output_size=output_size)
     print(np.sum(pred, axis=1))
 
     print(f"Saving prediction for {X_path} \n")
@@ -118,6 +140,10 @@ if __name__ == "__main__":
     samples_path = args.samples_path
     eras = training_config["samples_info"]["eras"]
 
+    # Get output_size from training config
+    output_size = len(training_config["classes"])
+    print(f"Number of output classes from training config: {output_size}")
+
     if args.get_pred_nominal:
 
         for era in eras:
@@ -131,8 +157,7 @@ if __name__ == "__main__":
                 X = torch.tensor(np.load(f'{inputs_path}/X.npy'), dtype=torch.float32).to(device)
 
                 print(f"Getting prediction for {sample} in {era} era")
-                #pred = get_prediction(model_dict_path, model_path, X)
-                pred = get_prediction(model_dict_path, model_path, X)
+                pred = get_prediction(model_dict_path, model_path, X, output_size=output_size)
                 print(np.sum(pred, axis=1))
                 # save the prediction
                 print(f"Saving prediction for {sample} in {era} era \n")
@@ -145,8 +170,7 @@ if __name__ == "__main__":
             X = torch.tensor(np.load(f'{inputs_path}/X.npy'), dtype=torch.float32).to(device)
 
             print(f"Getting prediction for {data_sample}")
-            #pred = get_prediction(model_dict_path, model_path, X)
-            pred = get_prediction(model_dict_path, model_path, X)
+            pred = get_prediction(model_dict_path, model_path, X, output_size=output_size)
             print(np.sum(pred, axis=1))
             # save the prediction
             print(f"Saving prediction for {data_sample} \n")
@@ -167,8 +191,7 @@ if __name__ == "__main__":
                     X = torch.tensor(np.load(f'{inputs_path}/X.npy'), dtype=torch.float32).to(device)
 
                     print(f"Getting prediction for {sample} in {era} era")
-                    #pred = get_prediction(model_dict_path, model_path, X)
-                    pred = get_prediction(model_dict_path, model_path, X)
+                    pred = get_prediction(model_dict_path, model_path, X, output_size=output_size)
                     print(np.sum(pred, axis=1))
                     # save the prediction
                     print(f"Saving prediction for {sample} in {era} era for {sys} \n")
