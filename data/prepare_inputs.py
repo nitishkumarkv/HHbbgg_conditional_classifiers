@@ -249,7 +249,7 @@ class PrepareInputs:
 
     def get_relative_xsec_weight(self, events, sample_type, era):
 
-        # for kl samples: https://twiki.cern.ch/twiki/bin/view/LHCPhysics/LHCHWGHH?redirectedfrom=LHCPhysics.LHCHXSWGHH#Latest_recommendations_for_gluon
+        # for kl samples and H BRs: https://gitlab.cern.ch/hh/recommendations/-/blob/master/CrossSections.md?ref_type=heads
         dict_xsec = {
             "GGJets": 88.75e3,
             "GJetPt20To40": 242.5e3,
@@ -263,16 +263,24 @@ class PrepareInputs:
             "WmHtoGG": 0.8889e3 * 0.00227,
             "WpHtoGG": 0.5677e3 * 0.00227,
             "ZHtoGG": 0.9439e3 * 0.00227,
-            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": 0.034e3 * 0.00227 * 0.582 * 2,#0.02964e3 * 0.00227 * 0.582 * 2,  # cross sectio of GluGluToHH * BR(HToGG) * BR(HToGG) * 2 for two combination ### have to recheck if this is correct. 
-            "VBFHHto2B2G_CV_1_C2V_1_C3_1": 0.00173e3 * 0.00227 * 0.582 * 2,  # cross sectio of VBFToHH * BR(HToGG) * BR(HTobb) * 2 for two combination ### have to recheck if this is correct.
+            "VBFHHto2B2G_CV_1_C2V_1_C3_1": 0.00173e3 * 0.00227 * 0.576 * 2,  # cross sectio of VBFToHH * BR(HToGG) * BR(HTobb) * 2 for two combination ### have to recheck if this is correct.
             "DDQCDGJET": 1.0,
-            "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": 0.09965e3 * 0.00227 * 0.582 * 2,
-            "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": 0.07575e3 * 0.00227 * 0.582 * 2,
-            "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": 0.01491e3 * 0.00227 * 0.582 * 2, #using formula listed above the table to extrapolate
             "TTG_10_100": 4.334e3,
             "TTG_100_200": 0.44e3,
             "TTG_200": 0.12e3,
             "TT": 730e3,
+        }
+        dict_xsec_ggHH_13TeV = {
+            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": 0.030649e3 * 0.00227 * 0.576 * 2,#0.033969e3 * 0.00227 * 0.576 * 2,  # cross sectio of GluGluToHH * BR(HToGG) * BR(HTobb) * 2 for two combination ### have to recheck if this is correct. 
+            "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": 0.068317e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": 0.013422e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": 0.090488e3 * 0.00227 * 0.576 * 2, 
+        }
+        dict_xsec_ggHH_13p6TeV = {
+            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": 0.033969e3 * 0.00227 * 0.576 * 2,#0.033969e3 * 0.00227 * 0.576 * 2,  # cross sectio of GluGluToHH * BR(HToGG) * BR(HTobb) * 2 for two combination ### have to recheck if this is correct. 
+            "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": 0.075495e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": 0.014864e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": 0.099298e3 * 0.00227 * 0.576 * 2,
         }
         luminosities = {
         "2016preVFP": 19.5,
@@ -281,17 +289,27 @@ class PrepareInputs:
         "2018": 59.56,
         "preEE": 7.98,  # Integrated luminosity for preEE in fb^-1
         "postEE": 26.67,  # Integrated luminosity for postEE in fb^-1
-        "preBPix": 17.794,  # Integrated luminosity for preEE in fb^-1
-        "postBPix": 9.451,  # Integrated luminosity for postEE in fb^-1
-        "2024": 108.95
+        "preBPix": 18.06,  # Integrated luminosity for preEE in fb^-1
+        "postBPix": 9.89,  # Integrated luminosity for postEE in fb^-1
+        "2024": 108.82
         }
 
         lumi = luminosities[era]
         if sample_type == "DDQCDGJET":
             lumi = 1.0
 
-        events["rel_xsec_weight"] = (events.weight) * dict_xsec[sample_type] * lumi
-        events["weight_tot"] = (events.weight) * dict_xsec[sample_type] * lumi
+        if sample_type in dict_xsec_ggHH_13p6TeV.keys():
+            if era in ["2016preVFP", "2016postVFP", "2017", "2018"]:
+                events["rel_xsec_weight"] = (events.weight) * dict_xsec_ggHH_13TeV[sample_type] * lumi
+                events["weight_tot"] = (events.weight) * dict_xsec_ggHH_13TeV[sample_type] * lumi
+            
+            elif era in ["preEE", "postEE", "preBPix", "postBPix", "2024"]:
+                events["rel_xsec_weight"] = (events.weight) * dict_xsec_ggHH_13p6TeV[sample_type] * lumi
+                events["weight_tot"] = (events.weight) * dict_xsec_ggHH_13p6TeV[sample_type] * lumi
+        
+        else:
+            events["rel_xsec_weight"] = (events.weight) * dict_xsec[sample_type] * lumi
+            events["weight_tot"] = (events.weight) * dict_xsec[sample_type] * lumi
 
         if (era == "2024") & (sample_type == "GGJets"):
             events["weight_tot"] = (events.weight_tot) * 1.59

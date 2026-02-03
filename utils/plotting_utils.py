@@ -325,9 +325,9 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
         "2018": 59.56,
         "preEE": 7.98,  # Integrated luminosity for preEE in fb^-1
         "postEE": 26.67,  # Integrated luminosity for postEE in fb^-1
-        "preBPix": 17.794,  # Integrated luminosity for preEE in fb^-1
-        "postBPix": 9.451,  # Integrated luminosity for postEE in fb^-1
-        "2024": 108.95
+        "preBPix": 18.06,  # Integrated luminosity for preEE in fb^-1
+        "postBPix": 9.89,  # Integrated luminosity for postEE in fb^-1
+        "2024": 108.82
         }
 
         lumi = 0
