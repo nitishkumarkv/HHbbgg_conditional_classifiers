@@ -181,9 +181,9 @@ def load_samples(base_path, samples, data=False, syst=""):
     for weight in weight_columns:
         samples_input.update({weight: []})
 
-    eras = ["preEE", "postEE", "preBPix", "postBPix", "2024"]
+    eras = ["2016preVFP", "2016postVFP", "2017", "2018", "preEE", "postEE", "preBPix", "postBPix", "2024"]
     if data:
-        eras = ["2022_EraC","2022_EraD","2022_EraE","2022_EraF","2022_EraG","2023_EraC","2023_EraD", "2024_EraC_EG0", "2024_EraC_EG1", "2024_EraD_EG0", "2024_EraD_EG1", "2024_EraE_EG0", "2024_EraE_EG1", "2024_EraF_EG0", "2024_EraF_EG1", "2024_EraG_EG0", "2024_EraG_EG1", "2024_EraH_EG0", "2024_EraH_EG1", "2024_EraIv1_EG0", "2024_EraIv1_EG1", "2024_EraIv2_EG0", "2024_EraIv2_EG1"]
+        eras = ["2016preVFP", "2016postVFP", "2017", "2018", "2022_EraC","2022_EraD","2022_EraE","2022_EraF","2022_EraG","2023_EraC","2023_EraD", "2024_EraC_EG0", "2024_EraC_EG1", "2024_EraD_EG0", "2024_EraD_EG1", "2024_EraE_EG0", "2024_EraE_EG1", "2024_EraF_EG0", "2024_EraF_EG1", "2024_EraG_EG0", "2024_EraG_EG1", "2024_EraH_EG0", "2024_EraH_EG1", "2024_EraIv1_EG0", "2024_EraIv1_EG1", "2024_EraIv2_EG0", "2024_EraIv2_EG1"]
 
     for era in eras:
         print("###########")
@@ -192,6 +192,9 @@ def load_samples(base_path, samples, data=False, syst=""):
         print()
         for sample in samples:
             if (sample in ["GGJets", "DDQCDGJET", "TTGG", "TT", "TTG_10_100", "TTG_100_200", "TTG_200"]) and (syst != ""):
+                continue
+
+            if (sample == "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00") & (era == "2016postVFP"):
                 continue
 
             if (era == "2024") & (sample == "VHtoGG_M_125"):
@@ -253,7 +256,13 @@ def load_samples(base_path, samples, data=False, syst=""):
             print(sample)
             samples_input["sample"].append(np.full(y.shape[0], sample))
 
-            if "22" in era or "EE" in era:
+            if "16" in era:
+                year = 2016
+            elif "17" in era:
+                year = 2017
+            elif "18" in era:
+                year = 2018
+            elif "22" in era or "EE" in era:
                 year = 2022
             elif "23" in era or "BPix" in era:
                 year = 2023
