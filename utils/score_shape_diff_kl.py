@@ -45,14 +45,8 @@ def plot_score_shape_diff_kl(folder):
         postBPix = ak.from_parquet(f"{folder}/postBPix/{sample}/events.parquet", columns=["weight_tot", "mass", "nonResReg_dijet_mass_DNNreg", "lead_mvaID", "sublead_mvaID"])
         y2024 = ak.from_parquet(f"{folder}/2024/{sample}/events.parquet", columns=["weight_tot", "mass", "nonResReg_dijet_mass_DNNreg", "lead_mvaID", "sublead_mvaID"])
 
-        if sample != "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00":
-            postVFP = ak.from_parquet(f"{folder}/2016postVFP/{sample}/events.parquet", columns=["weight_tot", "mass", "nonResReg_dijet_mass_DNNreg", "lead_mvaID", "sublead_mvaID"])
-            events = ak.concatenate([preVFP, postVFP, y2017, y2018, preEE, postEE, preBPix, postBPix, y2024], axis=0)
-        else:
-            events = ak.concatenate([preVFP, y2017, y2018, preEE, postEE, preBPix, postBPix, y2024], axis=0)
 
         score_preVFP = np.load(f"{folder}/2016preVFP/{sample}/y.npy")
-        score_postVFP = np.load(f"{folder}/2016postVFP/{sample}/y.npy")
         score_2017 = np.load(f"{folder}/2017/{sample}/y.npy")
         score_2018 = np.load(f"{folder}/2018/{sample}/y.npy")
         score_preEE = np.load(f"{folder}/preEE/{sample}/y.npy")
@@ -60,8 +54,16 @@ def plot_score_shape_diff_kl(folder):
         score_preBPix = np.load(f"{folder}/preBPix/{sample}/y.npy")
         score_postBPix = np.load(f"{folder}/postBPix/{sample}/y.npy")
         score_2024 = np.load(f"{folder}/2024/{sample}/y.npy")
-        
-        score = np.concatenate([score_preVFP, score_postVFP, score_2017, score_2018, score_preEE, score_postEE, score_preBPix, score_postBPix, score_2024], axis=0)
+
+        if sample != "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00":
+            postVFP = ak.from_parquet(f"{folder}/2016postVFP/{sample}/events.parquet", columns=["weight_tot", "mass", "nonResReg_dijet_mass_DNNreg", "lead_mvaID", "sublead_mvaID"])
+            score_postVFP = np.load(f"{folder}/2016postVFP/{sample}/y.npy")
+
+            events = ak.concatenate([preVFP, postVFP, y2017, y2018, preEE, postEE, preBPix, postBPix, y2024], axis=0)
+            score = np.concatenate([score_preVFP, score_postVFP, score_2017, score_2018, score_preEE, score_postEE, score_preBPix, score_postBPix, score_2024], axis=0)
+        else:
+            events = ak.concatenate([preVFP, y2017, y2018, preEE, postEE, preBPix, postBPix, y2024], axis=0)
+            score = np.concatenate([score_preVFP, score_2017, score_2018, score_preEE, score_postEE, score_preBPix, score_postBPix, score_2024], axis=0)
 
         # apply preselection
         events, score = preselection(events, score)
