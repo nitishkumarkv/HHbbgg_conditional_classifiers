@@ -248,40 +248,63 @@ class PrepareInputs:
 
 
     def get_relative_xsec_weight(self, events, sample_type, era):
-
+        # Using mH = 125.4 GeV
         # for kl samples and H BRs: https://gitlab.cern.ch/hh/recommendations/-/blob/master/CrossSections.md?ref_type=heads
-        dict_xsec = {
-            "GGJets": 88.75e3,
-            "GJetPt20To40": 242.5e3,
-            "GJetPt40": 919.1e3,
-            "TTGG": 0.02391e3,  # cross sectio of TTGG 0.01696, copilot: 0.502
-            "ttHtoGG_M_125": 0.5700e3 * 0.00227,  # cross sectio of ttH * BR(HToGG)
-            "BBHto2G_M_125": 0.4385e3 * 0.00227,  # cross sectio of BBH * BR(HToGG)
-            "GluGluHToGG_M_125": 52.23e3 * 0.00227,  # cross sectio of GluGluHToGG * BR(HToGG)
-            "VBFHToGG_M_125": 4.078e3 * 0.00227,
-            "VHtoGG_M_125": 2.4009e3 * 0.00227,
-            "WmHtoGG": 0.8889e3 * 0.00227,
-            "WpHtoGG": 0.5677e3 * 0.00227,
-            "ZHtoGG": 0.9439e3 * 0.00227,
-            "VBFHHto2B2G_CV_1_C2V_1_C3_1": 0.00173e3 * 0.00227 * 0.576 * 2,  # cross sectio of VBFToHH * BR(HToGG) * BR(HTobb) * 2 for two combination ### have to recheck if this is correct.
+        # for singleH at 13.6 TeV: https://twiki.cern.ch/twiki/bin/view/LHCPhysics/LHCHWG136TeVxsec_extrap
+        # for singleH at 13 TeV: https://twiki.cern.ch/twiki/bin/view/LHCPhysics/CERNYellowReportPageAt13TeV#gluon_gluon_Fusion_Process
+        
+        dict_xsec_13TeV = {
+            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": 0.030649e3 * 0.00227 * 0.576 * 2,#0.033969e3 * 0.00227 * 0.576 * 2,  # cross sectio of GluGluToHH * BR(HToGG) * BR(HTobb) * 2 for two combination ### have to recheck if this is correct. 
+            "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": 0.068317e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": 0.013422e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": 0.090488e3 * 0.00227 * 0.576 * 2,
+
+            # For singleH, XS(process) * BR(HtoGG)
+            # Using mH = 125.4 unless specified otherwise
+            "ttHtoGG_M_125": 0.5033e3 * 0.00227,
+            "BBHto2G_M_125": 0.5223e3 * 0.00227,
+            "GluGluHToGG_M_125": 48.30e3 * 0.00227,
+            "VBFHToGG_M_125": 3.770e3 * 0.00227,
+            "VHtoGG_M_125": 2.2347e3 * 0.00227, # XS is sum of WH and ZH
+
             "DDQCDGJET": 1.0,
             "TTG_10_100": 4.334e3,
             "TTG_100_200": 0.44e3,
             "TTG_200": 0.12e3,
             "TT": 730e3,
+            "GGJets": 88.75e3,
+            "GJetPt20To40": 242.5e3,
+            "GJetPt40": 919.1e3,
+            "TTGG": 0.02391e3,  # cross sectio of TTGG 0.01696, copilot: 0.502
         }
-        dict_xsec_ggHH_13TeV = {
-            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": 0.030649e3 * 0.00227 * 0.576 * 2,#0.033969e3 * 0.00227 * 0.576 * 2,  # cross sectio of GluGluToHH * BR(HToGG) * BR(HTobb) * 2 for two combination ### have to recheck if this is correct. 
-            "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": 0.068317e3 * 0.00227 * 0.576 * 2,
-            "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": 0.013422e3 * 0.00227 * 0.576 * 2,
-            "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": 0.090488e3 * 0.00227 * 0.576 * 2, 
-        }
-        dict_xsec_ggHH_13p6TeV = {
+        dict_xsec_13p6TeV = {
             "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": 0.033969e3 * 0.00227 * 0.576 * 2,#0.033969e3 * 0.00227 * 0.576 * 2,  # cross sectio of GluGluToHH * BR(HToGG) * BR(HTobb) * 2 for two combination ### have to recheck if this is correct. 
             "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": 0.075495e3 * 0.00227 * 0.576 * 2,
             "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": 0.014864e3 * 0.00227 * 0.576 * 2,
             "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": 0.099298e3 * 0.00227 * 0.576 * 2,
+
+            # For singleH, XS(process) * BR(HtoGG)
+            # Using mH = 125.38 unless specified otherwise
+            "ttHtoGG_M_125": 0.5638e3 * 0.00227,
+            "BBHto2G_M_125": 0.5251e3 * 0.00227, # mH = 125.09
+            "GluGluHToGG_M_125": 51.96e3 * 0.00227,
+            "VBFHToGG_M_125": 4.067e3 * 0.00227,
+            "VHtoGG_M_125": 2.3781e3 * 0.00227, # XS is sum of WH and ZH
+            "WmHtoGG": 0.8801e3 * 0.00227,
+            "WpHtoGG": 0.5620e3 * 0.00227,
+            "ZHtoGG": 0.9361e3 * 0.00227,
+
+            "DDQCDGJET": 1.0,
+            "TTG_10_100": 4.334e3,
+            "TTG_100_200": 0.44e3,
+            "TTG_200": 0.12e3,
+            "TT": 730e3,
+            "GGJets": 88.75e3,
+            "GJetPt20To40": 242.5e3,
+            "GJetPt40": 919.1e3,
+            "TTGG": 0.02391e3,  # cross sectio of TTGG 0.01696, copilot: 0.502
         }
+
         luminosities = {
         "2016preVFP": 19.5,
         "2016postVFP": 16.8,
@@ -298,19 +321,16 @@ class PrepareInputs:
         if sample_type == "DDQCDGJET":
             lumi = 1.0
 
-        if sample_type in dict_xsec_ggHH_13p6TeV.keys():
-            if era in ["2016preVFP", "2016postVFP", "2017", "2018"]:
-                events["rel_xsec_weight"] = (events.weight) * dict_xsec_ggHH_13TeV[sample_type] * lumi
-                events["weight_tot"] = (events.weight) * dict_xsec_ggHH_13TeV[sample_type] * lumi
-            
-            elif era in ["preEE", "postEE", "preBPix", "postBPix", "2024"]:
-                events["rel_xsec_weight"] = (events.weight) * dict_xsec_ggHH_13p6TeV[sample_type] * lumi
-                events["weight_tot"] = (events.weight) * dict_xsec_ggHH_13p6TeV[sample_type] * lumi
+        if era in ["2016preVFP", "2016postVFP", "2017", "2018"]:
+            events["rel_xsec_weight"] = (events.weight) * dict_xsec_13TeV[sample_type] * lumi
+            events["weight_tot"] = (events.weight) * dict_xsec_13TeV[sample_type] * lumi
         
+        elif era in ["preEE", "postEE", "preBPix", "postBPix", "2024"]:
+            events["rel_xsec_weight"] = (events.weight) * dict_xsec_13p6TeV[sample_type] * lumi
+            events["weight_tot"] = (events.weight) * dict_xsec_13p6TeV[sample_type] * lumi
         else:
-            events["rel_xsec_weight"] = (events.weight) * dict_xsec[sample_type] * lumi
-            events["weight_tot"] = (events.weight) * dict_xsec[sample_type] * lumi
-
+            raise ValueError(f"Unknown era: {era}")
+        
         if (era == "2024") & (sample_type == "GGJets"):
             events["weight_tot"] = (events.weight_tot) * 1.59
 
