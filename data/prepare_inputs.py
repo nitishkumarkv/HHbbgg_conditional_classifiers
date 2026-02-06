@@ -272,14 +272,12 @@ class PrepareInputs:
             "VHtoGG_M_125": 2.2347e3 * 0.00227, # XS is sum of WH and ZH
 
             "DDQCDGJET": 1.0,
-            "TTG_10_100": 4.334e3,
-            "TTG_100_200": 0.44e3,
-            "TTG_200": 0.12e3,
-            "TT": 730e3,
+            "TTG_10_100": 4.216e3,
+            "TTG_100_200": 0.4114e3,
+            "TTG_200": 0.1284e3,
+            "TT": 762.3e3,
             "GGJets": 88.75e3,
-            "GJetPt20To40": 242.5e3,
-            "GJetPt40": 919.1e3,
-            "TTGG": 0.02391e3,  # cross sectio of TTGG 0.01696, copilot: 0.502
+            "TTGG": 0.02391e3,
         }
         dict_xsec_13p6TeV = {
             "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": 0.033969e3 * 0.00227 * 0.576 * 2,#0.033969e3 * 0.00227 * 0.576 * 2,  # cross sectio of GluGluToHH * BR(HToGG) * BR(HTobb) * 2 for two combination ### have to recheck if this is correct. 
@@ -299,14 +297,14 @@ class PrepareInputs:
             "ZHtoGG": 0.9361e3 * 0.00227,
 
             "DDQCDGJET": 1.0,
-            "TTG_10_100": 4.334e3,
-            "TTG_100_200": 0.44e3,
-            "TTG_200": 0.12e3,
-            "TT": 730e3,
-            "GGJets": 88.75e3,
+            "TTG_10_100": 4.216e3,
+            "TTG_100_200": 0.4114e3,
+            "TTG_200": 0.1284e3,
+            "TT": 762.3e3,
+            "GGJets": 87.51e3,
             "GJetPt20To40": 242.5e3,
             "GJetPt40": 919.1e3,
-            "TTGG": 0.02391e3,  # cross sectio of TTGG 0.01696, copilot: 0.502
+            "TTGG": 0.02391e3,
         }
 
         luminosities = {
