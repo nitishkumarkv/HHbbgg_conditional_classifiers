@@ -38,14 +38,11 @@ class PrepareInputs:
             self.write_chunk = self.training_info["write_chunk"]
         self.fill_nan = -9
 
-        #self.extra_vars = ["mass", "nonRes_dijet_mass", "Res_dijet_mass", "nonRes_has_two_btagged_jets", "weight", "pt", "nonRes_dijet_pt", "Res_dijet_pt", "Res_lead_bjet_pt", "Res_sublead_bjet_pt", "Res_lead_bjet_ptPNetCorr", "Res_sublead_bjet_ptPNetCorr", "nonRes_HHbbggCandidate_mass", "Res_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "Res_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "jet1_mass", "jet2_mass", "jet3_mass", "jet4_mass", "jet5_mass", "jet6_mass", "Res_lead_bjet_jet_idx", "Res_sublead_bjet_jet_idx", "jet1_index", "jet2_index", "jet3_index", "jet4_index", "jet5_index", "jet6_index",
-        #                   "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet1_eta", "jet2_eta", "jet3_eta", "jet4_eta", "jet5_eta", "jet6_eta", "jet1_phi", "jet2_phi", "jet3_phi", "jet4_phi", "jet5_phi", "jet6_phi", "lead_phi", "sublead_phi"]
 
-        # self.extra_vars = ["mass", "nonRes_dijet_mass", "nonResReg_dijet_mass", "nonResReg_dijet_mass_DNNreg", "nonResReg_HHbbggCandidate_mass", "weight", "pt", "nonResReg_dijet_pt", "nonResReg_lead_bjet_pt", "nonResReg_sublead_bjet_pt", "nonResReg_lead_bjet_eta", "nonResReg_DNNpair_dijet_mass", "nonResReg_DNNpair_dijet_mass_DNNreg", "nonRes_dijet_pt", "nonRes_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "lead_eta", "lead_phi", "sublead_eta", "sublead_phi", "lead_genPartFlav", "sublead_genPartFlav"]
-
-        self.extra_vars = ["mass", "nonResReg_dijet_mass_DNNreg", "nonRes_dijet_mass", "nonResReg_dijet_mass", "nonResReg_HHbbggCandidate_mass", "weight", "nonResReg_dijet_pt", "nonResReg_lead_bjet_pt", "nonResReg_sublead_bjet_pt", "pt", "eta", "lead_mvaID", "sublead_mvaID", "lead_eta", "lead_phi", "sublead_eta", "sublead_phi", "lead_genPartFlav", "sublead_genPartFlav"]
-
+        self.extra_vars_train = ["weight", "mass", "nonResReg_dijet_mass_DNNreg", "nonResReg_HHbbggCandidate_mass", "nonResReg_dijet_pt", "nonResReg_lead_bjet_pt", "nonResReg_sublead_bjet_pt", "pt"]
         
+        self.extra_vars_out = ["nonRes_dijet_mass", "nonResReg_dijet_mass", "lead_genPartFlav", "sublead_genPartFlav","n_electrons", "n_muons", "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet7_pt", "jet8_pt", "jet9_pt", "jet10_pt", "nBTight"]
+
         # prepare process numbers for proccesses in each class
         num_process_each_class = {
             class_: 0 for class_ in self.classes
@@ -129,96 +126,6 @@ class PrepareInputs:
             events["year"] = 4
         elif era == "2024":
             events["year"] = 5
-
-        # add jet related mass
-            
-        # # Build awkward array of jets
-        # jets = ak.zip({
-        #     "pt": ak.concatenate([events[f"jet{i}_pt"][:, None] for i in range(1, 7)], axis=1),
-        #     "eta": ak.concatenate([events[f"jet{i}_eta"][:, None] for i in range(1, 7)], axis=1),
-        #     "phi": ak.concatenate([events[f"jet{i}_phi"][:, None] for i in range(1, 7)], axis=1),
-        #     "mass": ak.concatenate([events[f"jet{i}_mass"][:, None] for i in range(1, 7)], axis=1),
-        #     "index": ak.concatenate([events[f"jet{i}_index"][:, None] for i in range(1, 7)], axis=1),
-        # }, with_name="Momentum4D")
-        
-        # # Mask out jets that are b-jets
-        # is_not_bjet = (jets.index != events.Res_lead_bjet_jet_idx[:, None]) & \
-        #               (jets.index != events.Res_sublead_bjet_jet_idx[:, None])
-        # jets_clean = jets[is_not_bjet]
-
-        # # Select up to 4 jets
-        # selected_jets = jets_clean[:, :4]
-        
-        # # ΔR to objects
-        # def min_deltaR_to(obj_eta, obj_phi):
-        #     min = ak.min(self.deltaR(selected_jets.eta, selected_jets.phi, obj_eta[:, None], obj_phi[:, None], fill_none=False), axis=1)
-        #     return ak.fill_none(min, -999.0)
-
-        # events["min_deltaR_jet_b1"] = min_deltaR_to(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi)
-        # events["min_deltaR_jet_b2"] = min_deltaR_to(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi)
-        # events["min_deltaR_jet_g1"] = min_deltaR_to(events.lead_eta, events.lead_phi)
-        # events["min_deltaR_jet_g2"] = min_deltaR_to(events.sublead_eta, events.sublead_phi)
-
-        # # deltaR betwreen the jets anf photons, bjets
-        # events["deltaR_g1_j1"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
-        # events["deltaR_g1_j2"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
-        # events["deltaR_g1_j3"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
-        # events["deltaR_g1_j4"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
-        # events["deltaR_g2_j1"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
-        # events["deltaR_g2_j2"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
-        # events["deltaR_g2_j3"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
-        # events["deltaR_g2_j4"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
-        # events["deltaR_b1_j1"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
-        # events["deltaR_b1_j2"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
-        # events["deltaR_b1_j3"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
-        # events["deltaR_b1_j4"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
-        # events["deltaR_b2_j1"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
-        # events["deltaR_b2_j2"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
-        # events["deltaR_b2_j3"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
-        # events["deltaR_b2_j4"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
-
-        # # add jet pt, eta, phi
-        # events["j1_pt"] = selected_jets.pt[:, 0]
-        # events["j2_pt"] = selected_jets.pt[:, 1]
-        # events["j3_pt"] = selected_jets.pt[:, 2]
-        # events["j4_pt"] = selected_jets.pt[:, 3]
-        # events["j1_eta"] = selected_jets.eta[:, 0]
-        # events["j2_eta"] = selected_jets.eta[:, 1]
-        # events["j3_eta"] = selected_jets.eta[:, 2]
-        # events["j4_eta"] = selected_jets.eta[:, 3]
-        # events["j1_phi"] = selected_jets.phi[:, 0]
-        # events["j2_phi"] = selected_jets.phi[:, 1]
-        # events["j3_phi"] = selected_jets.phi[:, 2]
-        # events["j4_phi"] = selected_jets.phi[:, 3]
-       
-
-
-        # # Build Lorentz vectors from selected_jets
-        # jets_vec = selected_jets
-
-        # # Pair indices for 4 jets
-        # pair_indices = [(0, 1), (0, 2), (0, 3),
-        #                 (1, 2), (1, 3),
-        #                 (2, 3)]
-
-        # pair_names = ["j1_j2", "j1_j3", "j1_j4", "j2_j3", "j2_j4", "j3_j4"]
-
-        #for (i, j), name in zip(pair_indices, pair_names):
-        #    # Mask if either jet is invalid (pt == -999)
-        #    valid = (selected_jets.pt[:, i] != -999) & (selected_jets.pt[:, j] != -999)
-
-        #    # Sum vectors and get invariant mass
-        #    m_pair = (jets_vec[:, i] + jets_vec[:, j]).mass
-
-        #    # Set to -999 if invalid
-        #    events[f"mass_{name}"] = ak.where(valid, m_pair, -999.0)
-
-        #    # Compute ΔR for the pair using your self.deltaR
-        #    delta_r = self.deltaR(
-        #        selected_jets.eta[:, i], selected_jets.phi[:, i],
-        #        selected_jets.eta[:, j], selected_jets.phi[:, j]
-        #    )
-        #    events[f"deltaR_{name}"] = ak.where(valid, delta_r, -999.0)
 
         return events
 
@@ -324,11 +231,9 @@ class PrepareInputs:
             lumi = 1.0
 
         if era in ["2016preVFP", "2016postVFP", "2017", "2018"]:
-            events["rel_xsec_weight"] = (events.weight) * dict_xsec_13TeV[sample_type] * lumi
             events["weight_tot"] = (events.weight) * dict_xsec_13TeV[sample_type] * lumi
         
         elif era in ["preEE", "postEE", "preBPix", "postBPix", "2024"]:
-            events["rel_xsec_weight"] = (events.weight) * dict_xsec_13p6TeV[sample_type] * lumi
             events["weight_tot"] = (events.weight) * dict_xsec_13p6TeV[sample_type] * lumi
         else:
             raise ValueError(f"Unknown era: {era}")
@@ -629,7 +534,7 @@ class PrepareInputs:
         vars_for_training = vars_config["vars"] 
         # vars_for_log = vars_config["vars_for_log_transform"]
 
-        vars_to_load = vars_for_training + self.extra_vars
+        vars_to_load = vars_for_training + self.extra_vars_train
 
         for era in self.training_info["samples_info"]["eras"]:
             # for samples in self.sample_to_class.keys():                
@@ -647,6 +552,8 @@ class PrepareInputs:
                 # get relative weights according to cross section of the process
                 events = self.get_relative_xsec_weight(events, samples, era)
 
+                events = events[vars_for_training + ["weight_tot"]]
+
                 # apply mHH bin filter (if configured) and skip sample if empty
                 if self.mhh_var is not None and self.mhh_range is not None:
                     events = self._apply_mhh_filter(events)
@@ -661,7 +568,8 @@ class PrepareInputs:
                 for cls in self.classes:  # first intialize everything to zero
                     events[cls] = ak.zeros_like(events.eta)
 
-                events[self.sample_to_class[samples]] = ak.ones_like(events.pt) # one-hot encoded
+                events[self.sample_to_class[samples]] = ak.ones_like(events.eta) # one-hot encoded
+
                 # comb_inputs.append(events)
                 events["sample_type"] = samples
 
@@ -671,7 +579,7 @@ class PrepareInputs:
                 # plot_correlation_matrix
                 os.makedirs(f"{out_path}/correlation_matrix/", exist_ok=True)
                 corr_out_path = f"{out_path}/correlation_matrix/{samples}_{era}.pdf"
-                self.corr_with_mgg_mjj(events, vars_for_training, corr_out_path)
+                # self.corr_with_mgg_mjj(events, vars_for_training, corr_out_path)
 
                 print("INFO: Appending process samples to whole dataframe")
 
@@ -694,7 +602,7 @@ class PrepareInputs:
 
         X = comb_inputs[vars_for_training]
         Y = comb_inputs[[cls for cls in self.classes]]
-        relative_weights = comb_inputs["rel_xsec_weight"]
+        relative_weights = comb_inputs["weight_tot"]
 
         # perform log transformation for variables if needed
         # for var in vars_for_log:
@@ -787,7 +695,7 @@ class PrepareInputs:
 
         # vars_for_log = vars_config["vars_for_log_transform"]
 
-        vars_to_load = vars_for_training + self.extra_vars
+        vars_to_load = vars_for_training + self.extra_vars_train + self.extra_vars_out
 
         samples_path = training_info["samples_info"]["samples_path"]
 
@@ -823,6 +731,8 @@ class PrepareInputs:
                 os.makedirs(full_path_to_save, exist_ok=True)
                 ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
 
+                events = events[vars_for_training + ["weight_tot"]]
+
                 comb_inputs = pd.DataFrame()
                 i = 0
                 while len(events) > 0:
@@ -833,7 +743,7 @@ class PrepareInputs:
 
                 X = comb_inputs[vars_for_training]
                 #Y = comb_inputs[[cls for cls in self.classes]]
-                relative_weights = comb_inputs["rel_xsec_weight"]
+                relative_weights = comb_inputs["weight_tot"]
 
                 # perform log transformation for variables if needed
                 # for var in vars_for_log:
@@ -892,7 +802,7 @@ class PrepareInputs:
 
         # vars_for_log = vars_config["vars_for_log_transform"]
 
-        vars_to_load = vars_for_training + self.extra_vars
+        vars_to_load = vars_for_training + self.extra_vars_train + self.extra_vars_out
 
         samples_path = training_info["samples_info"]["samples_path"]
 
@@ -935,6 +845,8 @@ class PrepareInputs:
                     os.makedirs(full_path_to_save, exist_ok=True)
                     ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
 
+                    events = events[vars_for_training + ["weight_tot"]]
+
                     comb_inputs = pd.DataFrame()
                     i = 0
                     while len(events) > 0:
@@ -945,7 +857,7 @@ class PrepareInputs:
 
                     X = comb_inputs[vars_for_training]
                     #Y = comb_inputs[[cls for cls in self.classes]]
-                    relative_weights = comb_inputs["rel_xsec_weight"]
+                    relative_weights = comb_inputs["weight_tot"]
 
                     # perform log transformation for variables if needed
                     # for var in vars_for_log:
@@ -1004,7 +916,7 @@ class PrepareInputs:
 
         # vars_for_log = vars_config["vars_for_log_transform"]
 
-        vars_to_load = vars_for_training + self.extra_vars
+        vars_to_load = vars_for_training + self.extra_vars_train + self.extra_vars_out
 
         samples_path = training_info["samples_info"]["samples_path"]
         datas = training_info["samples_info"]["data"]
@@ -1063,6 +975,8 @@ class PrepareInputs:
             full_path_to_save = f"{out_path}/{data}/"
             os.makedirs(full_path_to_save, exist_ok=True)
             ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
+
+            events = events[vars_for_training]
 
             comb_inputs = pd.DataFrame()
             i = 0
