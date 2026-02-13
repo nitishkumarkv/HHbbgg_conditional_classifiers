@@ -38,7 +38,7 @@ max_epoch: 300
 
 # ========== Decorrelation ==========
 use_DisCo: True
-decorr_lambda: 0.5
+decorr_lambda: 0.0
 disco_reduce_method: mean # mean, max, sum, quadrature
 # disco_decorr_class_idx: [0,1,2,3] # index of the class to decorrel, e.g. 0 for signal-only
 z_variables: # "Z dataset" variables to decorrelate against, e.g. mjj

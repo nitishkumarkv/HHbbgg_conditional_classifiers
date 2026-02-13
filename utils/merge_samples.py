@@ -12,7 +12,16 @@ from sklearn.preprocessing import StandardScaler
 import pandas as pd
 import mplhep
 import awkward as ak
+import pyarrow as pa
 import pyarrow.parquet as pq
+
+# Temporary shim for pyarrow>=17 renaming PyExtensionType.
+try:
+    import pyarrow.lib as _pa_lib  # type: ignore
+    if not hasattr(_pa_lib, "PyExtensionType") and hasattr(_pa_lib, "ExtensionType"):
+        _pa_lib.PyExtensionType = _pa_lib.ExtensionType  # type: ignore[attr-defined]
+except ImportError:
+    _pa_lib = None
 from typing import Any, Dict, List
 
 ################################################################################

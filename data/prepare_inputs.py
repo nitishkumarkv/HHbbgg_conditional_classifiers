@@ -8,6 +8,14 @@ import awkward as ak
 import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
+
+# Temporary shim for pyarrow>=17 where PyExtensionType was renamed.
+try:
+    import pyarrow.lib as _pa_lib  # type: ignore
+    if not hasattr(_pa_lib, "PyExtensionType") and hasattr(_pa_lib, "ExtensionType"):
+        _pa_lib.PyExtensionType = _pa_lib.ExtensionType  # type: ignore[attr-defined]
+except ImportError:
+    _pa_lib = None
 import mplhep as hep
 import matplotlib.pyplot as plt
 import pandas as pd
