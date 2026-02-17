@@ -1,0 +1,6 @@
+#:: Define which variable you want the MLP to predict (e.g. Mjj)
+target_variables:
+  - nonResReg_dijet_mass_DNNreg
+
+cuda_device: "0"
+max_epoch: 50

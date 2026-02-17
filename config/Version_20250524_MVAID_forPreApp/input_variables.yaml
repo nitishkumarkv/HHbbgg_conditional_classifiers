@@ -52,6 +52,7 @@ mlp:
     - VBF_DeltaR_jg_min
     - VBF_dijet_mass
     - nonResReg_HHbbggCandidate_eta
+    # - nonResReg_dijet_mass_DNNreg # TEMP: MJJ TRUTH FOR SCULPTING STUDY VALIDATION
     
     # variables added at preparation level which are not available in HiggsDNA output
     - diphoton_PtOverM_ggjj

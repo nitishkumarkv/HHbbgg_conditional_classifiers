@@ -1,35 +1,46 @@
+import os
+import json
+import yaml
+import glob
+import pickle
+from typing import Any, Dict, List, Optional, Tuple
 import awkward as ak
 import numpy as np
-import yaml
-import json
-import os
-from typing import Any, Dict, List, Optional
 import pyarrow as pa
 import pyarrow.parquet as pq
-import glob
+
+# Temporary shim for pyarrow>=17 where PyExtensionType was renamed.
+try:
+    import pyarrow.lib as _pa_lib  # type: ignore
+    if not hasattr(_pa_lib, "PyExtensionType") and hasattr(_pa_lib, "ExtensionType"):
+        _pa_lib.PyExtensionType = _pa_lib.ExtensionType  # type: ignore[attr-defined]
+except ImportError:
+    _pa_lib = None
 import mplhep as hep
 import matplotlib.pyplot as plt
 import pandas as pd
-import pickle
+from sklearn.model_selection import train_test_split
 from vector import register_awkward
 register_awkward()
 
 class PrepareInputs:
     def __init__(
         self,
-        input_var_json: Optional[Dict[str, Any]] = None,
+        input_var_path: Optional[str] = None,
         training_info: Optional[Dict[str, Any]] = None,
+        sculpting_study_info: Optional[Dict[str, Any]] = None,
         outpath: Optional[Dict[str, Any]] = None,
         predict_parquet_info: Optional[Dict[str, Any]] = None,
         mhh_var: Optional[str] = None,
         mhh_range: Optional[List[float]] = None,
         ) -> None:
         self.model_type = "mlp"
-        self.input_var_json = input_var_json
+        self.input_var_path = input_var_path
         self.training_info = training_info
+        self.sculpting_study_info = sculpting_study_info
         self.outpath = outpath
         self.predict_parquet_info = predict_parquet_info
-        
+
         if self.training_info is not None:
             self.sample_to_class = self.training_info["sample_to_class"]
             self.classes = self.training_info["classes"]
@@ -38,8 +49,37 @@ class PrepareInputs:
             self.write_chunk = self.training_info["write_chunk"]
         self.fill_nan = -9
 
+        if isinstance(self.input_var_path, dict):
+            raise ValueError("PrepareInputs argument 'input_var_path' should be a string path to the yaml file, not a dict.")
 
-        self.extra_vars_train = ["weight", "mass", "nonResReg_dijet_mass_DNNreg", "nonResReg_HHbbggCandidate_mass", "nonResReg_dijet_pt", "nonResReg_lead_bjet_pt", "nonResReg_sublead_bjet_pt", "pt"]
+        #self.extra_vars = ["mass", "nonRes_dijet_mass", "Res_dijet_mass", "nonRes_has_two_btagged_jets", "weight", "pt", "nonRes_dijet_pt", "Res_dijet_pt", "Res_lead_bjet_pt", "Res_sublead_bjet_pt", "Res_lead_bjet_ptPNetCorr", "Res_sublead_bjet_ptPNetCorr", "nonRes_HHbbggCandidate_mass", "Res_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "Res_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "jet1_mass", "jet2_mass", "jet3_mass", "jet4_mass", "jet5_mass", "jet6_mass", "Res_lead_bjet_jet_idx", "Res_sublead_bjet_jet_idx", "jet1_index", "jet2_index", "jet3_index", "jet4_index", "jet5_index", "jet6_index",
+        #                   "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet1_eta", "jet2_eta", "jet3_eta", "jet4_eta", "jet5_eta", "jet6_eta", "jet1_phi", "jet2_phi", "jet3_phi", "jet4_phi", "jet5_phi", "jet6_phi", "lead_phi", "sublead_phi"]
+
+        self.extra_vars = [
+            "mass",                             "nonRes_dijet_mass",                    "nonResReg_dijet_mass", 
+            "nonResReg_dijet_mass_DNNreg",      "nonResReg_HHbbggCandidate_mass",       "nonResReg_dijet_pt", 
+            "nonResReg_lead_bjet_pt",           "nonResReg_sublead_bjet_pt",            "nonResReg_lead_bjet_eta", 
+            "nonResReg_DNNpair_dijet_mass",     "nonResReg_DNNpair_dijet_mass_DNNreg",  "weight", 
+            "pt",                               "nonRes_dijet_pt",                      "nonRes_HHbbggCandidate_mass", 
+            "eta",                              "nBTight",                              "nBMedium",
+            "nBLoose",                          "nonRes_lead_bjet_pt",                  "nonRes_sublead_bjet_pt", 
+            "lead_isScEtaEB",                   "lead_isScEtaEE",                       "sublead_isScEtaEB", 
+            "sublead_isScEtaEE",                "lead_mvaID",                           "sublead_mvaID", 
+            "lead_eta",                         "lead_phi",                             "sublead_eta", 
+            "sublead_phi",                      "lead_genPartFlav",                     "sublead_genPartFlav",
+            "lumi",                             "event",                                "run",
+            "genWeight",                        "bTagWeight",                           "weight_central",
+            "weight_interference",              "weight_bTagSF_sys_hfUp",               "weight_bTagSF_sys_lfstats2Down",
+            "weight_bTagSF_sys_lfDown",         "weight_bTagSF_sys_lfUp",               "weight_PileupDown", 
+            "weight_bTagSF_sys_hfstats1Down",   "weight_bTagSF_sys_cferr2Up",           "weight_bTagSF_sys_cferr1Down", 
+            "weight_bTagSF_sys_cferr2Down",     "weight_bTagSF_sys_lfstats1Up",         "weight_TriggerSFDown",
+            "weight_PreselSFDown",              "weight_bTagSF_sys_jesDown",            "weight_bTagSF_sys_cferr1Up",
+            "weight_PileupUp",                  "weight_ElectronVetoSFDown",            "weight_bTagSF_sys_lfstats2Up", 
+            "weight_bTagSF_sys_hfstats2Down",   "weight_ElectronVetoSFUp",              "weight_TriggerSFUp", 
+            "weight_bTagSF_sys_hfstats1Up",     "weight_bTagSF_sys_hfstats2Up",         "weight_PreselSFUp", 
+            "weight_bTagSF_sys_lfstats1Down",   "weight_bTagSF_sys_jesUp",              "weight_bTagSF_sys_hfDown", 
+            "rel_xsec_weight",                  "weight_tot"
+        ]
         
         self.extra_vars_out = ["nonRes_dijet_mass", "nonResReg_dijet_mass", "lead_genPartFlav", "sublead_genPartFlav","n_electrons", "n_muons", "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet7_pt", "jet8_pt", "jet9_pt", "jet10_pt", "nBTight"]
 
@@ -243,7 +283,20 @@ class PrepareInputs:
 
         return events
 
-    def get_weights_for_training(self, y_train, rel_w_train, proc_num_train):
+    def get_weights_for_training(self, y_train, rel_w_train, proc_num_train) -> Tuple[ak.Array, ak.Array, ak.Array]:
+        """Get weights for training.
+
+        Args:
+            y_train (ak.Array): The ground truth labels.
+            rel_w_train (ak.Array): The relative weights.
+            proc_num_train (ak.Array): The process numbers.
+
+        Returns:
+            Tuple[ak.Array, ak.Array, ak.Array]: The true class weights, absolute-valued class weights, and positive class weights.
+                - true_class_weights
+                - class_weights_for_training_abs
+                - class_weights_only_positive
+        """
 
         true_class_weights = ak.zeros_like(rel_w_train)
         class_weights_for_training_abs = ak.zeros_like(rel_w_train)
@@ -300,6 +353,7 @@ class PrepareInputs:
 
         return true_class_weights, class_weights_for_training_abs, class_weights_only_positive
 
+
     def get_weights_for_val_test(self, y_val, rel_w_val, proc_num_val):
 
         class_weights_for_val = ak.zeros_like(rel_w_val)
@@ -333,18 +387,48 @@ class PrepareInputs:
 
         return class_weights_for_val
 
-    def train_test_split(self, X, Y, relative_weights, proc_num, train_ratio=0.7, val_ratio=0.3):
+    def train_test_split(self, X, Y, relative_weights, proc_num, train_ratio=0.7, val_ratio=0.3, Z=None):
 
-        from sklearn.model_selection import train_test_split
 
-        X_train, X_test_val, y_train, y_test_val, rel_w_train, rel_w_test_val, proc_num_train, proc_num_val = train_test_split(X, Y, relative_weights, proc_num, train_size=train_ratio, shuffle=True, random_state=self.random_seed)
+        if Z is not None:
+            X_train, X_test_val, y_train, y_test_val, z_train, z_test_val, rel_w_train, rel_w_test_val, proc_num_train, proc_num_val = train_test_split(X, Y, Z, relative_weights, proc_num, train_size=train_ratio, shuffle=True, random_state=self.random_seed)
+        else:
+            X_train, X_test_val, y_train, y_test_val, rel_w_train, rel_w_test_val, proc_num_train, proc_num_val = train_test_split(X, Y, relative_weights, proc_num, train_size=train_ratio, shuffle=True, random_state=self.random_seed)
+            z_train, z_test_val = None, None
+
         if (train_ratio + val_ratio) == 1.0:
-            X_val, y_val, rel_w_val = X_test_val, y_test_val, rel_w_test_val
-            X_test, y_test, rel_w_test, proc_num_test = None, None, None, None
+            X_val, y_val, rel_w_val, z_val = X_test_val, y_test_val, rel_w_test_val, z_test_val
+            X_test, y_test, z_test, rel_w_test, proc_num_test = None, None, None, None, None
+        elif Z is not None:
+            X_val, X_test, y_val, y_test, z_val, z_test, rel_w_val, rel_w_test, proc_num_val, proc_num_test = train_test_split(X_test_val, y_test_val, z_test_val, rel_w_test_val, proc_num_val, train_size=0.5, shuffle=True, random_state=self.random_seed)
         else:
             X_val, X_test, y_val, y_test, rel_w_val, rel_w_test, proc_num_val, proc_num_test = train_test_split(X_test_val, y_test_val, rel_w_test_val, proc_num_val, train_size=0.5, shuffle=True, random_state=self.random_seed)
+            z_val, z_test = None, None
 
-        return X_train, X_val, X_test, y_train, y_val, y_test, rel_w_train, rel_w_val, rel_w_test, proc_num_train, proc_num_val, proc_num_test
+        out = {
+            "train": {
+                "X": X_train,
+                "y": y_train,
+                "rel_w": rel_w_train,
+                "proc_num": proc_num_train,
+                "z": z_train,
+            },
+            "val": {
+                "X": X_val,
+                "y": y_val,
+                "rel_w": rel_w_val,
+                "proc_num": proc_num_val,
+                "z": z_val,
+            },
+            "test": {
+                "X": X_test,
+                "y": y_test,
+                "rel_w": rel_w_test,
+                "proc_num": proc_num_test,
+                "z": z_test,
+            }
+        }
+        return out
 
 
     def standardize(self, X, mean, std):
@@ -359,6 +443,7 @@ class PrepareInputs:
 
         corr_matrix = np.zeros([len(vars_for_training), 4])
         for i in range(len(vars_for_training)):
+            # print("DEBUG: correlation - processing variable:", vars_for_training[i])
             var = vars_for_training[i]
             # calculate correlation with mgg and mjj, do not include -999 values
             mask = ((events[var] > -998.0) & (events.mass > -998.0))
@@ -397,7 +482,7 @@ class PrepareInputs:
         plt.clf()
         plt.close()
 
-    
+
     def preselection(self, events):
         
         mass_bool = ((events.mass > 100) & (events.mass < 180))
@@ -409,7 +494,7 @@ class PrepareInputs:
         events = events[mass_bool & dijet_mass_bool & lead_mvaID_bool & sublead_mvaID_bool]
 
         return events
-    
+
     def preselection_for_pred(self, events):
         
         mass_bool = ((events.mass > 100) & (events.mass < 180))
@@ -420,7 +505,7 @@ class PrepareInputs:
         events = events[mass_bool & lead_mvaID_bool & sublead_mvaID_bool]
 
         return events
-    
+
     def plot_variables(self, comb_inputs, vars_for_training, plot_path):
 
         # add color scheme for each class
@@ -520,6 +605,32 @@ class PrepareInputs:
 
 
     def prep_inputs_for_training(self):
+        """Prepare datasets for Multiclass DNN training.
+
+        Steps:
+            - Make self.output directory
+            - Load variables from input var yaml and select variables from particular model (eg. 'mlp')
+            - Loop over eras and samples:
+                - Load events from awkward parquet files
+                - Apply preselection
+                - Add more variables
+                - Add relative weights according to cross section of the process
+                - Add bools for each class
+                - Plot correlation matrix for each sample in /correlation_matrix/ dir
+                - Append events to a common dataframe
+            - Plot variables in /var_plots/ dir
+            - Construct X and Y arrays
+            - Train-test split
+            - Standardize the data
+            - Get class weights, abs(weights), and only positive weights for training
+            - Write to input_vars.txt
+            - Save train, val, test, and weights numpy arrays
+            - Save mean and std to mean_std_dict.pkl
+                
+        Returns:
+            int: 0 if successful
+        """
+        assert self.training_info is not None, "Training info is not provided."
 
         fill_nan = self.fill_nan
 
@@ -529,12 +640,12 @@ class PrepareInputs:
         comb_inputs = pd.DataFrame()
 
         # get the variables required for training
-        vars_config = self.load_vars(self.input_var_json)[self.model_type]
+        vars_config = self.load_vars(self.input_var_path)[self.model_type]
 
-        vars_for_training = vars_config["vars"] 
+        vars_for_training = vars_config["vars"]
         # vars_for_log = vars_config["vars_for_log_transform"]
 
-        vars_to_load = vars_for_training + self.extra_vars_train
+        vars_to_load = list(set(vars_for_training + self.extra_vars + self.training_info["z_variables"]))
 
         for era in self.training_info["samples_info"]["eras"]:
             # for samples in self.sample_to_class.keys():                
@@ -600,28 +711,77 @@ class PrepareInputs:
         for cls in self.classes:
             print("\n", f"INFO: Number of events in {cls}: {sum(comb_inputs[cls])}")
 
-        X = comb_inputs[vars_for_training]
+        # Ensure a clean, unique RangeIndex before splitting
+        comb_inputs.reset_index(drop=True, inplace=True)
+
+
+        X = comb_inputs[vars_for_training].copy()
         Y = comb_inputs[[cls for cls in self.classes]]
         relative_weights = comb_inputs["weight_tot"]
+        Z = comb_inputs[[zv for zv in self.training_info["z_variables"]]]
 
         # perform log transformation for variables if needed
         # for var in vars_for_log:
         #     X[var] = np.log(X[var])
+
+        # X = X.values
+        # Y = Y.values
+        # relative_weights = relative_weights.values
         process_number = comb_inputs["process_number"].values
         del comb_inputs
-        X = X.values
-        Y = Y.values
-        relative_weights = relative_weights.values
-        
+
         # mask -999.0 to nan
         mask = (X < -998.0)
         X[mask] = np.nan
 
-        X_train, X_val, X_test, y_train, y_val, y_test, rel_w_train, rel_w_val, rel_w_test, proc_num_train, proc_num_val, proc_num_test = self.train_test_split(X, Y, relative_weights, process_number)
+        # Split the data into training, validation, and test sets
+        split: dict = self.train_test_split(X, Y, relative_weights, process_number, Z=Z)
         del process_number
         del X
         del Y
         del relative_weights
+        X_train         = split["train"]["X"]
+        X_val           = split["val"]["X"]
+        X_test          = split["test"]["X"]
+        y_train         = split["train"]["y"]
+        y_val           = split["val"]["y"]
+        y_test          = split["test"]["y"]
+        z_train         = split["train"]["z"]
+        z_val           = split["val"]["z"]
+        z_test          = split["test"]["z"]
+        rel_w_train     = split["train"]["rel_w"]
+        rel_w_val       = split["val"]["rel_w"]
+        rel_w_test      = split["test"]["rel_w"]
+        proc_num_train  = split["train"]["proc_num"]
+        proc_num_val    = split["val"]["proc_num"]
+        proc_num_test   = split["test"]["proc_num"]
+
+        # Save positional indices as numpy arrays (ensure dtype is integer)
+        np.save(f"{out_path}/train_indices.npy", X_train.index.values)
+        np.save(f"{out_path}/val_indices.npy", X_val.index.values)
+        if X_test is not None:
+            np.save(f"{out_path}/test_indices.npy", X_test.index.values)
+
+
+        X_train = X_train.values
+        X_val = X_val.values
+        if X_test is not None:
+            X_test = X_test.values
+        y_train = y_train.values
+        y_val = y_val.values
+        if y_test is not None:
+            y_test = y_test.values
+        if z_train is not None:
+            z_train = z_train.values
+        if z_val is not None:
+            z_val = z_val.values
+        if z_test is not None:
+            z_test = z_test.values
+        rel_w_train = rel_w_train.values
+        rel_w_val = rel_w_val.values
+        if rel_w_test is not None:
+            rel_w_test = rel_w_test.values
+
 
         # get mean according to training data set
         mean = np.nanmean(X_train, axis=0)
@@ -636,24 +796,49 @@ class PrepareInputs:
         X_val = np.nan_to_num(X_val, nan=fill_nan)
 
         true_class_weights, class_weights_for_training_abs, class_weights_only_positive = self.get_weights_for_training(y_train, rel_w_train, proc_num_train)
-        class_weights_for_val = self.get_weights_for_val_test(y_val, rel_w_val, proc_num_val)
+        class_weights_for_val, class_weights_for_val_abs, class_weights_for_val_only_positive = self.get_weights_for_training(y_val, rel_w_val, proc_num_val)
+        # class_weights_for_val = self.get_weights_for_val_test(y_val, rel_w_val, proc_num_val)
 
         if X_test is not None:
             X_test = self.standardize(X_test, mean, std)
             X_test = np.nan_to_num(X_test, nan=fill_nan)
-            class_weights_for_test = self.get_weights_for_val_test(y_test, rel_w_test, proc_num_test)
-        
+            # class_weights_for_test = self.get_weights_for_val_test(y_test, rel_w_test, proc_num_test)
+            class_weights_for_test, class_weights_for_test_abs, class_weights_for_test_only_positive = self.get_weights_for_training(y_test, rel_w_test, proc_num_test)
+
+        if z_train is not None:
+            z_mean = np.nanmean(z_train, axis=0)
+            z_std = np.nanstd(z_train, axis=0)
+
+            # standardize z variables
+            z_train = self.standardize(z_train, z_mean, z_std)
+            z_val = self.standardize(z_val, z_mean, z_std)
+            if z_test is not None:
+                z_test = self.standardize(z_test, z_mean, z_std)
+
+            # save the z mean and std_dev. This will be used for standardizing data
+            z_mean_std_dict = {
+                "mean": z_mean,
+                "std_dev": z_std
+            }
+            with open(f"{out_path}/z_mean_std_dict.pkl", 'wb') as f:
+                pickle.dump(z_mean_std_dict, f)
+
         # save all the numpy arrays
         print("\n INFO: saving inputs for mlp")
         # save str of input variables
-        with open(f"{out_path}/input_vars.txt", 'w') as f:
+        with open(f"{out_path}/input_vars.txt", 'w', encoding='utf-8') as f:
             json.dump(vars_for_training, f)
-        
+
         np.save(f"{out_path}/X_train", X_train)
         np.save(f"{out_path}/X_val", X_val)
-        
+
         np.save(f"{out_path}/y_train", y_train)
         np.save(f"{out_path}/y_val", y_val)
+
+        np.save(f"{out_path}/z_train", z_train)
+        np.save(f"{out_path}/z_val", z_val)
+        if z_test is not None:
+            np.save(f"{out_path}/z_test", z_test)
 
         np.save(f"{out_path}/rel_w_train", rel_w_train)
         np.save(f"{out_path}/rel_w_val", rel_w_val)
@@ -661,13 +846,18 @@ class PrepareInputs:
         np.save(f"{out_path}/true_class_weights", true_class_weights)
         np.save(f"{out_path}/class_weights_for_training_abs", class_weights_for_training_abs)
         np.save(f"{out_path}/class_weights_only_positive", class_weights_only_positive)
-        np.save(f"{out_path}/class_weights_for_val", class_weights_for_val)
-        
+
+        np.save(f"{out_path}/class_weights_for_val", class_weights_for_val) # no absolute value
+        np.save(f"{out_path}/class_weights_for_val_abs", class_weights_for_val_abs) # new
+        np.save(f"{out_path}/class_weights_for_val_only_positive", class_weights_for_val_only_positive) # new
+
         if X_test is not None:
             np.save(f"{out_path}/X_test", X_test)
             np.save(f"{out_path}/rel_w_test", rel_w_test)
             np.save(f"{out_path}/y_test", y_test)
             np.save(f"{out_path}/class_weights_for_test", class_weights_for_test)
+            np.save(f"{out_path}/class_weights_for_test_abs", class_weights_for_test_abs) # new
+            np.save(f"{out_path}/class_weights_for_test_only_positive", class_weights_for_test_only_positive) # new
 
         # save the training mean ans std_dev. This will be used for standardizing data
         mean_std_dict = {
@@ -678,8 +868,28 @@ class PrepareInputs:
             pickle.dump(mean_std_dict, f)
 
         return 0
-    
+
     def prep_inputs_for_prediction_sim(self):
+        """
+
+        Steps:
+            - Make /individual_samples/ directory
+            - Load vars names from input_vars.txt
+            - Add extra vars from self.extra_vars
+            - Loop over eras and samples
+                - Load events from awkward parquet file (either all or only required columns)
+                - Apply preselection (self.preselection_for_pred)
+                - Add more variables (self.add_var)
+                - Get relative weights according to cross section of the process (self.get_relative_xsec_weight)
+                - Save the processed events to individual parquet files (/individual_samples/{era}/{sample}/events.parquet)
+                - Convert events to pandas dataframe in chunks of self.write_chunk
+                - Extract X (features) and relative weights
+                - Standardize X using training mean and std_dev from mean_std_dict.pkl
+                - Save X and relative weights as numpy arrays (/individual_samples/{era}/{sample}/X.npy, rel_w.npy)
+
+        Returns:
+            int: 0 if successful
+        """
 
         fill_nan = self.fill_nan
         training_info = self.training_info
@@ -687,7 +897,7 @@ class PrepareInputs:
         out_path = f"{inputs_path}/individual_samples/"
         os.makedirs(out_path, exist_ok=True)
         # get the variables required for training
-        vars_config = self.load_vars(self.input_var_json)[self.model_type]
+        vars_config = self.load_vars(self.input_var_path)[self.model_type]
 
         with open(f"{inputs_path}/input_vars.txt", 'r') as f:
             vars = json.load(f)
@@ -736,9 +946,9 @@ class PrepareInputs:
                 comb_inputs = pd.DataFrame()
                 i = 0
                 while len(events) > 0:
-                    events_intermediate = events[:self.write_chunk]
-                    events = events[self.write_chunk:]
-                    comb_inputs = pd.concat([comb_inputs, pd.DataFrame(ak.to_list(events_intermediate))])
+                    events_intermediate = events[:self.write_chunk] # take only a chunk
+                    events = events[self.write_chunk:] # keep the rest for next iteration
+                    comb_inputs = pd.concat([comb_inputs, pd.DataFrame(ak.to_list(events_intermediate))]) # convert to pandas dataframe and concatenate
                     i+=1
 
                 X = comb_inputs[vars_for_training]
@@ -776,7 +986,7 @@ class PrepareInputs:
                 np.save(f"{full_path_to_save}/X", X)
                 np.save(f"{full_path_to_save}/rel_w", relative_weights)
 
-                # save the training mean ans std_dev. This will be used for standardizing data
+                # save the training mean and std_dev. This will be used for standardizing data
                 mean_std_dict = {
                     "mean": mean,
                     "std_dev": std
@@ -794,7 +1004,7 @@ class PrepareInputs:
         out_path = f"{inputs_path}/individual_samples/"
         os.makedirs(out_path, exist_ok=True)
         # get the variables required for training
-        vars_config = self.load_vars(self.input_var_json)[self.model_type]
+        vars_config = self.load_vars(self.input_var_path)[self.model_type]
 
         with open(f"{inputs_path}/input_vars.txt", 'r') as f:
             vars = json.load(f)
@@ -909,7 +1119,7 @@ class PrepareInputs:
         os.makedirs(out_path, exist_ok=True)
 
         # get the variables required for training
-        vars_config = self.load_vars(self.input_var_json)[self.model_type]
+        vars_config = self.load_vars(self.input_var_path)[self.model_type]
         with open(f"{inputs_path}/input_vars.txt", 'r') as f:
             vars = json.load(f)
         vars_for_training = vars
@@ -1026,9 +1236,135 @@ class PrepareInputs:
                 pickle.dump(mean_std_dict, f)
 
         return
-    
 
     
+    def prep_inputs_for_sculpting_study(self):
+        """Prepare standardized target arrays for the sculpting study, aligned to the
+        previously saved train/val/test split by positional indices.
+
+        Returns:
+            int: 0 if successful
+        """
+
+        fill_nan = self.fill_nan
+        out_path = self.outpath
+        os.makedirs(out_path, exist_ok=True)
+
+        comb_inputs = pd.DataFrame()
+
+        assert self.training_info is not None, "ERROR: training_info is None. Please provide training_info for sculpting study."
+        assert self.sculpting_study_info is not None, "ERROR: sculpting_study_info is None. Please provide sculpting_study_info for sculpting study."
+
+        # Get sculpting study target variable from config
+        target_vars = self.sculpting_study_info["target_variables"]
+        print("INFO: Target variables for sculpting study:", target_vars)
+
+        # Minimal columns needed for selection and weighting
+        essential_vars = [
+            "mass",
+            "nonResReg_dijet_mass_DNNreg",
+            "lead_mvaID",
+            "sublead_mvaID",
+            "weight",
+            "weight_tot",
+            "eta",
+            "pt",
+        ]
+
+        vars_to_load = list(set(target_vars + essential_vars))
+        print("DEBUG: vars_to_load", vars_to_load)
+
+        for era in self.training_info["samples_info"]["eras"]:
+            for samples in self.sample_to_class.keys():
+                samples_path = self.training_info["samples_info"]["samples_path"]
+                parquet_path = self.training_info["samples_info"][era][samples]
+                events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
+
+                events = self.preselection(events)
+
+                # get relative weights according to cross section of the process
+                events = self.get_relative_xsec_weight(events, samples, era)
+
+                print(f"INFO: Number of MC events in {samples} after selection for {era}: {len(events)}")
+                print(f"INFO: Sum of weight_tot in {samples} after selection for {era}: {sum(events.weight_tot)}")
+
+                # add the bools for each class
+                for cls in self.classes:
+                    events[cls] = ak.zeros_like(events.eta)
+
+                events[self.sample_to_class[samples]] = ak.ones_like(events.pt)  # one-hot encoded
+                events["sample_type"] = samples
+                events["process_number"] = self.process_numbers[samples]
+
+                print("INFO: Appending process samples to whole dataframe")
+                events_df = pd.DataFrame(ak.to_list(events))
+                comb_inputs = pd.concat([comb_inputs, events_df], ignore_index=True)
+
+        for cls in self.classes:
+            print("\n", f"INFO: Number of events in {cls}: {sum(comb_inputs[cls])}")
+
+        # Ensure a clean, unique RangeIndex before selecting by saved positions
+        comb_inputs.reset_index(drop=True, inplace=True)
+        Y = comb_inputs[target_vars].copy()
+
+        # Load indices files and partition Y into train, val, test using positional indices
+        with open(f"{out_path}/train_indices.npy", "rb") as f:
+            train_indices = np.load(f)
+        with open(f"{out_path}/val_indices.npy", "rb") as f:
+            val_indices = np.load(f)
+        test_indices = None
+        test_idx_path = f"{out_path}/test_indices.npy"
+        if os.path.exists(test_idx_path):
+            with open(test_idx_path, "rb") as f:
+                test_indices = np.load(f)
+
+        print("DEBUG: Y.shape:", Y.shape)
+        print(Y.head())
+
+        y_train = Y.iloc[train_indices].copy()
+        y_val = Y.iloc[val_indices].copy()
+        y_test = Y.iloc[test_indices].copy() if test_indices is not None else None
+
+        # Get mean and std_dev from train set
+        mean = np.nanmean(y_train.values, axis=0)
+        std = np.nanstd(y_train.values, axis=0)
+
+        print("DEBUG: y_train.shape", y_train.shape)
+        print("DEBUG: y_val.shape", y_val.shape)
+        print("DEBUG: train_indices.shape", train_indices.shape)
+        print("DEBUG: val_indices.shape", val_indices.shape)
+
+        # Standardize and replace NaNs
+        y_train = self.standardize(y_train.values, mean, std)
+        y_val = self.standardize(y_val.values, mean, std)
+        if y_test is not None:
+            y_test = self.standardize(y_test.values, mean, std)
+
+        y_train = np.nan_to_num(y_train, nan=fill_nan)
+        y_val = np.nan_to_num(y_val, nan=fill_nan)
+        if y_test is not None:
+            y_test = np.nan_to_num(y_test, nan=fill_nan)
+
+        mean_std_dict = {"mean": mean, "std_dev": std}
+
+        # Save Y mean and std_dev from training
+        os.makedirs(f"{out_path}/sculpting_study/", exist_ok=True)
+        scale_file = f"{out_path}/sculpting_study/y_mean_std_dict.pkl"
+        with open(scale_file, "wb") as f:
+            pickle.dump(mean_std_dict, f)
+
+        # Save target variable names
+        with open(f"{out_path}/sculpting_study/target_vars.txt", "w", encoding="utf-8") as f:
+            json.dump(target_vars, f)
+            f.write("\n")
+
+        # Save arrays
+        np.save(f"{out_path}/sculpting_study/y_train.npy", y_train)
+        np.save(f"{out_path}/sculpting_study/y_val.npy", y_val)
+        if y_test is not None:
+            np.save(f"{out_path}/sculpting_study/y_test.npy", y_test)
+
+        return 0
 
 
     

@@ -1,4 +1,3 @@
-
 import awkward as ak
 import numpy as np
 import matplotlib.pyplot as plt
@@ -6,54 +5,15 @@ import os
 import argparse
 import optuna
 import math
+import matplotlib.pyplot as plt
 import mplhep as hep
 import pandas as pd
 import json
 import mplhep
-import pyarrow as pa
 from matplotlib.backends.backend_pdf import PdfPages
 
-# pyarrow>=15 removed PyExtensionType; awkward still looks for it, so alias it when missing
-if not hasattr(pa.lib, "PyExtensionType"):
-    pa.lib.PyExtensionType = pa.lib.ExtensionType
-
-
-# TODO: categorization/categorisation inconsistent
-# TODO: Validate best_cut_params.{txt,json} read/write logic
-# TODO: Validate non-mHH (baseline) cat mode
-# TODO: Correct typos in function names
 
 class OptunaCategorizer:
-    """Find optimal category boundaries. 
-
-    Args:
-        base_path (_type_): _description_
-        cat_folder (_type_, optional): _description_. Defaults to None.
-        signal_class (int, optional): _description_. Defaults to 3.
-        signal_samples (_type_, optional): _description_. Defaults to None.
-        samples_list (_type_, optional): _description_. Defaults to None.
-        bkg_samples (_type_, optional): _description_. Defaults to None.
-        n_categories (int, optional): _description_. Defaults to 5.
-        n_trials_optuna (int, optional): _description_. Defaults to 150.
-        n_runs (int, optional): _description_. Defaults to 10.
-        side_band_threshold (int, optional): _description_. Defaults to 10.
-        beta (float, optional): _description_. Defaults to 0.1.
-        gamma_strategy (str, optional): _description_. Defaults to "linear".
-        SR_strategy (str, optional): _description_. Defaults to "sequential".
-
-    Example Usage:
-        ```python
-        categorizer = OptunaCategorizer(
-            base_path="Version_20250524_MVAID_forPreApp/",
-            cat_folder="optuna_categorization",
-            n_categories=4,
-            n_runs=15,
-            SR_strategy="sequential"
-        )
-        categorizer.run_categorization()
-        ```
-
-    """
     def __init__(self,
                 base_path,
                 cat_folder=None,
@@ -68,11 +28,8 @@ class OptunaCategorizer:
                 beta=0.1,
                 gamma_strategy="linear",
                 SR_strategy="sequential",
-                boosted=False,
-                mHH_cats=[],
-                cat_signals=[]
+                boosted=False
                 ):
-
 
         self.base_path = base_path
         self.cat_folder = cat_folder
@@ -90,8 +47,6 @@ class OptunaCategorizer:
         self.gamma_strategy = gamma_strategy
         self.SR_strategy = SR_strategy
         self.boosted = boosted
-        self.mHH_cats = mHH_cats
-        self.cat_signals = cat_signals
 
         if self.cat_folder is None:
             print("INFO: No output directory specified, using default: optuna_categorization")
@@ -107,12 +62,6 @@ class OptunaCategorizer:
             self.signal_samples = ["GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00"]
 
         self.apply_preselection = True
-        # Bookkeeping for final category-level metrics and thresholds
-        self.best_sig_values = None
-        self.best_sig_peak_list = None
-        self.best_bkg_side_list = None
-        self.best_cut_params_list = None
-        self.best_z_sum_quadrature = None
     
     def gamma_fn(self):
         def gamma_linear(n):
@@ -139,7 +88,6 @@ class OptunaCategorizer:
         os.makedirs(out_dir, exist_ok=True)  # Ensure the output directory exists
         fig.savefig(os.path.join(out_dir, f"optuna_history_cat_{category}.png"))
         plt.clf()
-        plt.close()
 
     def plot_parallel_coordinates(self, study, out_dir, category):
         """
@@ -151,12 +99,11 @@ class OptunaCategorizer:
         out_dir = os.path.join(out_dir, "optuna_history_plots")
         fig.savefig(os.path.join(out_dir, f"parallel_coordinates_cat_{category}.png"))
         plt.clf()
-        plt.close()
 
     def preselection(self, events, scores):
         
         mass_bool = ((events.mass > 100) & (events.mass < 180))
-        dijet_mass_bool = ((events.nonResReg_dijet_mass_DNNreg > 70) & (events.nonResReg_dijet_mass_DNNreg < 190))
+        dijet_mass_bool = ((events.nonResReg_dijet_mass_DNNreg > 80) & (events.nonResReg_dijet_mass_DNNreg < 190))
 
         lead_mvaID_bool = (events.lead_mvaID > -0.7)
         sublead_mvaID_bool = (events.sublead_mvaID > -0.7)
@@ -178,15 +125,14 @@ class OptunaCategorizer:
         only if *nothing* is collected.
         """
         data = {k: [] for k in (
-            "score", "diphoton_mass", "dijet_mass", "HHbbggCandidate_mass",
+            "score", "diphoton_mass", "dijet_mass",
             "weights", "labels", "sample"
         )}
         if self.boosted:
             data.update({"is_boosted": []})
 
-        eras = ("preEE", "postEE", "preBPix", "postBPix", "2024")
+        eras = ("preEE", "postEE", "preBPix", "postBPix")
         dijet_mass_key = "nonResReg_dijet_mass_DNNreg"
-        mHH_key = "nonResReg_HHbbggCandidate_mass"
 
         for era in eras:
             for sample in self.samples_list:
@@ -196,86 +142,17 @@ class OptunaCategorizer:
                 y_file   = os.path.join(samp_dir, "y.npy")
                 evt_file = os.path.join(samp_dir, "events"+("_boostedCat" if self.boosted else "")+".parquet")
 
-                if (era == "2024") & (sample == "VHtoGG_M_125"):
-                    VHsample = "WmHtoGG"
-                    samp_dir = os.path.join(
-                        self.base_path, "individual_samples", era, VHsample
-                    )
-                    y_file   = os.path.join(samp_dir, "y.npy")
-                    evt_file = os.path.join(samp_dir, "events"+("_boostedCat" if self.boosted else "")+".parquet")
-
-                    # Skip if either file is missing
-                    if not (os.path.exists(y_file) and os.path.exists(evt_file)):
-                        print(f"[load_samples] WARNING: missing files for {samp_dir}, skipping.")
-                        continue
-
-                    try:
-                        y = np.load(y_file)
-                        events = ak.from_parquet(
-                            evt_file,
-                            columns=[
-                                "mass", dijet_mass_key, mHH_key,
-                                "lead_genPartFlav", "sublead_genPartFlav",
-                                "weight_tot",
-                                "lead_mvaID", "sublead_mvaID",
-                            ] + (["is_boosted"] if self.boosted else []),
-                        )
-                        if self.apply_preselection:
-                            events, y = self.preselection(events, y)
-                    except Exception as exc:
-                        print(f"[load_samples] ERROR while reading {samp_dir}: {exc}")
-                        continue
-
-                    for VHsample in ["WpHtoGG", "ZHtoGG"]:
-                        samp_dir = os.path.join(
-                            self.base_path, "individual_samples", era, VHsample
-                        )
-                        y_file   = os.path.join(samp_dir, "y.npy")
-                        evt_file = os.path.join(samp_dir, "events"+("_boostedCat" if self.boosted else "")+".parquet")
-
-                        # Skip if either file is missing
-                        if not (os.path.exists(y_file) and os.path.exists(evt_file)):
-                            print(f"[load_samples] WARNING: missing files for {samp_dir}, skipping.")
-                            continue
-
-                        try:
-                            y_VH = np.load(y_file)
-                            events_VH = ak.from_parquet(
-                                evt_file,
-                                columns=[
-                                    "mass", dijet_mass_key, mHH_key,
-                                    "lead_genPartFlav", "sublead_genPartFlav",
-                                    "weight_tot",
-                                    "lead_mvaID", "sublead_mvaID",
-                                ] + (["is_boosted"] if self.boosted else []),
-                            )
-                            if self.apply_preselection:
-                                events_VH, y_VH = self.preselection(events_VH, y_VH)
-                        except Exception as exc:
-                            print(f"[load_samples] ERROR while reading {samp_dir}: {exc}")
-                            continue
-
-                        events = ak.concatenate([events, events_VH])
-                        y = ak.concatenate([y, y_VH])
-
-                else:            
-                    samp_dir = os.path.join(
-                        self.base_path, "individual_samples", era, sample
-                    )
-                    y_file   = os.path.join(samp_dir, "y.npy")
-                    evt_file = os.path.join(samp_dir, "events"+("_boostedCat" if self.boosted else "")+".parquet")
-
-                    # Skip if either file is missing
-                    if not (os.path.exists(y_file) and os.path.exists(evt_file)):
-                        print(f"[load_samples] WARNING: missing files for {samp_dir}, skipping.")
-                        continue
+                # Skip if either file is missing
+                if not (os.path.exists(y_file) and os.path.exists(evt_file)):
+                    print(f"[load_samples] WARNING: missing files for {samp_dir}, skipping.")
+                    continue
 
                 try:
                     y = np.load(y_file)
                     events = ak.from_parquet(
                         evt_file,
                         columns=[
-                            "mass", dijet_mass_key, mHH_key,
+                            "mass", dijet_mass_key,
                             "lead_genPartFlav", "sublead_genPartFlav",
                             "weight_tot",
                             "lead_mvaID", "sublead_mvaID",
@@ -287,7 +164,7 @@ class OptunaCategorizer:
                     print(f"[load_samples] ERROR while reading {samp_dir}: {exc}")
                     continue
 
-                # Prompt-photon requirement for tt̄γ‐like samples
+                # Prompt-photon requirement for tt-like samples
                 if sample.startswith("TTG_") or sample in {"TT", "TTGG"}:
                     sel = ((events["lead_genPartFlav"] == 1) &
                            (events["sublead_genPartFlav"] == 1))
@@ -300,14 +177,12 @@ class OptunaCategorizer:
                 data["score"].append(y)
                 data["diphoton_mass"].append(np.asarray(events["mass"]))
                 data["dijet_mass"].append(np.asarray(events[dijet_mass_key]))
-                data["HHbbggCandidate_mass"].append(np.asarray(events[mHH_key]))
                 data["weights"].append(np.asarray(events["weight_tot"]))
                 data["labels"].append(
                     np.full(len(y), 1 if sample in self.signal_samples else 0, dtype=int)
                 )
                 data["sample"].append(np.repeat(sample, len(y)))
-                if self.boosted:
-                    data["is_boosted"].append(np.asarray(events["is_boosted"]))
+                data["is_boosted"].append(np.asarray(events["is_boosted"]))
 
         if not data["score"]:
             raise RuntimeError("[load_samples] No events found in any input sample.")
@@ -321,7 +196,7 @@ class OptunaCategorizer:
 
         # Assemble DataFrame
         df = pd.DataFrame(data)
-        df["score"] = scores.to_list()          # store per-event score vectors
+        df["score"] = list(scores)          # store per-event score vectors
         df["arg_max_score"] = argmax
 
         # Quick bookkeeping
@@ -403,15 +278,10 @@ class OptunaCategorizer:
 
 
             luminosities = {
-            "2016preVFP": 19.5,
-            "2016postVFP": 16.8,
-            "2017": 42.07,
-            "2018": 59.56,
             "preEE": 7.98,  # Integrated luminosity for preEE in fb^-1
             "postEE": 26.67,  # Integrated luminosity for postEE in fb^-1
-            "preBPix": 18.06,  # Integrated luminosity for preEE in fb^-1
-            "postBPix": 9.89,  # Integrated luminosity for postEE in fb^-1
-            "2024": 108.82
+            "preBPix": 17.794,  # Integrated luminosity for preEE in fb^-1
+            "postBPix": 9.451  # Integrated luminosity for postEE in fb^-1
             }
 
             sample_postEE = ak.from_parquet(f"{sim_folder}/postEE/{sample}/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=variables + ["weight_tot"])
@@ -430,31 +300,6 @@ class OptunaCategorizer:
                 else:
                     sample_postBPix = ak.from_parquet(f"{sim_folder}/postBPix/{sample}/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=variables + ["weight_tot"])
 
-            if sample == "VHtoGG_M_125":
-                VHsample = "ZHtoGG"
-                if not os.path.exists(f"{sim_folder}/2024/{VHsample}/events"+("_boostedCat" if self.boosted else "")+".parquet"):
-                    print(f"samples doesn't exist: {VHsample} 2024, path: {sim_folder}/2024/{VHsample}/events"+("_boostedCat" if self.boosted else "")+".parquet")
-                    sample_2024 = ak.from_parquet(f"{sim_folder}/postEE/ZHtoGG_M_125/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=variables + ["weight_tot"])
-                    sample_2024["weight_tot"] = sample_2024["weight_tot"] * luminosities["2024"] / luminosities["postEE"]
-                else:
-                    sample_2024 = ak.from_parquet(f"{sim_folder}/2024/{VHsample}/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=variables + ["weight_tot"])
-                
-                for VHsample in ["WmHtoGG", "WpHtoGG"]:
-                    if not os.path.exists(f"{sim_folder}/2024/{VHsample}/events"+("_boostedCat" if self.boosted else "")+".parquet"):
-                        print(f"samples doesn't exist: {VHsample} 2024, path: {sim_folder}/2024/{VHsample}/events"+("_boostedCat" if self.boosted else "")+".parquet")
-                    else:
-                        sample_VH = ak.from_parquet(f"{sim_folder}/2024/{VHsample}/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=variables + ["weight_tot"])
-                    
-                    sample_2024 = ak.concatenate([sample_2024, sample_VH])
-
-            else:
-                if not os.path.exists(f"{sim_folder}/2024/{sample}/events"+("_boostedCat" if self.boosted else "")+".parquet"):
-                    print(f"samples doesn't exist: {sample} 2024")
-                    sample_2024 = ak.from_parquet(f"{sim_folder}/postEE/{sample}/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=variables + ["weight_tot"])
-                    sample_2024["weight_tot"] = sample_2024["weight_tot"] * luminosities["2024"] / luminosities["postEE"]
-                else:
-                    sample_2024 = ak.from_parquet(f"{sim_folder}/2024/{sample}/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=variables + ["weight_tot"])
-
             if os.path.exists(f"{sim_folder}/preEE/{sample}/y.npy"):
                 score_preEE = np.load(f"{sim_folder}/preEE/{sample}/y.npy")
                 score_postEE = np.load(f"{sim_folder}/postEE/{sample}/y.npy")
@@ -462,22 +307,12 @@ class OptunaCategorizer:
                     score_preBPix = np.load(f"{sim_folder}/preBPix/{sample}/y.npy")
                     score_postBPix = np.load(f"{sim_folder}/postBPix/{sample}/y.npy")
 
-                if sample == "VHtoGG_M_125":
-                    VHsample = "WmHtoGG"
-                    score_2024 = np.load(f"{sim_folder}/2024/{VHsample}/y.npy")
-                    for VHsample in ["WpHtoGG", "ZHtoGG"]:
-                        score_VH = np.load(f"{sim_folder}/2024/{VHsample}/y.npy")
-                        score_2024 = ak.concatenate([score_2024, score_VH])
-                else:
-                    score_2024 = np.load(f"{sim_folder}/2024/{sample}/y.npy")
-
                 num_classes = score_preEE.shape[1]
 
                 for i, class_name in enumerate(class_names):
                     if i < num_classes:
                         sample_preEE[class_name] = score_preEE[:, i]
                         sample_postEE[class_name] = score_postEE[:, i]
-                        sample_2024[class_name] = score_2024[:, i]
                         if include_2023:
                             sample_preBPix[class_name] = score_preBPix[:, i]
                             sample_postBPix[class_name] = score_postBPix[:, i]
@@ -485,9 +320,9 @@ class OptunaCategorizer:
 
             # Merge preEE and postEE
             if include_2023:
-                sample_combined = ak.concatenate([sample_preEE, sample_postEE, sample_preBPix, sample_postBPix, sample_2024], axis=0)
+                sample_combined = ak.concatenate([sample_preEE, sample_postEE, sample_preBPix, sample_postBPix], axis=0)
             else:
-                sample_combined = ak.concatenate([sample_preEE, sample_postEE, sample_2024], axis=0)
+                sample_combined = ak.concatenate([sample_preEE, sample_postEE], axis=0)
             if "minMVAID" in variables:
                 sample_combined["minMVAID"] = np.min([sample_combined.lead_mvaID, sample_combined.sublead_mvaID], axis = 0)
                 sample_combined["maxMVAID"] = np.max([sample_combined.lead_mvaID, sample_combined.sublead_mvaID], axis = 0)
@@ -507,9 +342,9 @@ class OptunaCategorizer:
 
         # Load Data First
         if include_2023:
-            data_samples = ["2022_EraE", "2022_EraF", "2022_EraG", "2022_EraC", "2022_EraD", "2023_EraC", "2023_EraD", "2024_EraC_EG0", "2024_EraC_EG1", "2024_EraD_EG0", "2024_EraD_EG1", "2024_EraE_EG0", "2024_EraE_EG1", "2024_EraF_EG0", "2024_EraF_EG1", "2024_EraG_EG0", "2024_EraG_EG1", "2024_EraH_EG0", "2024_EraH_EG1", "2024_EraIv1_EG0", "2024_EraIv1_EG1", "2024_EraIv2_EG0", "2024_EraIv2_EG1"]
+            data_samples = ["2022_EraE", "2022_EraF", "2022_EraG", "2022_EraC", "2022_EraD", "2023_EraC", "2023_EraD"]
         else:
-            data_samples = ["2022_EraE", "2022_EraF", "2022_EraG", "2022_EraC", "2022_EraD", "2024_EraC_EG0", "2024_EraC_EG1", "2024_EraD_EG0", "2024_EraD_EG1", "2024_EraE_EG0", "2024_EraE_EG1", "2024_EraF_EG0", "2024_EraF_EG1", "2024_EraG_EG0", "2024_EraG_EG1", "2024_EraH_EG0", "2024_EraH_EG1", "2024_EraIv1_EG0", "2024_EraIv1_EG1", "2024_EraIv2_EG0", "2024_EraIv2_EG1"]
+            data_samples = ["2022_EraE", "2022_EraF", "2022_EraG", "2022_EraC", "2022_EraD"]
         data_combined = None
 
         for data_sample in data_samples:
@@ -545,9 +380,6 @@ class OptunaCategorizer:
             "nonResReg_dijet_mass_DNNreg": {"label": r"$m_{jj}^{reg}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
             "Res_mjj_regressed": {"label": r"$m_{jj}^{reg}$ [GeV]", "bins": 23, "range": (80, 180), "log": True},
             "Res_dijet_mass": {"label": r" Resonant $m_{jj}$ [GeV]", "bins": 30, "range": (80, 180), "log": True},
-            "nonRes_HHbbggCandidate_mass": {"label": r"$m_{HH}$ [GeV] (Nonresonant $m_{jj}$ cuts)", "bins": 30, "range": (100, 2500), "log": True},
-            "nonResReg_HHbbggCandidate_mass": {"label": r"$m_{HH}$ [GeV] (Nonresonant $m_{jj}$ regressed cuts)", "bins": 30, "range": (100, 2500), "log": True},
-            "Res_HHbbggCandidate_mass": {"label": r"$m_{HH}$ [GeV] (Resonant $m_{jj}$ cuts)", "bins": 30, "range": (100, 2500), "log": True},
             "non_resonant_bkg_score": {"label": "non_resonant_bkg_score", "bins": 30, "range": (0, 1), "log": True},
             "ttH_score": {"label": "ttH_score", "bins": 30, "range": (0, 1), "log": True},
             "other_single_H_score": {"label": "other_single_H_score", "bins": 30, "range": (0, 1), "log": True},
@@ -707,18 +539,7 @@ class OptunaCategorizer:
             ax.set_xlabel(var_config[variable]["label"], fontsize=14)
             plt.savefig(f"{out_path}/{variable}.png", dpi=300, bbox_inches="tight")
             plt.clf()
-            plt.close()
         print("output saved in ", out_path)
-
-    def _compute_z_sum_quadrature(self, z_scores):
-        """Return cumulative Z sum in quadrature for the provided Z scores."""
-        if z_scores is None:
-            return []
-        z_scores_arr = np.asarray(z_scores, dtype=float)
-        return [
-            float(np.sqrt(np.sum(z_scores_arr[:i] ** 2)))
-            for i in range(1, len(z_scores_arr) + 1)
-        ]
 
     def plot_category_summary_with_thresholds(
         self,
@@ -816,77 +637,9 @@ class OptunaCategorizer:
         # Adjust spacing
         plt.tight_layout()
         # Save the figure
-        plt.savefig(f"{save_path}category_summary_new.png") # original
-        # plt.savefig(os.path.join(save_path, "category_summary_new.png"))
+        plt.savefig(f"{save_path}category_summary_new.png")
         plt.close(fig)
 
-    def save_category_summary_dataframe(self, save_dir, correlation_by_category=None):
-        """
-        Persist the data shown in the category summary and mass-sculpting plots.
-        Stores per-category thresholds, Z, cumulative Z, signal in peak, background
-        in sidebands, and weighted Pearson correlations.
-        """
-        if self.best_cut_params_list is None or self.best_sig_values is None:
-            print("[save_category_summary_dataframe] Missing category summary inputs, skipping save.")
-            return
-
-        n_cats = len(self.best_cut_params_list)
-        z_scores = self.best_sig_values or []
-        z_sum_quad = self.best_z_sum_quadrature or self._compute_z_sum_quadrature(z_scores)
-        sig_peak = self.best_sig_peak_list or []
-        bkg_side = self.best_bkg_side_list or []
-
-        boundary_cols = sorted(
-            {f"boundary_{key}" for params in self.best_cut_params_list for key in params.keys()}
-        )
-
-        records = []
-        for idx in range(n_cats):
-            category_label = f"cat{idx+1}"
-            params = self.best_cut_params_list[idx] if idx < len(self.best_cut_params_list) else {}
-            corr_entry = correlation_by_category.get(category_label, {}) if correlation_by_category else {}
-
-            record = {
-                "category_index": idx + 1,
-                "category_label": category_label,
-                "z_score": z_scores[idx] if idx < len(z_scores) else np.nan,
-                "z_sum_quadrature": z_sum_quad[idx] if idx < len(z_sum_quad) else np.nan,
-                "signal_under_peak": sig_peak[idx] if idx < len(sig_peak) else np.nan,
-                "background_in_sidebands": bkg_side[idx] if idx < len(bkg_side) else np.nan,
-                "weighted_pearson_corr_mean": corr_entry.get("mean", np.nan),
-                "weighted_pearson_corr_std": corr_entry.get("std", np.nan),
-                "weighted_pearson_corr_min": corr_entry.get("min", np.nan),
-                "weighted_pearson_corr_max": corr_entry.get("max", np.nan),
-            }
-
-            for key, value in params.items():
-                record[f"boundary_{key}"] = value
-
-            records.append(record)
-
-        df = pd.DataFrame(records)
-
-        # Ensure consistent column ordering
-        metric_cols = [
-            "category_index",
-            "category_label",
-            "z_score",
-            "z_sum_quadrature",
-            "signal_under_peak",
-            "background_in_sidebands",
-            "weighted_pearson_corr_mean",
-            "weighted_pearson_corr_std",
-            "weighted_pearson_corr_min",
-            "weighted_pearson_corr_max",
-        ]
-        ordered_cols = metric_cols + [col for col in boundary_cols if col not in metric_cols]
-        df = df[[col for col in ordered_cols if col in df.columns]]
-
-        os.makedirs(save_dir, exist_ok=True)
-        parquet_path = os.path.join(save_dir, "category_summary_data.parquet")
-        csv_path = os.path.join(save_dir, "category_summary_data.csv")
-        df.to_parquet(parquet_path, index=False)
-        df.to_csv(csv_path, index=False)
 
     def asymptotic_significance(self, df):
 
@@ -904,7 +657,7 @@ class OptunaCategorizer:
     # Sequential categorization using Optuna
     #############################################
     
-    def optmize_SR_sequential(self, samples_input, mHH_cat=""):
+    def optmize_SR_sequential(self, samples_input):
         """
         For each category, use Optuna to find the best multidimensional cuts:
           - The signal score must be above a threshold.
@@ -920,10 +673,7 @@ class OptunaCategorizer:
           - The weighted signal in the peak (120-130 GeV)
           - The weighted background in the sidebands
         """
-        if mHH_cat == "":
-            cat_path = os.path.join(self.base_path, f"{self.cat_folder}")
-        else:
-            cat_path = os.path.join(self.base_path, f"{self.cat_folder}/mHH{mHH_cat}")
+        cat_path = os.path.join(self.base_path, f"{self.cat_folder}")
         print(f"Creating output directory: {cat_path}")
         os.makedirs(cat_path, exist_ok=True)
 
@@ -979,20 +729,17 @@ class OptunaCategorizer:
                         mask = mask & (scores[:, b] < th_bg)
 
                     if np.sum(mask) == 0:
-                        # No events selected, return negative significance.
                         return -1.0
 
                     # Enforce sideband requirement: background outside 120-130 GeV must have at least 10 (weighted).
-                    side_mask = (((dipho_mass[mask] < 120) | (dipho_mass[mask] > 130)) & (labels[mask] == 0)) # mgg in sidebands and background only
-                    bkg_side_val = weights[mask][side_mask].sum() # bkg sideband weighted sum
+                    side_mask = (((dipho_mass[mask] < 120) | (dipho_mass[mask] > 130)) & (labels[mask] == 0))
+                    bkg_side_val = weights[mask][side_mask].sum()
                     if bkg_side_val < self.side_band_threshold:
-                        # Not enough background in sidebands, return negative significance.
                         return -1.0
 
                     # Select events in the diphoton mass window (120 < m_γγ < 130).
                     mass_mask = (dipho_mass[mask] > 120) & (dipho_mass[mask] < 130)
                     if np.sum(mass_mask) == 0:
-                        # No events in the mgg window, return negative significance.
                         return -1.0
 
                     selected_samples = samples[mask][mass_mask]
@@ -1053,8 +800,7 @@ class OptunaCategorizer:
                 sig_peak_list,
                 bkg_side_list,
                 best_cut_params_list,
-                f"{cat_path}/run_{run}_"
-            )
+                f"{cat_path}/run_{run}_")
 
             run_significance_list.append(best_sig_values)
             run_best_params_list.append(best_cut_params_list)
@@ -1077,46 +823,36 @@ class OptunaCategorizer:
         #plot_category_summary(best_sig_values, sig_peak_list, bkg_side_list, cat_path)
         # Plot summary with thresholds annotated on the significance plot.
         self.plot_category_summary_with_thresholds(best_sig_values,
-            sig_peak_list,
-            bkg_side_list,
-            best_cut_params_list,
-            f"{cat_path}/"
-        )
+        sig_peak_list,
+        bkg_side_list,
+        best_cut_params_list,
+        cat_path)
 
-        # Cache the best-performing run metrics for later reuse.
-        self.best_cut_params_list = best_cut_params_list
-        self.best_sig_values = best_sig_values
-        self.best_sig_peak_list = sig_peak_list
-        self.best_bkg_side_list = bkg_side_list
-        self.best_z_sum_quadrature = self._compute_z_sum_quadrature(best_sig_values)
+        # save the best cut parameters
+        best_params_path = os.path.join(cat_path, "best_cut_params.txt")
+        with open(best_params_path, "w") as f:
+            for i, params in enumerate(best_cut_params_list, start=1):
+                f.write(f"Category {i}:\n")
+                for k, v in params.items():
+                    f.write(f"{k}: {v}\n")
+                f.write("\n")
+            # also save the best run number
+            f.write(f"Best run number: {max_index}\n")
+            # also save the best significance value
+            f.write(f"Best significance value: {best_sig_values}\n")
 
-        # POST-MERGE: Write to best_cut_params.{txt,json} moved to run_categorization and run_categorisation_mHH
-        # # save the best cut parameters
-        # best_params_path = os.path.join(cat_path, "best_cut_params.txt")
-        # with open(best_params_path, "w") as f:
-        #     for i, params in enumerate(best_cut_params_list, start=1):
-        #         f.write(f"Category {i}:\n")
-        #         for k, v in params.items():
-        #             f.write(f"{k}: {v}\n")
-        #         f.write("\n")
-        #     # also save the best run number
-        #     f.write(f"Best run number: {max_index}\n")
-        #     # also save the best significance value
-        #     f.write(f"Best significance value: {best_sig_values}\n")
+        # also save it as a JSON file
+        best_params_json_path = os.path.join(cat_path, "best_cut_params.json")
+        with open(best_params_json_path, "w") as f:
+            json.dump(best_cut_params_list, f, indent=4)
 
-        # # also save it as a JSON file
-        # best_params_json_path = os.path.join(cat_path, "best_cut_params.json")
-        # with open(best_params_json_path, "w") as f:
-        #     json.dump(best_cut_params_list, f, indent=4)
-
-        return best_cut_params_list, best_sig_values, max_index
+        return best_cut_params_list, best_sig_values
 
     def store_categorization_events_with_score(
         self, 
         base_path,
         best_cut_values,
         folder_name,
-        mHH_cat=[]
     ):
         """
         Categorize events into:
@@ -1143,9 +879,6 @@ class OptunaCategorizer:
               For reference, e.g. [["ttHtoGG_M_125"], ["BBHto2G_M_125","GluGluHToGG_M_125"]].
           cr_name (list[str] or None):
               The name you want to give each CR category (e.g. ["CR_ttH", "CR_singleH"]).
-          mHH_cat (list, defaults to empty):
-              The upper and lower bounds of the mHH category, empty if not doing mHH categories.
-              If a bound is -1, then no upper or lower bound.
         """
 
         nsr = 3
@@ -1188,45 +921,16 @@ class OptunaCategorizer:
             "TT"
         ]
         dijet_mass_key = "nonResReg_dijet_mass_DNNreg"
-        mHH_key = "nonResReg_HHbbggCandidate_mass"
 
-        columns = ["mass", dijet_mass_key, mHH_key, "lead_genPartFlav", "sublead_genPartFlav", "lead_mvaID", "sublead_mvaID", "weight_tot"]
+        columns = ["mass", dijet_mass_key, "lead_genPartFlav", "sublead_genPartFlav", "lead_mvaID", "sublead_mvaID", "weight_tot"]
 
-        for era in ["preEE", "postEE", "preBPix", "postBPix", "2024"]:
+        for era in ["preEE", "postEE", "preBPix", "postBPix"]:
             for sample in samples:
-
-                if (era == "2024") & (sample == "VHtoGG_M_125"):
-                    VHsample = "WmHtoGG"
-                    if not os.path.exists(f"{base_path}/individual_samples/{era}/{VHsample}"):
-                        print(f"Skipping {sample} in {era} as it does not exist.")
-                        continue
-                    inputs_path = f"{base_path}/individual_samples/{era}/{VHsample}"
-                    print(f"Processing {inputs_path}")
-
-                    # Load events
-                    events = ak.from_parquet(f"{inputs_path}/events.parquet", columns=columns)
-                    scores = np.load(f"{inputs_path}/y.npy")
-
-                    for VHsample in ["WpHtoGG", "ZHtoGG"]:
-                        if not os.path.exists(f"{base_path}/individual_samples/{era}/{VHsample}"):
-                            print(f"Skipping {VHsample} in {era} as it does not exist.")
-                            continue
-                        inputs_path = f"{base_path}/individual_samples/{era}/{VHsample}"
-                        print(f"Processing {inputs_path}")
-
-                        # Load events
-                        events_VH = ak.from_parquet(f"{inputs_path}/events.parquet", columns=columns)
-                        scores_VH = np.load(f"{inputs_path}/y.npy")
-
-                        events = ak.concatenate([events, events_VH])
-                        scores = ak.concatenate([scores, scores_VH])
-
-                else:
-                    if not os.path.exists(f"{base_path}/individual_samples/{era}/{sample}"):
-                        print(f"Skipping {sample} in {era} as it does not exist.")
-                        continue
-                    inputs_path = f"{base_path}/individual_samples/{era}/{sample}"
-                    print(f"Processing {inputs_path}")
+                if not os.path.exists(f"{base_path}/individual_samples/{era}/{sample}"):
+                    print(f"Skipping {sample} in {era} as it does not exist.")
+                    continue
+                inputs_path = f"{base_path}/individual_samples/{era}/{sample}"
+                print(f"Processing {inputs_path}")
 
                 # Load events
                 events = ak.from_parquet(f"{inputs_path}/events"+("_boostedCat" if self.boosted else "")+".parquet",
@@ -1244,32 +948,19 @@ class OptunaCategorizer:
                     scores = scores[prompt_photon_bool]
 
                 events["dijet_mass"] = events[dijet_mass_key]
-                events["HHbbggCandidate_mass"] = events[mHH_key]
 
                 # Keep track of leftover
                 selected_events = events
                 selected_scores = scores
-                selected_mHH = events["HHbbggCandidate_mass"]
 
                 # ============= SR Categories (cat1, cat2, cat3) =============
                 for i in range(nsr):
-
-                    # ============= mHH category =============
-                    mask_mHH = np.ones(len(selected_mHH), dtype=bool)
-                    if len(mHH_cat) > 0:
-                        if mHH_cat[0] != -1:
-                            mask_mHH &= ak.to_numpy(selected_mHH >= mHH_cat[0])
-                        if mHH_cat[1] != -1:
-                            mask_mHH &= ak.to_numpy(selected_mHH < mHH_cat[1])
-
                     score_cuts = best_cut_values[i]
 
                     mask = (selected_scores[:, self.signal_class] > score_cuts["th_signal"])
                     bg_classes = [j for j in range(n_classes) if j != self.signal_class]
                     for b in bg_classes:
                         mask &= (selected_scores[:, b] < score_cuts[f"th_bg_{b}"])
-
-                    mask &= mask_mHH
 
                     cat_outdir = f"{out_dir}/cat{i+1}/{era}/{sample}"
                     os.makedirs(cat_outdir, exist_ok=True)
@@ -1285,7 +976,6 @@ class OptunaCategorizer:
                     # Remove from leftover
                     selected_events = selected_events[~mask]
                     selected_scores = selected_scores[~mask]
-                    selected_mHH = selected_mHH[~mask]
 
         # ----------------------
         # Process Data samples
@@ -1297,23 +987,7 @@ class OptunaCategorizer:
             "2022_EraC",
             "2022_EraD",
             "2023_EraC",
-            "2023_EraD",
-            "2024_EraC_EG0",
-            "2024_EraC_EG1",
-            "2024_EraD_EG0",
-            "2024_EraD_EG1",
-            "2024_EraE_EG0",
-            "2024_EraE_EG1",
-            "2024_EraF_EG0",
-            "2024_EraF_EG1",
-            "2024_EraG_EG0",
-            "2024_EraG_EG1",
-            "2024_EraH_EG0",
-            "2024_EraH_EG1",
-            "2024_EraIv1_EG0",
-            "2024_EraIv1_EG1",
-            "2024_EraIv2_EG0",
-            "2024_EraIv2_EG1"
+            "2023_EraD"
         ]
         for data_sample in data_samples:
             inputs_path = f"{base_path}/individual_samples_data/{data_sample}"
@@ -1326,7 +1000,6 @@ class OptunaCategorizer:
             # For data, weight_tot = 1
             events["weight_tot"] = ak.ones_like(events[dijet_mass_key])
             events["dijet_mass"] = events[dijet_mass_key]
-            events["HHbbggCandidate_mass"] = events[mHH_key]
 
             # Apply selection if needed
             if self.apply_preselection:
@@ -1334,26 +1007,14 @@ class OptunaCategorizer:
 
             selected_events = events
             selected_scores = scores
-            selected_mHH = events["HHbbggCandidate_mass"]
 
             # ============= SR (cat1, cat2, cat3) =============
             for i in range(nsr):
                 score_cuts = best_cut_values[i]
-
-                # ============= mHH category =============
-                mask_mHH = np.ones(len(selected_mHH), dtype=bool)
-                if len(mHH_cat) > 0:
-                    if mHH_cat[0] != -1:
-                        mask_mHH &= ak.to_numpy(selected_mHH >= mHH_cat[0])
-                    if mHH_cat[1] != -1:
-                        mask_mHH &= ak.to_numpy(selected_mHH < mHH_cat[1])
-
                 mask = (selected_scores[:, self.signal_class] > score_cuts["th_signal"])
                 bg_classes = [j for j in range(n_classes) if j != self.signal_class]
                 for b in bg_classes:
                     mask &= (selected_scores[:, b] < score_cuts[f"th_bg_{b}"])
-                
-                mask &= mask_mHH
 
                 cat_outdir = f"{out_dir}/cat{i+1}/{data_sample}"
                 os.makedirs(cat_outdir, exist_ok=True)
@@ -1368,7 +1029,6 @@ class OptunaCategorizer:
 
                 selected_events = selected_events[~mask]
                 selected_scores = selected_scores[~mask]
-                selected_mHH = selected_mHH[~mask]
 
         # ----------------------
         # Write combined yields to a text file, grouped by category
@@ -1423,6 +1083,7 @@ class OptunaCategorizer:
         import awkward as ak
         import pandas as pd
         import matplotlib.pyplot as plt
+        from matplotlib.backends.backend_pdf import PdfPages
 
         samples = [
             "GGJets", "DDQCDGJET", "TTGG", "ttHtoGG_M_125", "BBHto2G_M_125",
@@ -1432,7 +1093,7 @@ class OptunaCategorizer:
         ]
         data_samples = [
             "2022_EraE","2022_EraF","2022_EraG","2022_EraC","2022_EraD",
-            "2023_EraC","2023_EraD", "2024_EraC_EG0", "2024_EraC_EG1", "2024_EraD_EG0", "2024_EraD_EG1", "2024_EraE_EG0", "2024_EraE_EG1", "2024_EraF_EG0", "2024_EraF_EG1", "2024_EraG_EG0", "2024_EraG_EG1", "2024_EraH_EG0", "2024_EraH_EG1", "2024_EraIv1_EG0", "2024_EraIv1_EG1", "2024_EraIv2_EG0", "2024_EraIv2_EG1"
+            "2023_EraC","2023_EraD"
         ]
         folder_to_region = {
             "cat1":"SR1","cat2":"SR2","cat3":"SR3",
@@ -1445,23 +1106,13 @@ class OptunaCategorizer:
             m_low, m_high = mass_range
 
         for category in category_list:
-            path = f"{base_dir}/{category}"
-            if not os.path.isdir(path):
-                print(f"Skipping {category} as it does not exist.")
-                continue
-
             # ----- Monte Carlo -----
             total_mc, total_mc_err2 = 0.0, 0.0
             for sample in samples:
-
-                if sample == "VHtoGG_M_125":
-                    VHsample = "WmHtoGG"
-                    sample_2024 = ak.from_parquet(f"{path}/2024/{VHsample}/events.parquet", columns=["weight_tot","mass"])
-                    for VHsample in ["WpHtoGG", "ZHtoGG"]:
-                        sample_VH = ak.from_parquet(f"{path}/2024/{VHsample}/events.parquet", columns=["weight_tot","mass"])
-                        sample_2024 = ak.concatenate([sample_2024, sample_VH])
-                else:
-                    sample_2024 = ak.from_parquet(f"{path}/2024/{sample}/events.parquet", columns=["weight_tot","mass"])
+                path = f"{base_dir}/{category}"
+                if not os.path.isdir(path):
+                    print(f"Skipping {category} as it does not exist.")
+                    continue
 
                 # load both weight and mass
                 ev = ak.concatenate([
@@ -1472,9 +1123,8 @@ class OptunaCategorizer:
                     ak.from_parquet(f"{path}/preBPix/{sample}/events"+("_boostedCat" if self.boosted else "")+".parquet",
                                     columns=["weight_tot","mass"]),
                     ak.from_parquet(f"{path}/postBPix/{sample}/events"+("_boostedCat" if self.boosted else "")+".parquet",
-                                    columns=["weight_tot","mass"]),
-                    sample_2024
-                    ], axis=0)
+                                    columns=["weight_tot","mass"])
+                ], axis=0)
 
                 # apply the mass cut if requested
                 if mass_range is not None:
@@ -1661,20 +1311,23 @@ class OptunaCategorizer:
         postEE = ak.from_parquet(f"{folder}/individual_samples/postEE/GGJets/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
         preBPix = ak.from_parquet(f"{folder}/individual_samples/preBPix/GGJets/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
         postBPix = ak.from_parquet(f"{folder}/individual_samples/postBPix/GGJets/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
-        y2024 = ak.from_parquet(f"{folder}/individual_samples/2024/GGJets/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
         # concatenate the samples
-        presel_GGjets = ak.concatenate([preEE, postEE, preBPix, postBPix, y2024], axis=0)
+        presel_GGjets = ak.concatenate([preEE, postEE, preBPix, postBPix], axis=0)
 
         # load TTGG
         preEE = ak.from_parquet(f"{folder}/individual_samples/preEE/TTGG/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
         postEE = ak.from_parquet(f"{folder}/individual_samples/postEE/TTGG/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
         preBPix = ak.from_parquet(f"{folder}/individual_samples/preBPix/TTGG/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
         postBPix = ak.from_parquet(f"{folder}/individual_samples/postBPix/TTGG/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
-        y2024 = ak.from_parquet(f"{folder}/individual_samples/2024/TTGG/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
         # concatenate the samples
-        presel = ak.concatenate([preEE, postEE, preBPix, postBPix, y2024, presel_GGjets], axis=0)
+        presel = ak.concatenate([preEE, postEE, preBPix, postBPix, presel_GGjets], axis=0)
 
-        cat_to_label = {cat: f"SR{i+1}" for i, cat in enumerate(cat_list)}
+        cat_to_label = {
+            "cat1": "SR1",
+            "cat2": "SR2",
+            "cat3": "SR3",
+            "cat4": "SR4",
+        }
 
         cat_events = {}
         # loop over the categories
@@ -1683,20 +1336,16 @@ class OptunaCategorizer:
             postEE = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/postEE/GGJets/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
             preBPix = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/preBPix/GGJets/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
             postBPix = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/postBPix/GGJets/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
-            y2024 = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/2024/GGJets/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
 
             # load TTGG
             preEE_ttgg = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/preEE/TTGG/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
             postEE_ttgg = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/postEE/TTGG/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
             preBPix_ttgg = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/preBPix/TTGG/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
             postBPix_ttgg = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/postBPix/TTGG/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
-            y2024_ttgg = ak.from_parquet(f"{folder}/{cat_folder}/{cat}/2024/TTGG/events"+("_boostedCat" if self.boosted else "")+".parquet", columns=columns_to_load)
 
             # concatenate the samples
-            events_nonRes = ak.concatenate([preEE, postEE, preBPix, postBPix, y2024, preEE_ttgg, postEE_ttgg, preBPix_ttgg, postBPix_ttgg, y2024_ttgg], axis=0)
+            events_nonRes = ak.concatenate([preEE, postEE, preBPix, postBPix, preEE_ttgg, postEE_ttgg, preBPix_ttgg, postBPix_ttgg], axis=0)
             cat_events[cat] = events_nonRes
-            
-            
 
 
 
@@ -1736,12 +1385,11 @@ class OptunaCategorizer:
         plt.tight_layout()
         fig.savefig(f"{path_for_plots}/mass.png")
         plt.clf()
-        plt.close()
 
         fig, ax = plt.subplots()
-        plot_with_errorbars(presel, "nonResReg_dijet_mass_DNNreg", [70, 190], "Pre-selection", ax)
+        plot_with_errorbars(presel, "nonResReg_dijet_mass_DNNreg", [80, 190], "Pre-selection", ax)
         for cat in cat_list:
-            plot_with_errorbars(cat_events[cat], "nonResReg_dijet_mass_DNNreg", [70, 190], cat_to_label[cat], ax)
+            plot_with_errorbars(cat_events[cat], "nonResReg_dijet_mass_DNNreg", [80, 190], cat_to_label[cat], ax)
         ax.set_xlabel("Dijet mass (GeV)")
         ax.set_ylabel("Normalized events")
         ax.legend()
@@ -1749,7 +1397,6 @@ class OptunaCategorizer:
         plt.tight_layout()
         fig.savefig(f"{path_for_plots}/nonResReg_dijet_mass_DNNreg.png")
         plt.clf()
-        plt.close()
 
         # get correlation
         cat_corr_dict = {}
@@ -1775,15 +1422,13 @@ class OptunaCategorizer:
             cat_corr = np.array(cat_corr)
             cat_corr_dict[cat]["mean"] = np.mean(cat_corr)
             cat_corr_dict[cat]["std"] = np.std(cat_corr)
-            cat_corr_dict[cat]["min"] = np.min(cat_corr)
-            cat_corr_dict[cat]["max"] = np.max(cat_corr)
 
         for cat in cat_list:
             cat_events_ = cat_events[cat]
             fig, ax = plt.subplots()
-            plot_with_errorbars(cat_events_, "nonResReg_dijet_mass_DNNreg", [70, 190], r"$m_{\gamma \gamma} = [100, 180] GeV$", ax)
-            plot_with_errorbars(cat_events_[cat_events_.mass < 125], "nonResReg_dijet_mass_DNNreg", [70, 190], r"$m_{\gamma \gamma} < 125 GeV$", ax)
-            plot_with_errorbars(cat_events_[cat_events_.mass > 125], "nonResReg_dijet_mass_DNNreg", [70, 190], r"$m_{\gamma \gamma} > 125 GeV$", ax)
+            plot_with_errorbars(cat_events_, "nonResReg_dijet_mass_DNNreg", [80, 190], r"$m_{\gamma \gamma} = [100, 180] GeV$", ax)
+            plot_with_errorbars(cat_events_[cat_events_.mass < 125], "nonResReg_dijet_mass_DNNreg", [80, 190], r"$m_{\gamma \gamma} < 125 GeV$", ax)
+            plot_with_errorbars(cat_events_[cat_events_.mass > 125], "nonResReg_dijet_mass_DNNreg", [80, 190], r"$m_{\gamma \gamma} > 125 GeV$", ax)
             ax.set_xlabel("Dijet regressed mass (GeV)")
             ax.set_ylabel("Normalized events")
             ax.legend(title=f"Weigted Pea. Corr.: {cat_corr_dict[cat]['mean']:.2f} $\pm$ {cat_corr_dict[cat]['std']:.2f}")
@@ -1791,8 +1436,7 @@ class OptunaCategorizer:
             plt.tight_layout()
             fig.savefig(f"{path_for_plots}/nonResReg_dijet_mass_DNNreg_diff_mass_{cat}.png")
             plt.clf()
-            plt.close()
-        return cat_corr_dict
+
 
     def run_categorisation(self):
     
@@ -1800,31 +1444,13 @@ class OptunaCategorizer:
         samples_input = self.load_samples()
 
         if self.SR_strategy == "sequential":
-            best_params, best_sig_values, max_index = self.optmize_SR_sequential(samples_input)
+            best_params, best_sig_values = self.optmize_SR_sequential(samples_input)
         elif self.SR_strategy == "simultaneous":
             raise NotImplementedError("Simultaneous SR strategy is not implemented yet.")
 
         # load the best cut values
         with open(f"{self.base_path}/{self.cat_folder}/best_cut_params.json", "r") as f:
             best_cut_values = json.load(f)
-
-        # save the best cut parameters
-        cat_path = os.path.join(self.base_path, f"{self.cat_folder}")
-        best_params_path = os.path.join(cat_path, "best_cut_params.txt")
-        with open(best_params_path, "w") as f:
-            for i, params in enumerate(best_params, start=1):
-                f.write(f"Category {i}:\n")
-                for k, v in params.items():
-                    f.write(f"{k}: {v}\n")
-                f.write("\n")
-            # also save the best run number
-            f.write(f"Best run number: {max_index}\n")
-            # also save the best significance value
-            f.write(f"Best significance value: {best_sig_values}\n")
-
-        best_params_json_path = os.path.join(cat_path, "best_cut_params.json")
-        with open(best_params_json_path, "w") as f:
-            json.dump(best_params, f, indent=4)
 
         self.store_categorization_events_with_score(
             self.base_path,
@@ -1836,7 +1462,7 @@ class OptunaCategorizer:
 
         # plots for sculpting test
         print("Testing mass sculpting...")
-        cat_corr_dict = self.test_mass_sculpting(f"{self.base_path}/", folder_list, self.cat_folder)
+        self.test_mass_sculpting(f"{self.base_path}/", folder_list, self.cat_folder)
 
         # plot data-MC for SRs
         sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET", "TTG_100_200", "TTG_200"]
@@ -1854,164 +1480,7 @@ class OptunaCategorizer:
             mass_range=(100, 180)  # Example mass range, adjust as needed
         )
 
-        # Save a structured snapshot of the category summary and mass-sculpting data.
-        self.save_category_summary_dataframe(
-            os.path.join(self.base_path, self.cat_folder),
-            correlation_by_category=cat_corr_dict
-        )
 
-    def run_categorisation_mHH(self):
-        print("Categorization with mHH categories: ", self.mHH_cats)
-        # load the samples
-        samples_input = self.load_samples()
-
-        mHH_cat_dict = {}
-        for i in range(0, len(self.mHH_cats) + 1):
-
-            mHH_bounds = []
-            samples_input_cats = pd.DataFrame()
-            if i == 0:
-                samples_input_cats = samples_input.loc[(samples_input["HHbbggCandidate_mass"] < self.mHH_cats[i])]
-                mHH_bounds = [-1, self.mHH_cats[i]]
-            elif i == len(self.mHH_cats):
-                samples_input_cats = samples_input.loc[samples_input["HHbbggCandidate_mass"] >= self.mHH_cats[i-1]]
-                mHH_bounds = [self.mHH_cats[i-1], -1]
-            else:
-                samples_input_cats = samples_input.loc[(samples_input["HHbbggCandidate_mass"] >= self.mHH_cats[i-1]) & (samples_input["HHbbggCandidate_mass"] < self.mHH_cats[i])]
-                mHH_bounds = [self.mHH_cats[i-1], self.mHH_cats[i]]
-
-            if len(self.cat_signals) > 0:
-                if (len(self.cat_signals) != len(self.mHH_cats) + 1):
-                    raise RuntimeError("Number of category signals is not equal to the number of categories.")
-                else:
-                    self.signal_samples = self.cat_signals[i]
-                    print(f"mHH category {i}, signal sample {self.signal_samples}")
-                
-            if self.SR_strategy == "sequential":
-                best_params, best_sig_values, max_index = self.optmize_SR_sequential(samples_input_cats, mHH_cat=i)
-            elif self.SR_strategy == "simultaneous":
-                raise NotImplementedError("Simultaneous SR strategy is not implemented yet.")
-
-
-            # save the best cut parameters
-            cat_path = os.path.join(self.base_path, f"{self.cat_folder}")
-            best_params_path = os.path.join(cat_path, "best_cut_params.txt")
-            if i == 0:
-                with open(best_params_path, "w") as f:
-                    f.write(f"----mHH category: 0 - {self.mHH_cats[i]}----\n")
-                    for j, params in enumerate(best_params, start=1):
-                        f.write(f"Category {j}:\n")
-                        for k, v in params.items():
-                            f.write(f"{k}: {v}\n")
-                        f.write("\n")
-                    # also save the best run number
-                    f.write(f"Best run number: {max_index}\n")
-                    # also save the best significance value
-                    f.write(f"Best significance value: {best_sig_values}\n\n")
-            elif i == len(self.mHH_cats):
-                with open(best_params_path, "a") as f:
-                    f.write(f"----mHH category: {self.mHH_cats[i-1]} - inf----\n")
-                    for j, params in enumerate(best_params, start=1):
-                        f.write(f"Category {j}:\n")
-                        for k, v in params.items():
-                            f.write(f"{k}: {v}\n")
-                        f.write("\n")
-                    # also save the best run number
-                    f.write(f"Best run number: {max_index}\n")
-                    # also save the best significance value
-                    f.write(f"Best significance value: {best_sig_values}\n")
-            else:
-                with open(best_params_path, "a") as f:
-                    f.write(f"----mHH category: {self.mHH_cats[i-1]} - {self.mHH_cats[i]}----\n")
-                    for j, params in enumerate(best_params, start=1):
-                        f.write(f"Category {j}:\n")
-                        for k, v in params.items():
-                            f.write(f"{k}: {v}\n")
-                        f.write("\n")
-                    # also save the best run number
-                    f.write(f"Best run number: {max_index}\n")
-                    # also save the best significance value
-                    f.write(f"Best significance value: {best_sig_values}\n\n")
-
-            # also save it as a JSON file
-            best_params_json_path = os.path.join(cat_path, "best_cut_params.json")
-            if i == 0:
-                # with open(best_params_json_path, "w") as f:
-                mHH_cat_dict[f"mHHcat{i}"] = {"mHH_low": -1,
-                                "mHH_high": self.mHH_cats[i],
-                                "DNN_cuts" : best_params
-                                }
-            elif i == len(self.mHH_cats):
-                # with open(best_params_json_path, "a") as f:
-                mHH_cat_dict[f"mHHcat{i}"] = {"mHH_low": self.mHH_cats[i-1],
-                                "mHH_high": -1,
-                                "DNN_cuts" : best_params
-                                }
-            else:
-                # with open(best_params_json_path, "a") as f:
-                mHH_cat_dict[f"mHHcat{i}"] = {"mHH_low": self.mHH_cats[i-1],
-                                "mHH_high": self.mHH_cats[i],
-                                "DNN_cuts" : best_params
-                                }
-
-            # # load the best cut values
-            # with open(f"{self.base_path}/{self.cat_folder}/best_cut_params.json", "r") as f:
-            #     best_cut_values = json.load(f)
-
-            # self.store_categorization_events_with_score(
-            #     self.base_path,
-            #     best_params,
-            #     folder_name=f"{self.cat_folder}/mHH{i}",
-            #     mHH_cat = mHH_bounds
-            #     )
-            
-            # folder_list = [f"cat{j}" for j in range(1, 4)]
-
-            # # plots for sculpting test
-            # print("Testing mass sculpting...")
-            # self.test_mass_sculpting(f"{self.base_path}", folder_list, f"{self.cat_folder}/mHH{i}")
-
-            # # plot data-MC for SRs
-            # sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET", "TTG_100_200", "TTG_200"]
-            # variables = ["mass", "nonResReg_dijet_mass_DNNreg", "nonResReg_HHbbggCandidate_mass"]
-            # for folder in folder_list:
-            #     sim_folder = f"{self.base_path}/{self.cat_folder}/mHH{i}/{folder}"
-            #     data_folder = f"{self.base_path}/{self.cat_folder}/mHH{i}/{folder}"
-            #     out_path = f"{self.base_path}/{self.cat_folder}/mHH{i}/{folder}"
-            #     self.plot_stacked_histogram(sim_folder, data_folder, sim_samples, variables, out_path, signal_scale=100)
-
-            # # collect event yields
-            # self.collect_event_yields(
-            #     f"{self.base_path}/{self.cat_folder}/mHH{i}/",
-            #     folder_list,
-            #     mass_range=(100, 180)  # Example mass range, adjust as needed
-            # )
-
-        with open(best_params_json_path, "w") as f:
-            json.dump(mHH_cat_dict, f, indent=4)
-
-        if len(self.cat_signals) > 0:
-            cat_signals_path = os.path.join(cat_path, "category_signals.txt")
-            with open(cat_signals_path, "w") as f:
-                f.write("Specified signals per mHH category")
-                j = 0
-                while j < len(cat_signals):
-                    f.write(f"Signal for mHH category {j}: {self.cat_signals[j]}\n")
-                    j += 1
-
-def parse_cat_signals(arg_cat_signals):
-    cat_signals = []
-    for sig in arg_cat_signals:
-        if ("kl_1" in sig) | ("1" in sig):
-            cat_signals.append("GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00")
-        elif ("kl_0" in sig) | ("0" in sig):
-            cat_signals.append("GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00")
-        elif ("kl_2p45" in sig) | ("2.45" in sig):
-            cat_signals.append("GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00")
-        elif ("kl_5" in sig) | ("5" in sig):
-            cat_signals.append("GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00")
-    
-    return cat_signals
 
 #############################################
 # Main execution
@@ -2028,53 +1497,14 @@ if __name__ == "__main__":
     parser.add_argument("--gamma_strategy", type=str, choices=["sqrt", "linear"], default="linear", help="Gamma strategy for TPE sampler")
     parser.add_argument("--side_band_threshold", type=int, default=10, help="Threshold for sideband requirements")
     parser.add_argument("--boosted", action='store_true', default=False, help="Take the boosted category into account")
-    parser.add_argument("--mHH_cats", type=int, nargs="+", default=[], help="Inner boundaries of mHH categories, if using. No lower or upper bound assumed.")
-    parser.add_argument("--use_kl_all", action="store_true", help="Use all kl samples to compute significance.")
-    parser.add_argument("--cat_signals", type=str, nargs="+", default=[], help="kl values to use as signals, must have one more than argumetns for -mHH_cats if using. Assumes kl=1 if none provided")
-    parser.add_argument("--cat1_signals", type=str, nargs="+", default=[], help="kl values to use as signals in mHH category 1")
-    parser.add_argument("--cat2_signals", type=str, nargs="+", default=[], help="kl values to use as signals in mHH category 1")
-    parser.add_argument("--cat3_signals", type=str, nargs="+", default=[], help="kl values to use as signals in mHH category 1")
 
     args = parser.parse_args()
 
-    if args.use_kl_all:
-        signals = ["GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00"]
-    else:
-        signals = None
-
-    cat_signals = []
-    if len(args.cat_signals) > 0:
-        all_cat_signals = parse_cat_signals(args.cat_signals)
-        for sig in all_cat_signals:
-            cat_signals.append([sig])
-        print("Using signals per cat:", cat_signals)
-    else: 
-        if len(args.cat1_signals) > 0:
-            cat1_signals = parse_cat_signals(args.cat1_signals)
-            cat_signals.append(cat1_signals)
-        if len(args.cat2_signals) > 0:
-            cat2_signals = parse_cat_signals(args.cat2_signals)
-            cat_signals.append(cat2_signals)
-        if len(args.cat3_signals) > 0:
-            cat3_signals = parse_cat_signals(args.cat3_signals)
-            cat_signals.append(cat3_signals)
-            print("Using signals per cat:", cat_signals)
-
-
-
-
     categoriser = OptunaCategorizer(base_path=args.base_path,
                                     cat_folder=args.optuna_folder,
-                                    signal_samples = signals,
                                     n_categories=args.n_categories,
                                     n_trials_optuna=args.n_trials,
                                     n_runs=args.n_runs,
                                     SR_strategy=args.SR_strategy,
-                                    boosted=args.boosted,
-                                    mHH_cats=args.mHH_cats,
-                                    cat_signals = cat_signals)
-
-    if len(args.mHH_cats) > 0:
-        categoriser.run_categorisation_mHH()
-    else:
-        categoriser.run_categorisation()
+                                    boosted=args.boosted)
+    categoriser.run_categorisation()

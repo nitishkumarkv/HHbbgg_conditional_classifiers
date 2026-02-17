@@ -30,6 +30,48 @@ weight_scheme: weighted_abs # weighted_only_positive # weighted_CRUW_abs # weigh
 random_seed: 42
 cuda_device: "0"
 
+
+# ========== Training loop ==========
+submit_mlp_plotter_condor_every_checkpoint: False
+max_epoch: 300
+
+
+# ========== Decorrelation ==========
+use_DisCo: True
+decorr_lambda: 0.0
+disco_reduce_method: mean # mean, max, sum, quadrature
+# disco_decorr_class_idx: [0,1,2,3] # index of the class to decorrel, e.g. 0 for signal-only
+z_variables: # "Z dataset" variables to decorrelate against, e.g. mjj
+- nonResReg_dijet_mass_DNNreg 
+- mass
+decorrelation_variables:
+    var1:
+        - mass
+        # - nonResReg_dijet_mass_DNNreg
+    var2:
+        - nonResReg_dijet_mass_DNNreg
+        # - is_non_resonant_bkg
+        # - is_ttH_bkg
+        # - is_single_H_bkg
+        # - is_GluGluToHH_sig
+upweight_params: # conservative SR upweighting parameters
+    do_upweight: True
+    max_upweight: 1000.0
+    min_upweight: 1.0 # values less than 1 will DECREASE the weight of events far from SR, so be careful
+    sr_definition:
+        score_midpoint: # score value at which upweight reaches 50% of max_upweight (ORDER SENSITIVE)
+            th_nonRes: 0.01
+            # th_ttH: 0.45
+            # th_singleH: 0.45
+            th_ggFHH: 0.80
+        score_90_percent: # score value at which upweight reaches 90% of max_upweight (ORDER SENSITIVE)
+            th_nonRes: 0.001
+            # th_ttH: 0.30
+            # th_singleH: 0.30
+            th_ggFHH: 0.95
+
+
+
 samples_info: 
     samples_path: /eos/cms/store/group/phys_b2g/HHbbgg/HiggsDNA_parquet/v3/ # samples path
     eras:
@@ -137,3 +179,125 @@ save_all_columns_sim_systematics : False
 
 # Chunk size for converting akward arrays to pandas dataframes to alleviate memory pressure
 write_chunk : 50000
+
+
+# ========== Categorization ==========
+class_name_map: # for mapping multiclass class names to other formats
+    th_name_to_class_name: # bayesian_categorization.py format
+        th_signal: th_ggFHH
+        th_bg_0: th_nonRes
+        th_bg_1: th_ttH
+        th_bg_2: th_singleH
+        th_bg_4: th_VBFHH
+
+    th_name_to_ff_name: # score names that appear in FinalFit cat json file
+        th_signal: "HH_score" # "ggHH_score" # "HH_score"
+        th_bg_0: "nonRes_score"
+        th_bg_1: "ttH_score"
+        th_bg_2: "singleH_score"
+        th_bg_4: "VBFHH_score"
+class_criteria_inequality: # inequality for each class criteria: >, >=, <, <=
+    th_signal: ">" # e.g. ggHH_score > 0.91005
+    th_bg_0: "<" # e.g. nonRes_score < 0.061683
+    th_bg_1: "<" # e.g. ttH_score < 0.045553
+    th_bg_2: "<" # e.g. singleH_score < 0.054659
+    th_bg_4: "<" # n.b. assuming this is correct -- it probably is
+global_criteria_phrases: # add to all category criteria
+- "dijet_mass > 80"
+- "dijet_mass < 190"
+# - "is_boosted == 0"
+json_float_precision: -1 # -1 for no rounding
+
+
+# ========== Merge samples for FinalFit ==========
+merge_samples:
+    samples: # Comment samples to exclude from merged parquet
+    # - GGJets
+    # - DDQCDGJET
+    # - TTGG
+    # - TT
+    # - TTG_10_100
+    # - TTG_100_200
+    # - TTG_200
+    - ttHtoGG_M_125
+    - BBHto2G_M_125
+    - GluGluHToGG_M_125
+    - VBFHToGG_M_125
+    - VHtoGG_M_125
+    - GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00
+    - GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00
+    - GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00
+    - GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00
+    systs: # Comment systematics to exclude from merged parquet
+    - ScaleEB2G_IJazZ_down
+    - ScaleEB2G_IJazZ_up
+    - ScaleEE2G_IJazZ_down
+    - ScaleEE2G_IJazZ_up
+    - Smearing2G_IJazZ_down
+    - Smearing2G_IJazZ_up
+    - jec_syst_Total_down
+    - jec_syst_Total_up
+    - jer_syst_down
+    - jer_syst_up
+    - FNUF_down
+    - FNUF_up
+    - Material_down
+    - Material_up
+    finalfit_syst_name_map: # pq: ff
+        ScaleEB2G_IJazZ_down: ScaleEB2GIJazZDown01sigma
+        ScaleEB2G_IJazZ_up: ScaleEB2GIJazZUp01sigma
+        ScaleEE2G_IJazZ_down: ScaleEE2GIJazZDown01sigma
+        ScaleEE2G_IJazZ_up: ScaleEE2GIJazZUp01sigma
+        Smearing2G_IJazZ_down: Smearing2GIJazZDown01sigma
+        Smearing2G_IJazZ_up: Smearing2GIJazZUp01sigma
+        jec_syst_Total_down: jecsystDown01sigma
+        jec_syst_Total_up: jecsystUp01sigma
+        jer_syst_down: jersystDown01sigma
+        jer_syst_up: jersystUp01sigma
+        FNUF_down: FNUFDown01sigma
+        FNUF_up: FNUFUp01sigma
+        Material_down: MaterialDown01sigma
+        Material_up: MaterialUp01sigma
+    finalfit_sample_name_map: # pq: ff; Samples not in name map will keep their original names
+        GGJets: GGJets
+        DDQCDGJET: DDQCDGJets
+        TTGG: TTGG
+        TT: TT
+        TTG_10_100: TTG_10_100
+        TTG_100_200: TTG_100_200
+        TTG_200: TTG_200
+        ttHtoGG_M_125: ttHToGG
+        BBHto2G_M_125: bbHToGG
+        GluGluHToGG_M_125: GluGluHToGG
+        VBFHToGG_M_125: VBFHToGG
+        VHtoGG_M_125: VHToGG
+        GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00: GluGluToHH_kl-1p00_kt-1p00_c2-0p00
+        GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00: GluGluToHH_kl-0p00_kt-1p00_c2-0p00
+        GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00: GluGluToHH_kl-2p45_kt-1p00_c2-0p00
+        GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00: GluGluToHH_kl-5p00_kt-1p00_c2-0p00
+    # === Columns to Save ===
+    # - Columns from the parquet file you want to save to the merged parquet file, ready for FinalFit.
+    # - If desired, apply mapping parquet_name -> finalfit_name here for each column.
+    # - Note that all *weight* columns are added automatically, so no need to list them here.
+    # - Also, all components of the score column are unpacked automatically, so no need to list them here. 
+    #   - Their names are defined in score_idx_name_map below.
+    # - If you need to rename specific weight columns, you can do so by manually specifying them in columns_to_save as `newname: oldname`.
+    columns_to_save: # name map pq: ff; automatically adds all *weight* and unpacks *score* columns, so no need to list them here
+        # old: new
+        lumi: lumi
+        event: event
+        run: run
+        mass: mass
+        nonResReg_dijet_mass_DNNreg: dijet_mass
+        year: year
+        # is_boosted: is_boosted
+        # y_proba: y_proba
+        sample: sample
+        score: score
+    dijet_mass_key: nonResReg_dijet_mass_DNNreg # special variable; true name in events.parquet; renamed to dijet_mass for FF; must be a KEY in finalfit_var_name_map
+    score_key: score # special variable for storing the multi-class scores
+    score_idx_name_map: # mapping from score column index to class name for unpacking the score column
+        0: nonRes_score
+        1: ttH_score
+        2: singleH_score
+        3: HH_score

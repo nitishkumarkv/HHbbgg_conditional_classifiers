@@ -1,0 +1,7 @@
+n_categories: 3
+n_runs: 5
+optuna_folder: optuna_categorization
+n_trials: 150
+SR_strategy: sequential
+gamma_strategy: linear
+side_band_threshold: 10
