@@ -34,6 +34,7 @@ class PrepareInputs:
             self.classes = self.training_info["classes"]
             self.random_seed = self.training_info["random_seed"]
             self.weight_scheme_process = self.training_info["weight_scheme_process"]
+            self.class_weight_scale = self.training_info.get("class_weight_scale", None)  # optional per-class scale factors
             self.var_prefix = self.training_info.get("var_prefix", "nonResReg")  # default to "nonResReg" for backwards compatibility
         else:
             self.var_prefix = "nonResReg"
@@ -459,6 +460,18 @@ class PrepareInputs:
                 only_positive_rel_xsec_weight_for_class = rel_w_train * cls_bool * (rel_w_train > 0)
                 class_weights_only_positive = class_weights_only_positive + (only_positive_rel_xsec_weight_for_class / np.sum(only_positive_rel_xsec_weight_for_class))
 
+        # Apply optional per-class scale factors (e.g., xsec-proportional within signal group)
+        if self.class_weight_scale is not None:
+            print("\nINFO: Applying class_weight_scale factors:")
+            for i in range(y_train.shape[1]):
+                class_name = self.class_idx_to_name[i]
+                scale = self.class_weight_scale.get(class_name, 1.0)
+                print(f"  {class_name}: scale = {scale}")
+                cls_bool = (y_train[:, i] == 1)
+                true_class_weights = ak.where(cls_bool, true_class_weights * scale, true_class_weights)
+                class_weights_for_training_abs = ak.where(cls_bool, class_weights_for_training_abs * scale, class_weights_for_training_abs)
+                class_weights_only_positive = ak.where(cls_bool, class_weights_only_positive * scale, class_weights_only_positive)
+
         for i in range(y_train.shape[1]):
             print(f"(number of events: sum of class_weights_for_training_abs) for class number {i+1} = ({sum(y_train[:, i])}: {sum(class_weights_for_training_abs[y_train[:, i] == 1])})")
             print(f"(number of events: sum of class_weights_only_positive) for class number {i+1} = ({sum(y_train[:, i])}: {sum(class_weights_only_positive[y_train[:, i] == 1])})")
@@ -495,6 +508,16 @@ class PrepareInputs:
                 cls_bool = (y_val[:, i] == 1)
                 rel_xsec_weight_for_class = rel_w_val * cls_bool
                 class_weights_for_val = class_weights_for_val + (rel_xsec_weight_for_class / np.sum(rel_xsec_weight_for_class))
+
+        # Apply optional per-class scale factors (same as in training weights)
+        if self.class_weight_scale is not None:
+            print("\nINFO: Applying class_weight_scale factors to validation weights:")
+            for i in range(y_val.shape[1]):
+                class_name = self.class_idx_to_name[i]
+                scale = self.class_weight_scale.get(class_name, 1.0)
+                print(f"  {class_name}: scale = {scale}")
+                cls_bool = (y_val[:, i] == 1)
+                class_weights_for_val = ak.where(cls_bool, class_weights_for_val * scale, class_weights_for_val)
 
         for i in range(y_val.shape[1]):
             print(f"(number of events: sum of class_weights_for_val) for class number {i+1} = ({sum(y_val[:, i])}: {sum(class_weights_for_val[y_val[:, i] == 1])})")

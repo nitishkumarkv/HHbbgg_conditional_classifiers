@@ -289,7 +289,7 @@ if __name__ == "__main__":
     print(f"INFO: Training for {n_epochs} epochs", '\n')
     best_loss = np.inf
     best_weights = None
-    patience = 30  # Reduced from 50 for faster early stopping
+    patience = 50  # Reduced from 50 for faster early stopping
     counter = 0
 
     train_loss_hist = []
