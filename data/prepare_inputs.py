@@ -25,10 +25,13 @@ class PrepareInputs:
         mhh_range: Optional[List[float]] = None,
         ) -> None:
         self.model_type = "mlp"
-        self.input_var_json = input_var_json
         self.training_info = training_info
         self.outpath = outpath
         self.predict_parquet_info = predict_parquet_info
+
+        # get the variables required for training
+        vars_config = self.load_vars(input_var_json)[self.model_type]
+        self.vars_for_training = vars_config["vars"] 
         
         if self.training_info is not None:
             self.sample_to_class = self.training_info["sample_to_class"]
@@ -38,10 +41,43 @@ class PrepareInputs:
             self.write_chunk = self.training_info["write_chunk"]
         self.fill_nan = -9
 
-
+        # Variables needed to construct variables for training (mass also needed for fitting)
         self.extra_vars_train = ["weight", "mass", "nonResReg_dijet_mass_DNNreg", "nonResReg_HHbbggCandidate_mass", "nonResReg_dijet_pt", "nonResReg_lead_bjet_pt", "nonResReg_sublead_bjet_pt", "pt"]
         
         self.extra_vars_out = ["nonRes_dijet_mass", "nonResReg_dijet_mass", "lead_genPartFlav", "sublead_genPartFlav","n_electrons", "n_muons", "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet7_pt", "jet8_pt", "jet9_pt", "jet10_pt", "nBTight"]
+
+        # VBF pairiing variables for Yu-Hsuan
+        self.extra_vars_out += ["pholead_PtOverM",
+                                "phosublead_PtOverM",
+                                "FirstJet_PtOverM",
+                                "SecondJet_PtOverM",
+                                "nonResReg_vbfpair_VBF_first_jet_btagPNetB",
+                                "nonResReg_vbfpair_VBF_second_jet_btagPNetB",
+                                "nonResReg_vbfpair_VBF_first_jet_btagPNetQvG",
+                                "nonResReg_vbfpair_VBF_second_jet_btagPNetQvG",
+                                "CosThetaStar_CS",
+                                "CosThetaStar_gg",
+                                "CosThetaStar_jj",
+                                "M_X",
+                                "HHbbggCandidate_pt",
+                                "nonResReg_vbfpair_VBF_first_jet_PtOverM",
+                                "nonResReg_vbfpair_VBF_second_jet_PtOverM",
+                                "nonResReg_vbfpair_VBF_jet_eta_prod",
+                                "nonResReg_vbfpair_VBF_jet_eta_diff",
+                                "nonResReg_vbfpair_VBF_jet_eta_sum",
+                                "nonResReg_vbfpair_VBF_DeltaR_jb_min",
+                                "nonResReg_vbfpair_VBF_DeltaR_jg_min",
+                                "nonResReg_vbfpair_VBF_Cgg",
+                                "nonResReg_vbfpair_VBF_Cbb",
+                                "nonResReg_vbfpair_VBF_dijet_mass",
+                                "nonResReg_vbfpair_VBF_dijet_vbfpair_Score_jj",
+                                "lead_bjet_btagPNetB",
+                                "sublead_bjet_btagPNetB",
+                                "lead_bjet_eta",
+                                "sublead_bjet_eta",
+                                "DeltaR_jg_min",
+                                "dijet_mass",
+                                "CMS_hgg_mass"]
 
         # prepare process numbers for proccesses in each class
         num_process_each_class = {
@@ -239,7 +275,7 @@ class PrepareInputs:
             raise ValueError(f"Unknown era: {era}")
         
         if (era == "2024") & (sample_type == "GGJets"):
-            events["weight_tot"] = (events.weight_tot) * 1.59
+            events["weight_tot"] = (events.weight_tot) * 1.5925
 
         return events
 
@@ -528,22 +564,21 @@ class PrepareInputs:
 
         comb_inputs = pd.DataFrame()
 
-        # get the variables required for training
-        vars_config = self.load_vars(self.input_var_json)[self.model_type]
+        vars_to_load = self.vars_for_training + self.extra_vars_train
 
-        vars_for_training = vars_config["vars"] 
-        # vars_for_log = vars_config["vars_for_log_transform"]
-
-        vars_to_load = vars_for_training + self.extra_vars_train
 
         for era in self.training_info["samples_info"]["eras"]:
-            # for samples in self.sample_to_class.keys():                
-            for samples in self.training_info["samples_info"][era].keys():                
+            # for samples in self.sample_to_class.keys():
+            print("*****", era)
+            for samples in self.training_info["samples_info"][era].keys(): 
+                print("*****", samples)
 
                 samples_path = self.training_info["samples_info"]["samples_path"]
                 parquet_path = self.training_info["samples_info"][era][samples]
-                events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
 
+                df = pd.read_parquet(f"{samples_path}/{parquet_path}")
+
+                events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
                 events = self.preselection(events)
 
                 # add more variables
@@ -552,7 +587,7 @@ class PrepareInputs:
                 # get relative weights according to cross section of the process
                 events = self.get_relative_xsec_weight(events, samples, era)
 
-                events = events[vars_for_training + ["weight_tot"]]
+                events = events[self.vars_for_training + ["weight_tot", "diphoton_PtOverM_ggjj", "nonResReg_dijet_PtOverM_ggjj", "deltaR_gg", "nonResReg_lead_bjet_over_M_regressed", "nonResReg_sublead_bjet_over_M_regressed", "year"]]
 
                 # apply mHH bin filter (if configured) and skip sample if empty
                 if self.mhh_var is not None and self.mhh_range is not None:
@@ -600,7 +635,7 @@ class PrepareInputs:
         for cls in self.classes:
             print("\n", f"INFO: Number of events in {cls}: {sum(comb_inputs[cls])}")
 
-        X = comb_inputs[vars_for_training]
+        X = comb_inputs[self.vars_for_training]
         Y = comb_inputs[[cls for cls in self.classes]]
         relative_weights = comb_inputs["weight_tot"]
 
@@ -647,7 +682,7 @@ class PrepareInputs:
         print("\n INFO: saving inputs for mlp")
         # save str of input variables
         with open(f"{out_path}/input_vars.txt", 'w') as f:
-            json.dump(vars_for_training, f)
+            json.dump(self.vars_for_training, f)
         
         np.save(f"{out_path}/X_train", X_train)
         np.save(f"{out_path}/X_val", X_val)
@@ -686,16 +721,8 @@ class PrepareInputs:
         inputs_path = self.outpath
         out_path = f"{inputs_path}/individual_samples/"
         os.makedirs(out_path, exist_ok=True)
-        # get the variables required for training
-        vars_config = self.load_vars(self.input_var_json)[self.model_type]
 
-        with open(f"{inputs_path}/input_vars.txt", 'r') as f:
-            vars = json.load(f)
-        vars_for_training = vars
-
-        # vars_for_log = vars_config["vars_for_log_transform"]
-
-        vars_to_load = vars_for_training + self.extra_vars_train + self.extra_vars_out
+        vars_to_load = self.vars_for_training + self.extra_vars_train + self.extra_vars_out
 
         samples_path = training_info["samples_info"]["samples_path"]
 
@@ -731,7 +758,7 @@ class PrepareInputs:
                 os.makedirs(full_path_to_save, exist_ok=True)
                 ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
 
-                events = events[vars_for_training + ["weight_tot"]]
+                events = events[self.vars_for_training + ["weight_tot"]]
 
                 comb_inputs = pd.DataFrame()
                 i = 0
@@ -741,7 +768,7 @@ class PrepareInputs:
                     comb_inputs = pd.concat([comb_inputs, pd.DataFrame(ak.to_list(events_intermediate))])
                     i+=1
 
-                X = comb_inputs[vars_for_training]
+                X = comb_inputs[self.vars_for_training]
                 #Y = comb_inputs[[cls for cls in self.classes]]
                 relative_weights = comb_inputs["weight_tot"]
 
@@ -793,16 +820,8 @@ class PrepareInputs:
         inputs_path = self.outpath
         out_path = f"{inputs_path}/individual_samples/"
         os.makedirs(out_path, exist_ok=True)
-        # get the variables required for training
-        vars_config = self.load_vars(self.input_var_json)[self.model_type]
 
-        with open(f"{inputs_path}/input_vars.txt", 'r') as f:
-            vars = json.load(f)
-        vars_for_training = vars
-
-        # vars_for_log = vars_config["vars_for_log_transform"]
-
-        vars_to_load = vars_for_training + self.extra_vars_train + self.extra_vars_out
+        vars_to_load = self.vars_for_training + self.extra_vars_train + self.extra_vars_out
 
         samples_path = training_info["samples_info"]["samples_path"]
 
@@ -845,7 +864,7 @@ class PrepareInputs:
                     os.makedirs(full_path_to_save, exist_ok=True)
                     ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
 
-                    events = events[vars_for_training + ["weight_tot"]]
+                    events = events[self.vars_for_training + ["weight_tot"]]
 
                     comb_inputs = pd.DataFrame()
                     i = 0
@@ -855,7 +874,7 @@ class PrepareInputs:
                         comb_inputs = pd.concat([comb_inputs, pd.DataFrame(ak.to_list(events_intermediate))])
                         i+=1
 
-                    X = comb_inputs[vars_for_training]
+                    X = comb_inputs[self.vars_for_training]
                     #Y = comb_inputs[[cls for cls in self.classes]]
                     relative_weights = comb_inputs["weight_tot"]
 
@@ -908,15 +927,7 @@ class PrepareInputs:
         out_path = f"{inputs_path}/individual_samples_data/"
         os.makedirs(out_path, exist_ok=True)
 
-        # get the variables required for training
-        vars_config = self.load_vars(self.input_var_json)[self.model_type]
-        with open(f"{inputs_path}/input_vars.txt", 'r') as f:
-            vars = json.load(f)
-        vars_for_training = vars
-
-        # vars_for_log = vars_config["vars_for_log_transform"]
-
-        vars_to_load = vars_for_training + self.extra_vars_train + self.extra_vars_out
+        vars_to_load = self.vars_for_training + self.extra_vars_train + self.extra_vars_out
 
         samples_path = training_info["samples_info"]["samples_path"]
         datas = training_info["samples_info"]["data"]
@@ -976,7 +987,7 @@ class PrepareInputs:
             os.makedirs(full_path_to_save, exist_ok=True)
             ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
 
-            events = events[vars_for_training]
+            events = events[self.vars_for_training]
 
             comb_inputs = pd.DataFrame()
             i = 0
@@ -986,7 +997,7 @@ class PrepareInputs:
                 comb_inputs = pd.concat([comb_inputs, pd.DataFrame(ak.to_list(events_intermediate))])
                 i+=1
 
-            X = comb_inputs[vars_for_training]
+            X = comb_inputs[self.vars_for_training]
 
             # perform log transformation for variables if needed
             # for var in vars_for_log:
