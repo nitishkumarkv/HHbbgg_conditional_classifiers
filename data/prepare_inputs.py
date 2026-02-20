@@ -239,7 +239,7 @@ class PrepareInputs:
             raise ValueError(f"Unknown era: {era}")
         
         if (era == "2024") & (sample_type == "GGJets"):
-            events["weight_tot"] = (events.weight_tot) * 1.59
+            events["weight_tot"] = (events.weight_tot) * 1.5925
 
         return events
 
