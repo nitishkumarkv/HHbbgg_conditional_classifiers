@@ -40,9 +40,6 @@ class PrepareInputs:
             self.var_prefix = "nonResReg"
         self.fill_nan = -9
 
-        #self.extra_vars = ["mass", "nonRes_dijet_mass", "Res_dijet_mass", "nonRes_has_two_btagged_jets", "weight", "pt", "nonRes_dijet_pt", "Res_dijet_pt", "Res_lead_bjet_pt", "Res_sublead_bjet_pt", "Res_lead_bjet_ptPNetCorr", "Res_sublead_bjet_ptPNetCorr", "nonRes_HHbbggCandidate_mass", "Res_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "Res_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "jet1_mass", "jet2_mass", "jet3_mass", "jet4_mass", "jet5_mass", "jet6_mass", "Res_lead_bjet_jet_idx", "Res_sublead_bjet_jet_idx", "jet1_index", "jet2_index", "jet3_index", "jet4_index", "jet5_index", "jet6_index",
-        #                   "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet1_eta", "jet2_eta", "jet3_eta", "jet4_eta", "jet5_eta", "jet6_eta", "jet1_phi", "jet2_phi", "jet3_phi", "jet4_phi", "jet5_phi", "jet6_phi", "lead_phi", "sublead_phi"]
-
         self.extra_vars = ["mass", "nonRes_dijet_mass", f"{self.var_prefix}_dijet_mass", f"{self.var_prefix}_dijet_mass_DNNreg", f"{self.var_prefix}_HHbbggCandidate_mass", f"{self.var_prefix}_dijet_pt", f"{self.var_prefix}_lead_bjet_pt", f"{self.var_prefix}_sublead_bjet_pt", f"{self.var_prefix}_lead_bjet_eta", f"{self.var_prefix}_DNNpair_dijet_mass", f"{self.var_prefix}_DNNpair_dijet_mass_DNNreg", f"{self.var_prefix}_lead_bjet_btagPNetB", f"{self.var_prefix}_sublead_bjet_btagPNetB", f"{self.var_prefix}_lead_bjet_btagUParTAK4B", f"{self.var_prefix}_sublead_bjet_btagUParTAK4B", "weight", "pt", "nonRes_dijet_pt", "nonRes_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "lead_eta", "lead_phi", "sublead_eta", "sublead_phi"] # "lead_genPartFlav", "sublead_genPartFlav", "weight_tot" added for sim predictions only in the dedicated functions
 
         self.vars_for_boosted = ['sublead_mvaID', 'fatjet3_tau2', 'fatjet3_particleNet_XbbVsQCD', 'fatjet4_subjet2_eta', 'sublead_eta', 'fatjet2_phi', 'fatjet1_mass', f'{self.var_prefix}_CosThetaStar_gg', 'fatjet4_particleNet_XbbVsQCD', 'lead_phi', 'fatjet4_pt', 'fatjet4_tau1', 'fatjet4_tau2', 'fatjet2_particleNet_XbbVsQCD', 'fatjet3_subjet1_eta', 'fatjet1_subjet1_eta', 'lead_eta', 'fatjet3_msoftdrop', 'fatjet4_mass', 'fatjet4_particleNet_massCorr', 'fatjet1_tau1', 'eta', 'fatjet2_pt', 'phi', 'fatjet1_subjet2_phi', 'fatjet3_eta', 'fatjet1_subjet2_eta', f'{self.var_prefix}_phosublead_PtOverM', 'fatjet4_subjet1_phi', 'fatjet3_subjet2_phi', 'fatjet3_subjet1_phi', 'fatjet2_tau2', 'n_jets', 'fatjet2_msoftdrop', 'fatjet2_subjet2_phi', 'fatjet3_pt', 'fatjet2_eta', 'fatjet3_tau1', 'fatjet4_eta', 'fatjet1_eta', 'fatjet3_mass', 'n_fatjets', 'fatjet1_pt', 'fatjet3_subjet2_eta', 'fatjet1_subjet1_phi', 'fatjet1_msoftdrop', 'lead_mvaID', 'fatjet4_subjet1_eta', f'{self.var_prefix}_pholead_PtOverM', 'fatjet2_tau1', 'fatjet2_mass', 'fatjet2_subjet2_eta', 'fatjet3_phi', 'n_leptons', 'fatjet1_particleNet_massCorr', 'fatjet2_subjet1_phi', 'fatjet4_subjet2_phi', 'fatjet1_tau2', 'fatjet1_phi', 'fatjet2_subjet1_eta', 'fatjet4_phi', 'fatjet1_particleNet_XbbVsQCD', 'fatjet3_particleNet_massCorr', 'fatjet4_msoftdrop', 'sublead_phi', 'fatjet2_particleNet_massCorr']
@@ -75,6 +72,7 @@ class PrepareInputs:
             vars = yaml.safe_load(f)
         return vars
 
+
     def substitute_var_prefix(self, var_list):
         """
         Replace generic 'regcol_' prefix with the actual var_prefix.
@@ -87,10 +85,86 @@ class PrepareInputs:
         """
         return [var.replace("regcol_", f"{self.var_prefix}_") if "regcol_" in var else var for var in var_list]
 
+
+    def _mem_mb(self):
+        """Return current process RSS in MB by reading /proc/self/status."""
+        with open('/proc/self/status') as f:
+            for line in f:
+                if line.startswith('VmRSS:'):
+                    return int(line.split()[1]) / 1024
+        return -1
+
+
+    def _iter_file_batched(self, file_path, vars_to_load, save_all_columns, era, preselection_func, xsec_sample_name, apply_xsec_weights):
+        """
+        Generator that loads a single parquet file in 20 equal-sized row batches,
+        yielding each processed batch. Peak memory is bounded to ~1/20th of the file
+        regardless of the number of row groups written in the file.
+
+        Args:
+            file_path: Full path to the parquet file
+            vars_to_load: List of variables to load
+            save_all_columns: If True, load all columns
+            era: Era name
+            preselection_func: Function to apply for event selection
+            xsec_sample_name: Sample name for cross-section weighting
+            apply_xsec_weights: If True, apply cross-section weights
+
+        Yields:
+            batch: Processed awkward array for each non-empty batch
+        """
+        pf = pq.ParquetFile(file_path)
+        batch_size = max(1, pf.metadata.num_rows // 20)
+        columns = None if save_all_columns else vars_to_load
+
+        for record_batch in pf.iter_batches(batch_size=batch_size, columns=columns):
+            #print(f"  [MEM] after iter_batches read:  {self._mem_mb():.0f} MB")
+            batch = ak.from_arrow(record_batch)
+            del record_batch
+            #print(f"  [MEM] after ak.from_arrow:      {self._mem_mb():.0f} MB")
+
+            # Temporary fix for v4p5 version of Run 2 & 2022+2023
+            if ("201" in era) or ("EE" in era) or ("BPix" in era):
+                batch = ak.Array({
+                    (name.replace("nonResReg", "nonResReg_vbfpair", 1)
+                     if name.startswith("nonResReg")
+                     else name
+                    ): batch[name]
+                    for name in batch.fields
+                })
+                batch = ak.Array({
+                    (f"nonResReg_vbfpair_{name}"
+                     if "VBF" in name and not name.startswith("nonResReg_vbfpair")
+                     else name
+                    ): batch[name]
+                    for name in batch.fields
+                })
+
+            batch = preselection_func(batch)
+            #print(f"  [MEM] after preselection:       {self._mem_mb():.0f} MB  ({len(batch)} events)")
+
+            if len(batch) > 0:
+                batch = self.add_var(batch, era)
+                #print(f"  [MEM] after add_var:            {self._mem_mb():.0f} MB")
+                if apply_xsec_weights:
+                    batch = self.get_relative_xsec_weight(batch, xsec_sample_name, era)
+                    #print(f"  [MEM] after xsec weights:       {self._mem_mb():.0f} MB")
+
+                # Convert float64 fields to float32 to save memory
+                for field in batch.fields:
+                    if hasattr(batch[field], 'dtype') and batch[field].dtype == np.float64:
+                        batch[field] = ak.values_astype(batch[field], np.float32)
+                #print(f"  [MEM] after float32 cast:       {self._mem_mb():.0f} MB")
+
+                yield batch
+                #print(f"  [MEM] after caller consumed batch: {self._mem_mb():.0f} MB")
+
+
     def load_and_process_sample(self, samples_path, parquet_path, samples, era, vars_to_load, preselection_func, save_all_columns=False, systematic=None, apply_xsec_weights=True):
         """
         Load parquet file(s) for a sample and apply preprocessing.
         Handles both single files and lists of files (for VH merging in 2024/2025).
+        Files are loaded in row-group batches to reduce peak memory usage.
 
         Args:
             samples_path: Base path to samples
@@ -125,14 +199,6 @@ class PrepareInputs:
                         print(f"WARNING: {samples} for {era} for {systematic} does not exist. Skipping.: {samples_path}/{path}")
                         continue
 
-                if save_all_columns:
-                    events_part = ak.from_parquet(f"{samples_path}/{path}")
-                else:
-                    events_part = ak.from_parquet(f"{samples_path}/{path}", columns=vars_to_load)
-
-                events_part = preselection_func(events_part)
-                events_part = self.add_var(events_part, era)
-
                 # Determine which VH component this is from the path
                 component_name = None
                 for key in vh_component_names.keys():
@@ -140,15 +206,20 @@ class PrepareInputs:
                         component_name = vh_component_names[key]
                         break
 
-                # Apply correct cross-section for each component
-                if apply_xsec_weights:
-                    events_part = self.get_relative_xsec_weight(events_part, component_name, era)
-                events_list.append(events_part)
+                for batch in self._iter_file_batched(
+                    file_path=f"{samples_path}/{path}",
+                    vars_to_load=vars_to_load,
+                    save_all_columns=save_all_columns,
+                    era=era,
+                    preselection_func=preselection_func,
+                    xsec_sample_name=component_name,
+                    apply_xsec_weights=apply_xsec_weights
+                ):
+                    events_list.append(batch)
 
             # Only concatenate if we have events (some systematics might not exist)
             if len(events_list) > 0:
                 events = ak.concatenate(events_list, axis=0)
-                # Clean up intermediate list
                 del events_list
             else:
                 events = None
@@ -161,25 +232,21 @@ class PrepareInputs:
                     print(f"WARNING: {samples} for {era} for {systematic} does not exist. Skipping.: {samples_path}/{parquet_path}")
                     return None
 
-            if save_all_columns:
-                events = ak.from_parquet(f"{samples_path}/{parquet_path}")
-            else:
-                events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
-
-            events = preselection_func(events)
-            events = self.add_var(events, era)
-            if apply_xsec_weights:
-                events = self.get_relative_xsec_weight(events, samples, era)
-
-        # Convert float64 fields to float32 to save memory
-        if events is not None:
-            for field in events.fields:
-                if hasattr(events[field], 'dtype'):
-                    if events[field].dtype == np.float64:
-                        events[field] = ak.values_astype(events[field], np.float32)
+            batches = list(self._iter_file_batched(
+                file_path=f"{samples_path}/{parquet_path}",
+                vars_to_load=vars_to_load,
+                save_all_columns=save_all_columns,
+                era=era,
+                preselection_func=preselection_func,
+                xsec_sample_name=samples,
+                apply_xsec_weights=apply_xsec_weights
+            ))
+            events = ak.concatenate(batches, axis=0) if batches else None
+            del batches
 
         return events
     
+
     def deltaR(self, eta1, phi1, eta2, phi2, fill_none=True):
         eta1 = ak.mask(eta1, (eta1 != -999) & (phi1 != -999) & (eta2 != -999) & (phi2 != -999))
         phi1 = ak.mask(phi1, (eta1 != -999) & (phi1 != -999) & (eta2 != -999) & (phi2 != -999))
@@ -194,6 +261,7 @@ class PrepareInputs:
             return ak.fill_none(delta_r, -999.0)
         else:
             return delta_r
+
 
     def add_var(self, events, era):
 
@@ -275,96 +343,6 @@ class PrepareInputs:
             events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.6298, int)
             events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.9739, int)
 
-        # add jet related mass
-            
-        # # Build awkward array of jets
-        # jets = ak.zip({
-        #     "pt": ak.concatenate([events[f"jet{i}_pt"][:, None] for i in range(1, 7)], axis=1),
-        #     "eta": ak.concatenate([events[f"jet{i}_eta"][:, None] for i in range(1, 7)], axis=1),
-        #     "phi": ak.concatenate([events[f"jet{i}_phi"][:, None] for i in range(1, 7)], axis=1),
-        #     "mass": ak.concatenate([events[f"jet{i}_mass"][:, None] for i in range(1, 7)], axis=1),
-        #     "index": ak.concatenate([events[f"jet{i}_index"][:, None] for i in range(1, 7)], axis=1),
-        # }, with_name="Momentum4D")
-        
-        # # Mask out jets that are b-jets
-        # is_not_bjet = (jets.index != events.Res_lead_bjet_jet_idx[:, None]) & \
-        #               (jets.index != events.Res_sublead_bjet_jet_idx[:, None])
-        # jets_clean = jets[is_not_bjet]
-
-        # # Select up to 4 jets
-        # selected_jets = jets_clean[:, :4]
-        
-        # # ΔR to objects
-        # def min_deltaR_to(obj_eta, obj_phi):
-        #     min = ak.min(self.deltaR(selected_jets.eta, selected_jets.phi, obj_eta[:, None], obj_phi[:, None], fill_none=False), axis=1)
-        #     return ak.fill_none(min, -999.0)
-
-        # events["min_deltaR_jet_b1"] = min_deltaR_to(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi)
-        # events["min_deltaR_jet_b2"] = min_deltaR_to(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi)
-        # events["min_deltaR_jet_g1"] = min_deltaR_to(events.lead_eta, events.lead_phi)
-        # events["min_deltaR_jet_g2"] = min_deltaR_to(events.sublead_eta, events.sublead_phi)
-
-        # # deltaR betwreen the jets anf photons, bjets
-        # events["deltaR_g1_j1"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
-        # events["deltaR_g1_j2"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
-        # events["deltaR_g1_j3"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
-        # events["deltaR_g1_j4"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
-        # events["deltaR_g2_j1"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
-        # events["deltaR_g2_j2"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
-        # events["deltaR_g2_j3"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
-        # events["deltaR_g2_j4"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
-        # events["deltaR_b1_j1"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
-        # events["deltaR_b1_j2"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
-        # events["deltaR_b1_j3"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
-        # events["deltaR_b1_j4"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
-        # events["deltaR_b2_j1"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
-        # events["deltaR_b2_j2"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
-        # events["deltaR_b2_j3"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
-        # events["deltaR_b2_j4"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
-
-        # # add jet pt, eta, phi
-        # events["j1_pt"] = selected_jets.pt[:, 0]
-        # events["j2_pt"] = selected_jets.pt[:, 1]
-        # events["j3_pt"] = selected_jets.pt[:, 2]
-        # events["j4_pt"] = selected_jets.pt[:, 3]
-        # events["j1_eta"] = selected_jets.eta[:, 0]
-        # events["j2_eta"] = selected_jets.eta[:, 1]
-        # events["j3_eta"] = selected_jets.eta[:, 2]
-        # events["j4_eta"] = selected_jets.eta[:, 3]
-        # events["j1_phi"] = selected_jets.phi[:, 0]
-        # events["j2_phi"] = selected_jets.phi[:, 1]
-        # events["j3_phi"] = selected_jets.phi[:, 2]
-        # events["j4_phi"] = selected_jets.phi[:, 3]
-       
-
-
-        # # Build Lorentz vectors from selected_jets
-        # jets_vec = selected_jets
-
-        # # Pair indices for 4 jets
-        # pair_indices = [(0, 1), (0, 2), (0, 3),
-        #                 (1, 2), (1, 3),
-        #                 (2, 3)]
-
-        # pair_names = ["j1_j2", "j1_j3", "j1_j4", "j2_j3", "j2_j4", "j3_j4"]
-
-        #for (i, j), name in zip(pair_indices, pair_names):
-        #    # Mask if either jet is invalid (pt == -999)
-        #    valid = (selected_jets.pt[:, i] != -999) & (selected_jets.pt[:, j] != -999)
-
-        #    # Sum vectors and get invariant mass
-        #    m_pair = (jets_vec[:, i] + jets_vec[:, j]).mass
-
-        #    # Set to -999 if invalid
-        #    events[f"mass_{name}"] = ak.where(valid, m_pair, -999.0)
-
-        #    # Compute ΔR for the pair using your self.deltaR
-        #    delta_r = self.deltaR(
-        #        selected_jets.eta[:, i], selected_jets.phi[:, i],
-        #        selected_jets.eta[:, j], selected_jets.phi[:, j]
-        #    )
-        #    events[f"deltaR_{name}"] = ak.where(valid, delta_r, -999.0)
-
         return events
 
 
@@ -417,6 +395,7 @@ class PrepareInputs:
         events["weight_tot"] = (events.weight) * dict_xsec[sample_type] * lumi
 
         return events
+
 
     def get_weights_for_training(self, y_train, rel_w_train, proc_num_train):
 
@@ -487,6 +466,7 @@ class PrepareInputs:
 
         return true_class_weights, class_weights_for_training_abs, class_weights_only_positive
 
+
     def get_weights_for_val_test(self, y_val, rel_w_val, proc_num_val):
 
         class_weights_for_val = ak.zeros_like(rel_w_val)
@@ -530,6 +510,7 @@ class PrepareInputs:
 
         return class_weights_for_val
 
+
     def train_test_split(self, X, Y, relative_weights, proc_num, train_ratio=0.7, val_ratio=0.3):
 
         from sklearn.model_selection import train_test_split
@@ -547,8 +528,10 @@ class PrepareInputs:
     def standardize(self, X, mean, std):
         return (X - mean) / std
 
+
     def min_max_scale(self, X, min, max):
         return (X - min) / (max - min)
+
 
     def corr_with_mgg_mjj(self, events, vars_for_training, out_path):
 
@@ -606,6 +589,7 @@ class PrepareInputs:
 
         return events
 
+
     def preselection_for_pred(self, events):
 
         mass_bool = ((events.mass > 100) & (events.mass < 180))
@@ -617,6 +601,7 @@ class PrepareInputs:
 
         return events
     
+
     def plot_variables(self, comb_inputs, vars_for_training, plot_path):
         """
         Plot variables directly from awkward array without pandas conversion.
@@ -720,7 +705,6 @@ class PrepareInputs:
             plt.close()  # Explicitly close figure to free memory
             
 
-
     def prep_inputs_for_training(self):
 
         fill_nan = self.fill_nan
@@ -730,16 +714,21 @@ class PrepareInputs:
 
         comb_inputs = []
 
-        # get the variables required for training
-        vars_config = self.load_vars(self.input_var_json)[self.model_type]
-
-        # Substitute generic 'regcol_' prefix with actual var_prefix
-        vars_for_training = self.substitute_var_prefix(vars_config["vars"])
-        # vars_for_log = vars_config["vars_for_log_transform"]
-
-        vars_to_load = vars_for_training + self.extra_vars
-
         for era in self.training_info["samples_info"]["eras"]:
+            # get the variables required for training
+            vars_config = self.load_vars(self.input_var_json)[self.model_type]
+
+            # Substitute generic 'regcol_' prefix with actual var_prefix
+            vars_for_training = self.substitute_var_prefix(vars_config["vars"])
+            # vars_for_log = vars_config["vars_for_log_transform"]
+
+            vars_to_load = vars_for_training + self.extra_vars
+
+            # Temporary fix for v4p5 version of Run 2
+            if ("201" in era) or ("EE" in era) or ("BPix" in era):
+                vars_to_load = [var.replace(f"{self.var_prefix}_", "") if "VBF" in var else var for var in vars_to_load]
+                vars_to_load = [var.replace(f"{self.var_prefix}_", "nonResReg_") for var in vars_to_load]
+
             for samples in self.sample_to_class.keys():
                 print(samples)
 
@@ -818,6 +807,18 @@ class PrepareInputs:
         mask = (X < -998.0)
         X[mask] = np.nan
 
+        training_fraction = self.training_info.get("training_fraction", 1.0)
+        if training_fraction < 1.0:
+            rng = np.random.default_rng(self.random_seed)
+            n_total = len(X)
+            n_keep = int(n_total * training_fraction)
+            idx = np.sort(rng.choice(n_total, size=n_keep, replace=False))
+            X = X[idx]
+            Y = Y[idx]
+            relative_weights = relative_weights[idx]
+            process_number = process_number[idx]
+            print(f"INFO: training_fraction={training_fraction}: keeping {n_keep}/{n_total} events")
+
         X_train, X_val, X_test, y_train, y_val, y_test, rel_w_train, rel_w_val, rel_w_test, proc_num_train, proc_num_val, proc_num_test = self.train_test_split(X, Y, relative_weights, process_number)
 
         # Clean up original arrays after split
@@ -880,6 +881,7 @@ class PrepareInputs:
 
         return 0
     
+
     def prep_inputs_for_prediction_sim(self):
 
         fill_nan = self.fill_nan
@@ -897,6 +899,12 @@ class PrepareInputs:
         mean = mean_std_dict["mean"]
         std = mean_std_dict["std_dev"]
 
+        vh_component_names = {
+            "WmHtoGG": "WmHtoGG_M_125",
+            "WpHtoGG": "WpHtoGG_M_125",
+            "ZHtoGG": "ZHtoGG_M_125"
+        }
+
         for era in training_info["samples_info"]["eras"]:
             # get the variables required for training
             vars_config = self.load_vars(self.input_var_json)[self.model_type]
@@ -909,73 +917,81 @@ class PrepareInputs:
 
             vars_to_load = vars_for_training + self.extra_vars + self.vars_for_boosted + ["lead_genPartFlav", "sublead_genPartFlav", "weight_tot"]
 
-            # Temporary fix for v4p5 version of Run 2
+            # Temporary fix for v4p5 version of Run 2 & 2022+2023
             if ("201" in era) or ("EE" in era) or ("BPix" in era):
-                vars_for_training = [var.replace(f"{self.var_prefix}_", "") if "VBF" in var else var for var in vars_for_training]
                 vars_to_load = [var.replace(f"{self.var_prefix}_", "") if "VBF" in var else var for var in vars_to_load]
+                vars_to_load = [var.replace(f"{self.var_prefix}_", "nonResReg_") for var in vars_to_load]
 
             for samples in training_info["samples_info"][era].keys():
 
                 parquet_path = training_info["samples_info"][era][samples]
 
-                # Load and process sample
-                events = self.load_and_process_sample(
-                    samples_path=samples_path,
-                    parquet_path=parquet_path,
-                    samples=samples,
-                    era=era,
-                    vars_to_load=vars_to_load,
-                    preselection_func=self.preselection_for_pred,
-                    save_all_columns=self.save_all_columns_sim_nominal
-                )
+                # Build list of (file_path, xsec_sample_name) pairs to stream over
+                if isinstance(parquet_path, list):
+                    print(f"INFO: Merging {len(parquet_path)} files for {samples} in {era}")
+                    file_xsec_pairs = []
+                    for path in parquet_path:
+                        component_name = None
+                        for key in vh_component_names:
+                            if key in path:
+                                component_name = vh_component_names[key]
+                                break
+                        file_xsec_pairs.append((f"{samples_path}/{path}", component_name))
+                else:
+                    file_xsec_pairs = [(f"{samples_path}/{parquet_path}", samples)]
 
-                print(f"INFO: Number of events in {samples} for {era}: {len(events)}")
-
-                # Build X array directly from awkward array
-                X_list = []
-                for var in vars_for_training:
-                    var_data = ak.to_numpy(ak.fill_none(events[var], -999.0))
-                    X_list.append(var_data)
-                X = np.column_stack(X_list).astype(np.float32)  # Use float32
-
-                # Fill None with NaN for weights
-                relative_weights = ak.to_numpy(ak.fill_none(events["rel_xsec_weight"], np.nan)).astype(np.float32)
-
-                # Clean up temporary list
-                del X_list
-
-                # mask -999.0 to nan
-                mask = (X < -998.0)
-                X[mask] = np.nan
-
-                # transform all data set
-                X = self.standardize(X, mean, std)
-
-                # replace NaN with fill_nan value
-                X = np.nan_to_num(X, nan=fill_nan)
-
-                # save all the numpy arrays
-                print("INFO: saving inputs for mlp")
                 full_path_to_save = f"{out_path}/{era}/{samples}/"
                 os.makedirs(full_path_to_save, exist_ok=True)
 
+                X_chunks, w_chunks = [], []
+                parquet_writer = None
+
+                for file_path, xsec_name in file_xsec_pairs:
+                    for batch in self._iter_file_batched(
+                        file_path=file_path,
+                        vars_to_load=vars_to_load,
+                        save_all_columns=self.save_all_columns_sim_nominal,
+                        era=era,
+                        preselection_func=self.preselection_for_pred,
+                        xsec_sample_name=xsec_name,
+                        apply_xsec_weights=True
+                    ):
+                        X_chunks.append(np.column_stack([
+                            ak.to_numpy(ak.fill_none(batch[var], -999.0))
+                            for var in vars_for_training
+                        ]).astype(np.float32))
+                        w_chunks.append(ak.to_numpy(
+                            ak.fill_none(batch["rel_xsec_weight"], np.nan)
+                        ).astype(np.float32))
+                        arrow_table = pa.table({field: ak.to_arrow(batch[field]) for field in batch.fields})
+                        if parquet_writer is None:
+                            parquet_writer = pq.ParquetWriter(f"{full_path_to_save}/events.parquet", arrow_table.schema)
+                        parquet_writer.write_table(arrow_table)
+                        del batch, arrow_table
+
+                if parquet_writer is not None:
+                    parquet_writer.close()
+
+                if not X_chunks:
+                    print(f"WARNING: No events survived selection for {samples} in {era}. Skipping.")
+                    continue
+
+                X = np.concatenate(X_chunks)
+                del X_chunks
+                relative_weights = np.concatenate(w_chunks)
+                del w_chunks
+
+                print(f"INFO: Number of events in {samples} for {era}: {len(X)}")
+
+                mask = (X < -998.0)
+                X[mask] = np.nan
+                X = self.standardize(X, mean, std)
+                X = np.nan_to_num(X, nan=fill_nan)
+
+                print("INFO: saving inputs for mlp")
                 np.save(f"{full_path_to_save}/X", X)
                 np.save(f"{full_path_to_save}/rel_w", relative_weights)
-
-                # Save events to parquet
-                # Convert each field individually to avoid Arrow schema conversion issues
-                arrays = []
-                names = []
-                for field in events.fields:
-                    arrow_array = ak.to_arrow(events[field])
-                    arrays.append(arrow_array)
-                    names.append(field)
-
-                arrow_table = pa.table(dict(zip(names, arrays)))
-                pq.write_table(arrow_table, f"{full_path_to_save}/events.parquet")
-
-                # Explicitly free memory
-                del X, relative_weights, events, mask
+                del X, relative_weights, mask
 
         # save the training mean ans std_dev. This will be used for standardizing data
         # (save only once at the end)
@@ -988,6 +1004,7 @@ class PrepareInputs:
 
         return 0
 
+
     def prep_inputs_for_prediction_sim_sys(self):
 
         fill_nan = self.fill_nan
@@ -995,18 +1012,6 @@ class PrepareInputs:
         inputs_path = self.outpath
         out_path = f"{inputs_path}/individual_samples/"
         os.makedirs(out_path, exist_ok=True)
-
-        # get the variables required for training
-        vars_config = self.load_vars(self.input_var_json)[self.model_type]
-
-        with open(f"{inputs_path}/input_vars.txt", 'r') as f:
-            vars = json.load(f)
-        # Variables should already have the correct prefix from training, no need to substitute again
-        vars_for_training = vars
-
-        # vars_for_log = vars_config["vars_for_log_transform"]
-
-        vars_to_load = vars_for_training + self.extra_vars + self.vars_for_boosted + ["lead_genPartFlav", "sublead_genPartFlav", "weight_tot"]
 
         samples_path = training_info["samples_info"]["samples_path"]
 
@@ -1017,8 +1022,30 @@ class PrepareInputs:
         mean = mean_std_dict["mean"]
         std = mean_std_dict["std_dev"]
 
+        vh_component_names = {
+            "WmHtoGG": "WmHtoGG_M_125",
+            "WpHtoGG": "WpHtoGG_M_125",
+            "ZHtoGG": "ZHtoGG_M_125"
+        }
+
         for era in training_info["samples_info"]["eras"]:
             for samples in training_info["samples_info"][era].keys():
+                # get the variables required for training
+                vars_config = self.load_vars(self.input_var_json)[self.model_type]
+
+                with open(f"{inputs_path}/input_vars.txt", 'r') as f:
+                    vars = json.load(f)
+                # Variables should already have the correct prefix from training, no need to substitute again
+                vars_for_training = vars
+                # vars_for_log = vars_config["vars_for_log_transform"]
+
+                vars_to_load = vars_for_training + self.extra_vars + self.vars_for_boosted + ["lead_genPartFlav", "sublead_genPartFlav", "weight_tot"]
+
+                # Temporary fix for v4p5 version of Run 2 & 2022+2023
+                if ("201" in era) or ("EE" in era) or ("BPix" in era):
+                    vars_to_load = [var.replace(f"{self.var_prefix}_", "") if "VBF" in var else var for var in vars_to_load]
+                    vars_to_load = [var.replace(f"{self.var_prefix}_", "nonResReg_") for var in vars_to_load]
+
                 for sys in training_info["systematics"]:
 
                     if samples in ["GGJets", "DDQCDGJET", "TTG_10_100", "TTG_100_200", "TTG_200", "TT", "TTGG"]:
@@ -1026,59 +1053,82 @@ class PrepareInputs:
 
                     parquet_path = training_info["samples_info"][era][samples]
 
-                    # Load and process sample with systematic variation
-                    events = self.load_and_process_sample(
-                        samples_path=samples_path,
-                        parquet_path=parquet_path,
-                        samples=samples,
-                        era=era,
-                        vars_to_load=vars_to_load,
-                        preselection_func=self.preselection_for_pred,
-                        save_all_columns=self.save_all_columns_sim_systematics,
-                        systematic=sys
-                    )
+                    # Apply systematic path replacement and build (file_path, xsec_name) pairs,
+                    # checking existence for each path.
+                    if isinstance(parquet_path, list):
+                        file_xsec_pairs = []
+                        for path in parquet_path:
+                            sys_path = path.replace("nominal", sys)
+                            if not os.path.exists(f"{samples_path}/{sys_path}"):
+                                print(f"WARNING: {samples} for {era} for {sys} does not exist. Skipping.: {samples_path}/{sys_path}")
+                                continue
+                            component_name = None
+                            for key in vh_component_names:
+                                if key in path:
+                                    component_name = vh_component_names[key]
+                                    break
+                            file_xsec_pairs.append((f"{samples_path}/{sys_path}", component_name))
+                    else:
+                        sys_path = parquet_path.replace("nominal", sys)
+                        if not os.path.exists(f"{samples_path}/{sys_path}"):
+                            print(f"WARNING: {samples} for {era} for {sys} does not exist. Skipping.: {samples_path}/{sys_path}")
+                            continue
+                        file_xsec_pairs = [(f"{samples_path}/{sys_path}", samples)]
 
-                    # Skip if events is None (file didn't exist)
-                    if events is None:
+                    if not file_xsec_pairs:
                         continue
 
-                    print(f"INFO: Number of events in {samples} for {era} for {sys}: {len(events)}")
-
-                    # Build X array directly from awkward array
-                    X_list = []
-                    for var in vars_for_training:
-                        var_data = ak.to_numpy(ak.fill_none(events[var], -999.0))
-                        X_list.append(var_data)
-                    X = np.column_stack(X_list).astype(np.float32)  # Use float32
-
-                    # Fill None with NaN for weights
-                    relative_weights = ak.to_numpy(ak.fill_none(events["rel_xsec_weight"], np.nan)).astype(np.float32)
-
-                    # Clean up temporary list
-                    del X_list
-
-                    # mask -999.0 to nan
-                    mask = (X < -998.0)
-                    X[mask] = np.nan
-
-                    # transform all data set
-                    X = self.standardize(X, mean, std)
-
-                    # replace NaN with fill_nan value
-                    X = np.nan_to_num(X, nan=fill_nan)
-
-                    # save all the numpy arrays
                     full_path_to_save = f"{out_path}/{era}/{samples}/{sys}/"
                     os.makedirs(full_path_to_save, exist_ok=True)
 
+                    X_chunks, w_chunks = [], []
+                    parquet_writer = None
+
+                    for file_path, xsec_name in file_xsec_pairs:
+                        for batch in self._iter_file_batched(
+                            file_path=file_path,
+                            vars_to_load=vars_to_load,
+                            save_all_columns=self.save_all_columns_sim_systematics,
+                            era=era,
+                            preselection_func=self.preselection_for_pred,
+                            xsec_sample_name=xsec_name,
+                            apply_xsec_weights=True
+                        ):
+                            X_chunks.append(np.column_stack([
+                                ak.to_numpy(ak.fill_none(batch[var], -999.0))
+                                for var in vars_for_training
+                            ]).astype(np.float32))
+                            w_chunks.append(ak.to_numpy(
+                                ak.fill_none(batch["rel_xsec_weight"], np.nan)
+                            ).astype(np.float32))
+                            arrow_table = pa.table({field: ak.to_arrow(batch[field]) for field in batch.fields})
+                            if parquet_writer is None:
+                                parquet_writer = pq.ParquetWriter(f"{full_path_to_save}/events.parquet", arrow_table.schema)
+                            parquet_writer.write_table(arrow_table)
+                            del batch, arrow_table
+
+                    if parquet_writer is not None:
+                        parquet_writer.close()
+
+                    if not X_chunks:
+                        print(f"WARNING: No events survived selection for {samples} in {era} for {sys}. Skipping.")
+                        continue
+
+                    X = np.concatenate(X_chunks)
+                    del X_chunks
+                    relative_weights = np.concatenate(w_chunks)
+                    del w_chunks
+
+                    print(f"INFO: Number of events in {samples} for {era} for {sys}: {len(X)}")
+
+                    mask = (X < -998.0)
+                    X[mask] = np.nan
+                    X = self.standardize(X, mean, std)
+                    X = np.nan_to_num(X, nan=fill_nan)
+
                     np.save(f"{full_path_to_save}/X", X)
                     np.save(f"{full_path_to_save}/rel_w", relative_weights)
-
-                    # also save the event
-                    ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
-
-                    # Explicitly free memory
-                    del X, relative_weights, events, mask
+                    del X, relative_weights, mask
 
         # save the training mean ans std_dev. This will be used for standardizing data
         # (save only once at the end)
@@ -1091,6 +1141,7 @@ class PrepareInputs:
 
         return 0
     
+
     def prep_inputs_for_prediction_data(self):
 
         fill_nan = self.fill_nan
@@ -1126,7 +1177,6 @@ class PrepareInputs:
                          "2025": "2025"}
 
         for data in datas:
-            # Temporary fix for v4p5 version of Run 2
             # get the variables required for training
             vars_config = self.load_vars(self.input_var_json)[self.model_type]
             with open(f"{inputs_path}/input_vars.txt", 'r') as f:
@@ -1137,51 +1187,64 @@ class PrepareInputs:
 
             vars_to_load = vars_for_training + self.extra_vars + self.vars_for_boosted
 
+            # Temporary fix for v4p5 version of Run 2 & 2022+2023
             if ("201" in data) or ("2022" in data) or ("2023" in data):
-                vars_for_training = [var.replace(f"{self.var_prefix}_", "") if "VBF" in var else var for var in vars_for_training]
                 vars_to_load = [var.replace(f"{self.var_prefix}_", "") if "VBF" in var else var for var in vars_to_load]
+                vars_to_load = [var.replace(f"{self.var_prefix}_", "nonResReg_") for var in vars_to_load]
 
-            # Load and process sample with apply_xsec_weights=False for data
-            events = self.load_and_process_sample(
-                samples_path=samples_path,
-                parquet_path=datas[data],
-                samples=data,
-                era=sample_to_era[data],
-                vars_to_load=vars_to_load,
-                preselection_func=self.preselection_for_pred,
-                save_all_columns=self.save_all_columns_data,
-                apply_xsec_weights=False  # Data doesn't need MC cross-section weights
-            )
+            era = sample_to_era[data]
+            parquet_path = datas[data]
 
-            # Build X array directly from awkward array
-            X_list = []
-            for var in vars_for_training:
-                var_data = ak.to_numpy(ak.fill_none(events[var], -999.0))
-                X_list.append(var_data)
-            X = np.column_stack(X_list).astype(np.float32)  # Use float32
+            # Build list of file paths to stream over
+            if isinstance(parquet_path, list):
+                file_paths = [f"{samples_path}/{path}" for path in parquet_path]
+            else:
+                file_paths = [f"{samples_path}/{parquet_path}"]
 
-            # Clean up temporary list
-            del X_list
-
-            # mask -999.0 to nan
-            mask = (X < -998.0)
-            X[mask] = np.nan
-
-            # transform all data set
-            X = self.standardize(X, mean, std)
-            X = np.nan_to_num(X, nan=fill_nan)
-
-            # save all the numpy arrays
-            print(f"INFO: saving inputs for {data}")
             full_path_to_save = f"{out_path}/{data}/"
             os.makedirs(full_path_to_save, exist_ok=True)
 
+            X_chunks = []
+            parquet_writer = None
+
+            for file_path in file_paths:
+                for batch in self._iter_file_batched(
+                    file_path=file_path,
+                    vars_to_load=vars_to_load,
+                    save_all_columns=self.save_all_columns_data,
+                    era=era,
+                    preselection_func=self.preselection_for_pred,
+                    xsec_sample_name=data,
+                    apply_xsec_weights=False
+                ):
+                    X_chunks.append(np.column_stack([
+                        ak.to_numpy(ak.fill_none(batch[var], -999.0))
+                        for var in vars_for_training
+                    ]).astype(np.float32))
+                    arrow_table = pa.table({field: ak.to_arrow(batch[field]) for field in batch.fields})
+                    if parquet_writer is None:
+                        parquet_writer = pq.ParquetWriter(f"{full_path_to_save}/events.parquet", arrow_table.schema)
+                    parquet_writer.write_table(arrow_table)
+                    del batch, arrow_table
+
+            if parquet_writer is not None:
+                parquet_writer.close()
+
+            if not X_chunks:
+                print(f"WARNING: No events survived selection for {data}. Skipping.")
+                continue
+
+            X = np.concatenate(X_chunks)
+            del X_chunks
+
+            print(f"INFO: saving inputs for {data} ({len(X)} events)")
+
+            mask = (X < -998.0)
+            X[mask] = np.nan
+            X = self.standardize(X, mean, std)
+            X = np.nan_to_num(X, nan=fill_nan)
             np.save(f"{full_path_to_save}/X", X)
-
-            ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
-
-            # Explicitly free memory
-            del X, events, mask
+            del X, mask
 
         # save the training mean ans std_dev. This will be used for standardizing data
         # (save only once at the end)

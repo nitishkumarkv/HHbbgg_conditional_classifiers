@@ -1,17 +1,13 @@
+import argparse
 import numpy as np
 import os
-import sys
-import matplotlib.pyplot as plt
-from sklearn.cluster import KMeans
-from sklearn.preprocessing import StandardScaler
-import joblib
+import yaml
 import pandas as pd
-import mplhep
 import awkward as ak
 import pyarrow.parquet as pq
 
 ff_sampledict = {
-    "GGJets": "GGJets", 
+    "GGJets": "GGJets",
     "DDQCDGJET": "DDQCDGJets",
     "TTGG": "TTGG",
     "TT": "TT",
@@ -27,43 +23,43 @@ ff_sampledict = {
     "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": "GluGluToHH_kl-0p00_kt-1p00_c2-0p00",
     "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": "GluGluToHH_kl-2p45_kt-1p00_c2-0p00",
     "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": "GluGluToHH_kl-5p00_kt-1p00_c2-0p00",
+    "VBFHH_CV_1p000_C2V_1p000_C3_1p000": "VBFHH_CV-1p000_C2V-1p000_C3-1p000",
 }
 
-def load_samples(base_path, samples, data=False, syst=""):
-    """Load predictions and weights, scaling weights by luminosity."""
-    # Example MC file to get the weight columns
-    parquet_file = pq.ParquetFile(base_path+"/individual_samples/preEE/ttHtoGG_M_125/"+syst+"/events_boostedCat.parquet")
-    all_columns = parquet_file.schema.names
+def load_samples(base_path, samples, classes, var_prefix, eras, no_syst_samples, data=False, syst="", save_all_columns=False, per_sample=False):
+    """Load predictions and weights, scaling weights by luminosity.
+
+    Returns a dict {(era, sample): DataFrame} if per_sample=True,
+    or a single concatenated DataFrame otherwise.
+    """
+    # Find the first available parquet file to read the schema (weight column names)
+    example_file = None
+    for era in eras:
+        for sample in samples:
+            if sample in no_syst_samples and syst != "":
+                continue
+            path = (os.path.join(base_path, "individual_samples_data", era, sample)
+                    if data else
+                    os.path.join(base_path, "individual_samples", era, sample, syst))
+            candidate = os.path.join(path, "events.parquet")
+            if os.path.exists(candidate):
+                example_file = candidate
+                break
+        if example_file:
+            break
+    if example_file is None:
+        raise FileNotFoundError("Could not find any parquet file to read the schema from.")
+    print(f"Using file {example_file} as an example to get the parquet schema")
+    all_columns = pq.ParquetFile(example_file).schema.names
     weight_columns = [col for col in all_columns if 'weight' in col]
-    dijet_mass_key = "nonResReg_dijet_mass_DNNreg"
-    columns = ["lumi", "event", "run",
-            #"nonResReg_lead_bjet_hFlav", "nonResReg_sublead_bjet_hFlav",
-            "mass", dijet_mass_key, "is_boosted", "y_proba"]
+    dijet_mass_key = f"{var_prefix}_dijet_mass_DNNreg"
+    score_keys = [f"{cls}_score" for cls in classes]
 
-    samples_input = {
-            "lumi": [],
-            "event": [],
-            "run": [],
-            #"nonResReg_lead_bjet_hFlav": [],
-            #"nonResReg_sublead_bjet_hFlav": [],
-            "mass": [], 
-            "dijet_mass": [], 
-            "sample": [],
-            "year": [],
-            "score": [],
-            "nonRes_score": [],
-            "ttH_score": [],
-            "singleH_score" :[],
-            "ggHH_score":[],
-            "is_boosted": [],
-            "y_proba":[]
-    }
-    for weight in weight_columns:
-        samples_input.update({weight: []})
+    #selected_columns = ["lumi", "event", "run", "mass", dijet_mass_key, "is_boosted", "y_proba"]
+    selected_columns = ["lumi", "event", "run", "mass", dijet_mass_key]
+    columns_to_load = selected_columns + weight_columns  # weight_columns always included
 
-    eras = ["preEE", "postEE", "preBPix", "postBPix"]
-    if data:
-        eras = ["2022_EraC","2022_EraD","2022_EraE","2022_EraF","2022_EraG","2023_EraC","2023_EraD"]
+    sample_dfs = {}  # (era, sample) -> DataFrame
 
     for era in eras:
         print("###########")
@@ -71,136 +67,146 @@ def load_samples(base_path, samples, data=False, syst=""):
         print("###########")
         print()
         for sample in samples:
-            if (sample in ["GGJets", "DDQCDGJET", "TTGG", "TT", "TTG_10_100", "TTG_100_200", "TTG_200"]) and (syst != ""):
+            if sample in no_syst_samples and syst != "":
                 continue
-            
-            if era != "postEE":
-              if ("TTG_" in sample) or (sample == "TT"):
-                continue
+
             if data:
                 path = os.path.join(base_path, "individual_samples_data", era, sample)
             else:
-                path = os.path.join(base_path, "individual_samples"+"/", era, sample, syst)
+                path = os.path.join(base_path, "individual_samples", era, sample, syst)
             y_path = os.path.join(path, 'y.npy')
-            w_path = os.path.join(path, 'rel_w.npy')
-            events = ak.from_parquet(os.path.join(path, 'events_boostedCat.parquet'), columns=columns+weight_columns)  # Load events
 
-            # Check if files exist
-            if not (os.path.exists(y_path)):
+            # Check if DNN prediction file exists
+            if not os.path.exists(y_path):
                 print(f"Missing y for {path}. Skipping.")
                 continue
+
+            events = ak.from_parquet(os.path.join(path, 'events.parquet'),
+                                     columns=None if save_all_columns else columns_to_load)
             y = np.load(y_path)
-            samples_input["score"].append(y)
-            
-            samples_input["lumi"].append(np.array(events['lumi']))
-            samples_input["event"].append(np.array(events['event']))
-            samples_input["run"].append(np.array(events['run']))
 
-            #samples_input["nonResReg_lead_bjet_hFlav"].append(np.array(events['nonResReg_lead_bjet_hFlav']))
-            #samples_input["nonResReg_sublead_bjet_hFlav"].append(np.array(events['nonResReg_sublead_bjet_hFlav']))
-
-            samples_input["mass"].append(np.array(events['mass']))
-            samples_input["dijet_mass"].append(np.array(events[dijet_mass_key]))
-
-            if sample == "":
-                sample = "Data"
-            if sample in ff_sampledict.keys():
-                sample = ff_sampledict[sample]
-            print(sample)
+            display_sample = sample
+            if display_sample == "":
+                display_sample = "Data"
+            if display_sample in ff_sampledict:
+                display_sample = ff_sampledict[display_sample]
+            print(display_sample)
             print()
-            samples_input["sample"].append(np.full(y.shape[0], sample))
 
-            if "22" in era or "EE" in era:
+            if "2016" in era:
+                year = 2016
+            elif "2017" in era:
+                year = 2017
+            elif "2018" in era:
+                year = 2018
+            elif "22" in era or "EE" in era:
                 year = 2022
             elif "23" in era or "BPix" in era:
                 year = 2023
+            elif "2024" in era:
+                year = 2024
             else:
                 raise ValueError(f"Unknown era: {era}")
-            samples_input["year"].append(np.full(y.shape[0], year))
 
-            samples_input["is_boosted"].append(np.array(events["is_boosted"]))  
-            samples_input["y_proba"].append(np.array(events['y_proba']))
+            acc = {
+                "sample": np.full(y.shape[0], display_sample),
+                "year": np.full(y.shape[0], year),
+            }
 
-            for weight in weight_columns:
-                if weight in events.fields:
-                    samples_input[weight].append(np.array(events[weight]))
-                else:
-                    samples_input[weight].append(np.array(ak.ones_like(events['mass'])))  # Default weight if not provided
+            if save_all_columns:
+                for field in events.fields:
+                    acc[field] = np.array(events[field])
+            else:
+                for col in selected_columns:
+                    acc[col] = np.array(events[col])
+                for weight in weight_columns:
+                    if weight in events.fields:
+                        acc[weight] = np.array(events[weight])
+                    else:
+                        acc[weight] = np.array(ak.ones_like(events['mass']))  # Default weight if not provided
 
-    # Concatenate all data
-    samples_input["lumi"] = np.concatenate(samples_input["lumi"], axis=0)
-    samples_input["event"] = np.concatenate(samples_input["event"], axis=0)
-    samples_input["run"] = np.concatenate(samples_input["run"], axis=0)
-    #samples_input["nonResReg_lead_bjet_hFlav"] = np.concatenate(samples_input["nonResReg_lead_bjet_hFlav"], axis=0)
-    #samples_input["nonResReg_sublead_bjet_hFlav"] = np.concatenate(samples_input["nonResReg_sublead_bjet_hFlav"], axis=0)
-    samples_input["mass"] = np.concatenate(samples_input["mass"], axis=0)
-    samples_input["dijet_mass"] = np.concatenate(samples_input["dijet_mass"], axis=0)
-    samples_input["sample"] = np.concatenate(samples_input["sample"], axis=0)
-    samples_input["year"] = np.concatenate(samples_input["year"], axis=0)
-    scores = np.concatenate(samples_input["score"], axis=0)
-    samples_input["score"] = [row for row in scores]
-    samples_input["nonRes_score"] = [row[0] for row in scores]
-    samples_input["ttH_score"] = [row[1] for row in scores]   
-    samples_input["singleH_score"] = [row[2] for row in scores]
-    samples_input["ggHH_score"] = [row[3] for row in scores]
-    samples_input["is_boosted"] = np.concatenate(samples_input["is_boosted"], axis=0)
-    samples_input["y_proba"] = np.concatenate(samples_input["y_proba"], axis=0)
-    for weight in weight_columns:
-        samples_input[weight] = np.concatenate(samples_input[weight], axis=0)
+            acc["score"] = list(y)
+            for i, key in enumerate(score_keys):
+                acc[key] = [row[i] for row in y]
 
-    # convert to pandas dataframe
-    samples_input = pd.DataFrame(samples_input)
+            sample_dfs[(era, sample)] = pd.DataFrame(acc)
 
-    return samples_input
+    if per_sample:
+        return sample_dfs
+    else:
+        return pd.concat(list(sample_dfs.values()), ignore_index=True)
+
+def save_per_sample(sample_dfs, base_path, syst="", data=False, merged=False):
+    """Save scored samples under base_path/scored_samples.
+
+    merged=False (default): sample_dfs is a dict {(era, sample): DataFrame};
+        each is saved as .../scored_samples/[sim,data]/{era}/{sample}/[{syst}/]scored_events.parquet.
+    merged=True: sample_dfs is a single DataFrame;
+        saved as .../scored_samples/merged/[{syst}/]merged_scored_events.parquet.
+    """
+    if merged:
+        subdir = "scored_samples/merged"
+        parts = [base_path, subdir]
+        if syst:
+            parts.append(syst)
+        out_dir = os.path.join(*parts)
+        os.makedirs(out_dir, exist_ok=True)
+        sample_dfs.to_parquet(os.path.join(out_dir, "merged_scored_events.parquet"), engine='pyarrow')
+    else:
+        subdir = "scored_samples/data" if data else "scored_samples/sim"
+        for (era, sample), df in sample_dfs.items():
+            parts = [base_path, subdir, era, sample]
+            if syst:
+                parts.append(syst)
+            out_dir = os.path.join(*parts)
+            os.makedirs(out_dir, exist_ok=True)
+            df.to_parquet(os.path.join(out_dir, "scored_events.parquet"), engine='pyarrow')
+
 
 if __name__ == "__main__":
-    base_path = sys.argv[1]
+    parser = argparse.ArgumentParser()
+    parser.add_argument("base_path")
+    parser.add_argument("config_path")
+    parser.add_argument("--per-sample", action="store_true", dest="per_sample",
+                        help="Save one parquet per (era, sample) under base_path/scored_samples "
+                             "instead of a single merged file.")
+    args = parser.parse_args()
+    base_path = args.base_path
+    config_path = args.config_path
     print(base_path)
 
-    samples = [
-            #"GGJets",
-            #"DDQCDGJET",
-            #"TTGG",
-            #"TT",
-            #"TTG_10_100",
-            #"TTG_100_200",
-            #"TTG_200",
-            "ttHtoGG_M_125",
-            "BBHto2G_M_125",
-            "GluGluHToGG_M_125",
-            "VBFHToGG_M_125",
-            "VHtoGG_M_125",
-            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00",
-            "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00",
-            "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00",
-            "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00",
-    ]
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
 
-    systs = [
-            "ScaleEB2G_IJazZ_down",
-            "ScaleEB2G_IJazZ_up",
-            "ScaleEE2G_IJazZ_down",
-            "ScaleEE2G_IJazZ_up",
-            "Smearing2G_IJazZ_down",
-            "Smearing2G_IJazZ_up",
-            "jec_syst_Total_down",
-            "jec_syst_Total_up",
-            "jer_syst_down",
-            "jer_syst_up",
-            "FNUF_down",
-            "FNUF_up",
-            "Material_down",
-            "Material_up",
-    ]
-    
-    merged_samples_MC = load_samples(base_path, samples)
-    merged_samples_data = load_samples(base_path, [""] ,data=True)
+    classes = config['classes']
+    var_prefix = config['var_prefix']
+    samples = list(config['sample_to_class'].keys())
+    mc_eras = config['samples_info']['eras']
+    data_eras = list(config['samples_info']['data'].keys())
+    no_syst_samples = [s for s, c in config['sample_to_class'].items() if c == 'is_nonRes_bkg']
+    systs = config.get('systematics') or []
+    save_all_columns_sim_nominal = config.get('save_all_columns_sim_nominal', False)
+    save_all_columns_data = config.get('save_all_columns_data', False)
+    save_all_columns_sim_systematics = config.get('save_all_columns_sim_systematics', False)
 
-    merged_samples = pd.concat([merged_samples_MC, merged_samples_data], ignore_index=True)
-    merged_samples.to_parquet("merged_samples.parquet", engine='pyarrow')
+    result_MC = load_samples(base_path, samples, classes, var_prefix, mc_eras, no_syst_samples,
+                             save_all_columns=save_all_columns_sim_nominal, per_sample=args.per_sample)
+    result_data = load_samples(base_path, [""], classes, var_prefix, data_eras, no_syst_samples,
+                               data=True, save_all_columns=save_all_columns_data, per_sample=args.per_sample)
+
+    if args.per_sample:
+        save_per_sample(result_MC, base_path)
+        save_per_sample(result_data, base_path, data=True)
+    else:
+        merged_samples = pd.concat([result_MC, result_data], ignore_index=True)
+        save_per_sample(merged_samples, base_path, merged=True)
 
     for syst in systs:
         print(syst)
-        merged_samples_MC = load_samples(base_path, samples, syst=syst)
-        merged_samples_MC.to_parquet("merged_samples_"+syst+".parquet", engine='pyarrow')
+        result_MC = load_samples(base_path, samples, classes, var_prefix, mc_eras, no_syst_samples,
+                                 syst=syst, save_all_columns=save_all_columns_sim_systematics, per_sample=args.per_sample)
+        if args.per_sample:
+            save_per_sample(result_MC, base_path, syst=syst)
+        else:
+            save_per_sample(result_MC, base_path, syst=syst, merged=True)
         print()

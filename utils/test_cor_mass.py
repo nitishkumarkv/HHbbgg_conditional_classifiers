@@ -98,8 +98,8 @@ if __name__ == "__main__":
     # Load scores
     y = []
     rel_w = []
-    for s in sample:
-        for era in eras:
+    for era in eras:
+        for s in sample:
             y.append(np.load(f"{path}/individual_samples/{era}/{s}/y.npy"))
             rel_w.append(np.load(f"{path}/individual_samples/{era}/{s}/rel_w.npy"))
     y = np.concatenate(y)
@@ -142,7 +142,7 @@ if __name__ == "__main__":
 
     # Di-photon mass plot
     fig, ax = plt.subplots()
-    for cut in [0, 0.6, 0.9, 0.95]:
+    for cut in [0, 0.6, 0.9, 0.95, 0.98, 0.99]:
         mask = y[:, signal_class_idx] > cut
         plot_with_errorbars(
             data=np.array(events.mass)[mask],
@@ -163,7 +163,7 @@ if __name__ == "__main__":
 
     # Dijet mass plot
     fig, ax = plt.subplots()
-    for cut in [0, 0.6, 0.9, 0.95]:
+    for cut in [0, 0.6, 0.9, 0.95, 0.98, 0.99]:
         mask = y[:, signal_class_idx] > cut
         plot_with_errorbars(
             data=np.array(events[dijet_mass_var])[mask],
