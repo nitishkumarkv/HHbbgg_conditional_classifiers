@@ -323,18 +323,15 @@ if __name__ == "__main__":
             "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00",
     ]
 
-    eras_run2_mc = ["2016preVFP", "2016postVFP", "2017", "2018"]
-    eras_run3_mc = ["preEE", "postEE", "preBPix", "postBPix", "2024"]
-    eras_run2_data = ["2016preVFP", "2016postVFP", "2017", "2018"]
-    eras_run3_data = ["2022_EraC","2022_EraD","2022_EraE","2022_EraF","2022_EraG","2023_EraC","2023_EraD", "2024_EraC_EG0", "2024_EraC_EG1", "2024_EraD_EG0", "2024_EraD_EG1", "2024_EraE_EG0", "2024_EraE_EG1", "2024_EraF_EG0", "2024_EraF_EG1", "2024_EraG_EG0", "2024_EraG_EG1", "2024_EraH_EG0", "2024_EraH_EG1", "2024_EraIv1_EG0", "2024_EraIv1_EG1", "2024_EraIv2_EG0", "2024_EraIv2_EG1"]
 
-    eras_run2 = {"mc": eras_run2_mc,
-                 "data": eras_run2_data}
-
-    eras_run3 = {"mc": eras_run3_mc,
-                 "data": eras_run3_data}
-    
-    dict_run_eras = {"run2": eras_run2, "run3": eras_run3}
+    # Split up eras to merge for memory
+    dict_run_eras = {}
+    dict_run_eras["2016"] = {"mc" : ["2016preVFP", "2016postVFP"], "data": ["2016preVFP", "2016postVFP"]}
+    dict_run_eras["2017"] = {"mc" : ["2017"], "data": ["2017"]}
+    dict_run_eras["2018"] = {"mc" : ["2018"], "data": ["2018"]}
+    dict_run_eras["2022"] = {"mc" : ["preEE", "postEE"], "data": ["2022_EraC","2022_EraD","2022_EraE","2022_EraF","2022_EraG"]}
+    dict_run_eras["2023"] = {"mc" : ["preBPix", "postBPix"], "data": ["2023_EraC","2023_EraD"]}
+    dict_run_eras["2024"] = {"mc" : ["2024"], "data": ["2024_EraC_EG0", "2024_EraC_EG1", "2024_EraD_EG0", "2024_EraD_EG1", "2024_EraE_EG0", "2024_EraE_EG1", "2024_EraF_EG0", "2024_EraF_EG1", "2024_EraG_EG0", "2024_EraG_EG1", "2024_EraH_EG0", "2024_EraH_EG1", "2024_EraIv1_EG0", "2024_EraIv1_EG1", "2024_EraIv2_EG0", "2024_EraIv2_EG1"]}
 
     systs = []
     # systs = [
