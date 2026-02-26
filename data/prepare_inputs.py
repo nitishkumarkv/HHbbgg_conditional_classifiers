@@ -42,7 +42,7 @@ class PrepareInputs:
         self.fill_nan = -9
 
         # Variables needed to construct variables for training (mass also needed for fitting)
-        self.extra_vars_train = ["weight", "mass", "nonResReg_vbfpair_dijet_mass_DNNreg", "nonResReg_vbfpair_HHbbggCandidate_mass", "nonResReg_vbfpair_dijet_pt", "nonResReg_vbfpair_lead_bjet_pt", "nonResReg_vbfpair_sublead_bjet_pt", "pt"]
+        self.extra_vars_train = ["weight", "mass", "nonResReg_vbfpair_dijet_mass", "nonResReg_vbfpair_HHbbggCandidate_mass", "nonResReg_vbfpair_dijet_pt", "nonResReg_vbfpair_lead_bjet_pt", "nonResReg_vbfpair_sublead_bjet_pt", "pt"]
         
         self.extra_vars_out = ["nonRes_dijet_mass", "nonResReg_dijet_mass", "lead_genPartFlav", "sublead_genPartFlav","n_electrons", "n_muons", "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet7_pt", "jet8_pt", "jet9_pt", "jet10_pt", "nBTight"]
 
@@ -139,10 +139,10 @@ class PrepareInputs:
     def add_var(self, events, era):
 
         events["diphoton_PtOverM_ggjj"] = events.pt / events.nonResReg_vbfpair_HHbbggCandidate_mass
-        events["nonResReg_dijet_PtOverM_ggjj"] = events.nonResReg_vbfpair_dijet_pt / events.nonResReg_vbfpair_HHbbggCandidate_mass
+        events["nonResReg_vbfpair_dijet_PtOverM_ggjj"] = events.nonResReg_vbfpair_dijet_pt / events.nonResReg_vbfpair_HHbbggCandidate_mass
 
-        events["nonResReg_lead_bjet_over_M_regressed"] = events.nonResReg_vbfpair_lead_bjet_pt / events.nonResReg_vbfpair_dijet_mass_DNNreg
-        events["nonResReg_sublead_bjet_over_M_regressed"] = events.nonResReg_vbfpair_sublead_bjet_pt / events.nonResReg_vbfpair_dijet_mass_DNNreg
+        events["nonResReg_vbfpair_lead_bjet_over_M_regressed"] = events.nonResReg_vbfpair_lead_bjet_pt / events.nonResReg_vbfpair_dijet_mass
+        events["nonResReg_vbfpair_sublead_bjet_over_M_regressed"] = events.nonResReg_vbfpair_sublead_bjet_pt / events.nonResReg_vbfpair_dijet_mass
 
         # add deltaR between lead and sublead photon
         events["deltaR_gg"] = self.deltaR(events.lead_eta, events.lead_phi, events.sublead_eta, events.sublead_phi)
@@ -392,7 +392,7 @@ class PrepareInputs:
 
     def corr_with_mgg_mjj(self, events, vars_for_training, out_path):
 
-        "nonResReg_dijet_mass", "nonResReg_dijet_mass_DNNreg"
+        "nonResReg_dijet_mass", "nonResReg_vbfpair_dijet_mass"
 
         corr_matrix = np.zeros([len(vars_for_training), 4])
         for i in range(len(vars_for_training)):
@@ -413,10 +413,10 @@ class PrepareInputs:
             var_values = events[var][mask]
             corr_matrix[i, 2] = np.corrcoef(nonResReg_dijet_mass, var_values)[0, 1]
 
-            mask = ((events[var] > -998.0) & (events.nonResReg_dijet_mass_DNNreg > -998.0))
-            nonResReg_dijet_mass_DNNreg = events.nonResReg_dijet_mass_DNNreg[mask]
+            mask = ((events[var] > -998.0) & (events.nonResReg_vbfpair_dijet_mass > -998.0))
+            nonResReg_vbfpair_dijet_mass = events.nonResReg_vbfpair_dijet_mass[mask]
             var_values = events[var][mask]
-            corr_matrix[i, 3] = np.corrcoef(nonResReg_dijet_mass_DNNreg, var_values)[0, 1]
+            corr_matrix[i, 3] = np.corrcoef(nonResReg_vbfpair_dijet_mass, var_values)[0, 1]
 
         # plot the correlation matrix
         plt.figure(figsize=(18, len(vars_for_training)))
@@ -427,7 +427,7 @@ class PrepareInputs:
                 # format the value to 2 decimal places
                 plt.text(j, i, f"{corr_matrix[i, j]:.2f}", ha='center', va='center', color='b')
 
-        plt.xticks([0, 1, 2, 3], ['mass', 'nonRes_dijet_mass', 'nonResReg_dijet_mass', 'nonResReg_dijet_mass_DNNreg'], rotation=90)
+        plt.xticks([0, 1, 2, 3], ['mass', 'nonRes_dijet_mass', 'nonResReg_dijet_mass', 'nonResReg_vbfpair_dijet_mass'], rotation=90)
         plt.yticks(range(len(vars_for_training)), vars_for_training)
         plt.colorbar()
         plt.savefig(f'{out_path}', dpi=300, )
@@ -438,7 +438,7 @@ class PrepareInputs:
     def preselection(self, events):
         
         mass_bool = ((events.mass > 100) & (events.mass < 180))
-        dijet_mass_bool = ((events.nonResReg_dijet_mass_DNNreg > 70) & (events.nonResReg_dijet_mass_DNNreg < 190))
+        dijet_mass_bool = ((events.nonResReg_vbfpair_dijet_mass > 70) & (events.nonResReg_vbfpair_dijet_mass < 190))
 
         lead_mvaID_bool = (events.lead_mvaID > -0.7)
         sublead_mvaID_bool = (events.sublead_mvaID > -0.7)
@@ -570,12 +570,15 @@ class PrepareInputs:
 
         for era in self.training_info["samples_info"]["eras"]:
             # for samples in self.sample_to_class.keys():
+            print(era)
             for samples in self.training_info["samples_info"][era].keys(): 
+                print(samples)
 
                 samples_path = self.training_info["samples_info"]["samples_path"]
                 parquet_path = self.training_info["samples_info"][era][samples]
 
-                df = pd.read_parquet(f"{samples_path}/{parquet_path}")
+                # df = pd.read_parquet(f"{samples_path}/{parquet_path}")
+                # print(df.columns.to_list())
 
                 events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
                 events = self.preselection(events)
@@ -586,7 +589,7 @@ class PrepareInputs:
                 # get relative weights according to cross section of the process
                 events = self.get_relative_xsec_weight(events, samples, era)
 
-                events = events[self.vars_for_training + ["weight_tot", "diphoton_PtOverM_ggjj", "nonResReg_dijet_PtOverM_ggjj", "deltaR_gg", "nonResReg_lead_bjet_over_M_regressed", "nonResReg_sublead_bjet_over_M_regressed", "year"]]
+                events = events[self.vars_for_training + ["weight_tot", "diphoton_PtOverM_ggjj", "nonResReg_vbfpair_dijet_PtOverM_ggjj", "deltaR_gg", "nonResReg_vbfpair_lead_bjet_over_M_regressed", "nonResReg_vbfpair_sublead_bjet_over_M_regressed", "year"]]
 
                 # apply mHH bin filter (if configured) and skip sample if empty
                 if self.mhh_var is not None and self.mhh_range is not None:
