@@ -598,8 +598,8 @@ class PrepareInputs:
                         print(f"WARNING: No events left in sample {samples} for era {era} after mHH filter {self.mhh_range}. Skipping.")
                         continue
 
-                print(f"INFO: Number of MC events in {samples} after selection for {era}: {len(events)}")
-                print(f"INFO: Sum of weight_tot in {samples} after selection for {era}: {sum(events.weight_tot)}")
+                # print(f"INFO: Number of MC events in {samples} after selection for {era}: {len(events)}")
+                # print(f"INFO: Sum of weight_tot in {samples} after selection for {era}: {sum(events.weight_tot)}")
 
                 # add the bools for each class
                 for cls in self.classes:  # first intialize everything to zero
