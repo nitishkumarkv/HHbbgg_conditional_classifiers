@@ -1,0 +1,1180 @@
+import argparse
+import json
+import math
+import os
+
+import awkward as ak
+import matplotlib.pyplot as plt
+import mplhep as hep
+import numpy as np
+import optuna
+import pandas as pd
+from matplotlib.backends.backend_pdf import PdfPages
+
+class OptunaCategorizer:
+  def __init__(
+    self,
+    base_path,
+    cat_folder=None,
+    signal_class=3,  # ggHH index
+    signal_class_name="ggHH",  # Name for output cut strings
+    signal_samples=None,
+    samples_list=None,
+    bkg_samples=None,
+    bkg_classes=None,  # List of background class indices for score cuts
+    bkg_class_names=None,  # Names for output cut strings
+    n_categories=5,
+    n_trials_optuna=300,
+    n_runs=30,
+    side_band_threshold_low=10,
+    side_band_threshold_high=15,
+    beta=0.1,
+    gamma_strategy="linear",
+    SR_strategy="sequential",
+    sig_type=None,
+    vbfhh_class=None,
+    vbfhh_samples=None,
+    vbfhh_n_scan_points=1000,
+    vbfhh_sideband_threshold=10.0,
+    vbfhh_n_categories=1,
+    output_dir=None,
+  ):
+    self.base_path = base_path
+    self.cat_folder = cat_folder
+    self.signal_class = signal_class
+    self.signal_class_name = signal_class_name
+    self.signal_samples = signal_samples
+    self.bkg_samples = bkg_samples
+    self.best_cut_params = []
+    self.best_cut_params_cr = []
+    self.samples_list = samples_list
+    self.n_categories = n_categories
+    self.n_trials_optuna = n_trials_optuna
+    print(side_band_threshold_low, side_band_threshold_high)
+    self.side_band_threshold_low = side_band_threshold_low
+    self.side_band_threshold_high = side_band_threshold_high
+    self.n_runs = n_runs
+    self.beta = beta
+    self.gamma_strategy = gamma_strategy
+    self.SR_strategy = SR_strategy
+    self.sig_type = sig_type
+
+    # Background classes for score-based cuts (default: ttH=1, singleH=2)
+    self.bkg_classes = bkg_classes if bkg_classes is not None else [1, 2]
+    if bkg_class_names is not None:
+      self.bkg_class_names = bkg_class_names
+    elif self.bkg_classes:
+      # Default names based on indices
+      self.bkg_class_names = [f"bkg_{i}" for i in self.bkg_classes]
+    else:
+      self.bkg_class_names = []
+
+    # Samples for which SR yield is estimated from SB by linear interpolation
+    self.interp_samples = {"TTGG", "GGJets", "DDQCDGJET", "TTG_100_200", "TTG_200"}
+    # Sideband and SR windows (GeV)
+    self.mass_left_sb = (100.0, 120.0)
+    self.mass_sr = (120.0, 130.0)
+    self.mass_right_sb = (130.0, 180.0)
+
+    if self.cat_folder is None:
+      print(
+        "INFO: No output directory specified, using default: optuna_categorization"
+      )
+      print(
+        "INFO: If there is a previous run with the same output directory, it will be overwritten."
+      )
+      self.cat_folder = "optuna_categorization"
+    self.output_dir = output_dir if output_dir is not None else self.base_path
+    if self.samples_list is None:
+      self.samples_list = [
+        "VBFHToGG_M_125",
+        "VHtoGG_M_125",
+        "ttHtoGG_M_125",
+        "BBHto2G_M_125",
+        "GluGluHToGG_M_125",
+        "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00",
+        #"GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00",
+        #"GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00",
+        #"GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00",
+        "VBFHH_CV_1p000_C2V_1p000_C3_1p000",
+        "TTGG",
+        "GGJets",
+        "DDQCDGJET",
+        "TTG_100_200",
+        "TTG_200",
+      ]
+    if self.bkg_samples is None:
+      self.bkg_samples = [
+        "VBFHToGG_M_125",
+        "VHtoGG_M_125",
+        "ttHtoGG_M_125",
+        "BBHto2G_M_125",
+        "GluGluHToGG_M_125",
+        "TTGG",
+        "GGJets",
+        "DDQCDGJET",
+        "TTG_100_200",
+        "TTG_200",
+      ]
+    else:
+      raw_bkg_samples = self.bkg_samples.strip()
+      if not (
+        raw_bkg_samples.startswith("[") and raw_bkg_samples.endswith("]")
+      ):
+        raise ValueError(
+          "bkg_samples must be bracket-enclosed, e.g. "
+          "'[VBFHToGG_M_125,VHtoGG_M_125]' or '[A,B,C]'."
+        )
+      inner = raw_bkg_samples[1:-1]
+      self.bkg_samples = [s.strip() for s in inner.split(",") if s.strip()]
+      if not self.bkg_samples:
+        raise ValueError("bkg_samples is empty inside brackets.")
+    if self.signal_samples is None:
+      raise ValueError("Missing signal sample definition")
+    else:
+      raw_signal_samples = self.signal_samples.strip()
+      if not (
+        raw_signal_samples.startswith("[") and raw_signal_samples.endswith("]")
+      ):
+        raise ValueError(
+          "signal_samples must be bracket-enclosed, e.g. "
+          "'[GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00]' or '[A,B,C]'."
+        )
+      inner = raw_signal_samples[1:-1]
+      self.signal_samples = [s.strip() for s in inner.split(",") if s.strip()]
+      if not self.signal_samples:
+        raise ValueError("signal_samples is empty inside brackets.")
+
+    # will be filled in load_samples()
+    self.scores_all = None
+    self.mass_all = None
+    self.dijet_mass_all = None
+    self.weights_all = None
+    self.labels_all = None
+    self.samples_all = None
+
+    self.apply_preselection = True
+    self.apply_boosted_veto = False
+
+    self.vbfhh_class = vbfhh_class
+    if vbfhh_samples is not None:
+      raw_vbfhh_samples = vbfhh_samples.strip()
+      if not (
+        raw_vbfhh_samples.startswith("[") and raw_vbfhh_samples.endswith("]")
+      ):
+        raise ValueError(
+          "vbfhh_samples must be bracket-enclosed, e.g. "
+          "'[VBFHH_CV_1p000_C2V_1p000_C3_1p000]' or '[A,B,C]'."
+        )
+      inner = raw_vbfhh_samples[1:-1]
+      self.vbfhh_samples = [s.strip() for s in inner.split(",") if s.strip()]
+      if not self.vbfhh_samples:
+        raise ValueError("vbfhh_samples is empty inside brackets.")
+    else:
+      self.vbfhh_samples = None
+    self.vbfhh_n_scan_points = vbfhh_n_scan_points
+    self.vbfhh_sideband_threshold = vbfhh_sideband_threshold
+    self.vbfhh_n_categories = vbfhh_n_categories
+
+
+  def gamma_fn(self):
+    def gamma_linear(n):
+      return min(int(np.ceil(self.beta * n)), 25)
+
+    def gamma_sqrt(n):
+      return min(int(np.ceil(self.beta * np.sqrt(n))), 25)
+
+    if self.gamma_strategy == "linear":
+      return gamma_linear
+    elif self.gamma_strategy == "sqrt":
+      return gamma_sqrt
+    else:
+      raise ValueError("Unsupported gamma_strategy. Use 'linear' or 'sqrt'.")
+
+
+  def plot_optuna_history(self, study, out_dir, category):
+    ax = optuna.visualization.matplotlib.plot_optimization_history(study)
+    fig = ax.get_figure()
+    fig.suptitle(
+      f"Optuna Optimization History for Category {category}", fontsize=14
+    )
+    out_dir = os.path.join(out_dir, "optuna_history_plots")
+    os.makedirs(out_dir, exist_ok=True)
+    fig.savefig(os.path.join(out_dir, f"optuna_history_cat_{category}.png"))
+    plt.clf()
+
+
+  def plot_parallel_coordinates(self, study, out_dir, category):
+    ax = optuna.visualization.matplotlib.plot_parallel_coordinate(study)
+    fig = ax.get_figure()
+    fig.suptitle(f"Parallel Coordinates for Category {category}", fontsize=14)
+    out_dir = os.path.join(out_dir, "optuna_history_plots")
+    os.makedirs(out_dir, exist_ok=True)
+    fig.savefig(os.path.join(out_dir, f"parallel_coordinates_cat_{category}.png"))
+    plt.clf()
+
+
+  def preselection(self, events, scores):
+    mass_bool = (events.mass > 100) & (events.mass < 180)
+    dijet_mass_bool = (events[self.dijet_mass_key] > 70) & (
+      events[self.dijet_mass_key] < 190
+    )
+    lead_mvaID_bool = events.lead_mvaID > -0.7
+    sublead_mvaID_bool = events.sublead_mvaID > -0.7
+
+    mask = mass_bool & dijet_mass_bool & lead_mvaID_bool & sublead_mvaID_bool
+    if self.apply_boosted_veto:
+      mask = mask & (events.is_boosted == False)
+    events = events[mask]
+    scores = scores[mask]
+    return events, scores
+
+
+  def load_samples(self):
+    data = {
+      k: []
+      for k in (
+        "score",
+        "diphoton_mass",
+        "dijet_mass",
+        "weights",
+        "labels",
+        "sample",
+      )
+    }
+    #eras = ["2024"]
+    eras = ["2016preVFP", "2016postVFP", "2017", "2018", "preEE", "postEE", "preBPix", "postBPix", "2024"]
+    self.dijet_mass_key = "nonResReg_vbfpair_dijet_mass_DNNreg"
+
+    for era in eras:
+      for sample in self.samples_list:
+        samp_dir = os.path.join(self.base_path, "individual_samples", era, sample)
+        y_file = os.path.join(samp_dir, "y.npy")
+        evt_file = os.path.join(samp_dir, "events"+("_boostedCat" if self.apply_boosted_veto else "")+".parquet")
+
+        if not (os.path.exists(y_file) and os.path.exists(evt_file)):
+          print(
+            f"[load_samples] WARNING: missing files for {samp_dir}, skipping."
+          )
+          continue
+
+        try:
+          y = np.load(y_file)
+          columns = [
+            "mass",
+            self.dijet_mass_key,
+            "lead_genPartFlav",
+            "sublead_genPartFlav",
+            "weight_tot",
+            "lead_mvaID",
+            "sublead_mvaID",
+          ]
+          if self.apply_boosted_veto:
+            columns.append("is_boosted")
+          events = ak.from_parquet(evt_file, columns=columns)
+          if self.apply_preselection:
+            events, y = self.preselection(events, y)
+        except Exception as exc:
+          print(f"[load_samples] ERROR while reading {samp_dir}: {exc}")
+          continue
+
+        # Prompt-photon requirement for tt̄γ-like samples
+        if sample.startswith("TTG_") or sample in {"TT", "TTGG"}:
+          sel = (events["lead_genPartFlav"] == 1) & (
+            events["sublead_genPartFlav"] == 1
+          )
+          events = events[sel]
+          y = y[sel]
+
+        if len(y) == 0:
+          continue
+
+        data["score"].append(y)
+        data["diphoton_mass"].append(np.asarray(events["mass"]))
+        data["dijet_mass"].append(np.asarray(events[self.dijet_mass_key]))
+        data["weights"].append(np.asarray(events["weight_tot"]))
+
+        if sample in self.signal_samples:
+          print("!!!!!!=================using as signal: ", sample)
+          label_val = 1
+        elif "GluGlutoHHto2B2G" in sample:
+          # exclude EFT HH variations
+          label_val = -1
+          print("!!!!!!=================excluding as signal: ", sample)
+        else:
+          label_val = 0
+
+        data["labels"].append(
+          np.full(len(y), label_val, dtype=int)
+        )
+        data["sample"].append(np.repeat(sample, len(y)))
+
+    if not data["score"]:
+      raise RuntimeError("[load_samples] No events found in any input sample.")
+
+    # Concatenate everything
+    for key in data:
+      data[key] = np.concatenate(data[key], axis=0)
+
+    scores = data.pop("score")  # shape (N, n_classes)
+    df = pd.DataFrame(
+      {
+        "diphoton_mass": data["diphoton_mass"],
+        "dijet_mass": data["dijet_mass"],
+        "weights": data["weights"],
+        "labels": data["labels"],
+        "sample": data["sample"],
+      }
+    )
+
+    # store arrays for fast access in optimization
+    self.scores_all = scores
+    self.mass_all = df["diphoton_mass"].to_numpy()
+    self.dijet_mass_all = df["dijet_mass"].to_numpy()
+    self.weights_all = df["weights"].to_numpy()
+    self.labels_all = df["labels"].to_numpy()
+    self.samples_all = df["sample"].to_numpy()
+
+    in_peak = (df["diphoton_mass"] > 120) & (df["diphoton_mass"] < 130)
+    print(
+      f"Background weight: {df.loc[df['labels'] == 0, 'weights'].sum():.3g}"
+    )
+    print(f"Signal weight:     {df.loc[df['labels'] == 1, 'weights'].sum():.3g}")
+    print(
+      f"Bkg weight 120-130 GeV: {df.loc[(df['labels'] == 0) & in_peak, 'weights'].sum():.3g}"
+    )
+    print(
+      f"Sig weight 120-130 GeV: {df.loc[(df['labels'] == 1) & in_peak, 'weights'].sum():.3g}"
+    )
+
+    return df
+
+
+  def _sr_from_sidebands_linear(self, mass, weights, left_sb, sr, right_sb):
+    """Return (b_sr, var_b_sr) using linear interpolation from SB densities.
+
+    Weights each sideband density by its centroid distance from the SR centroid,
+    matching the estimate one would obtain from a linear fit to the sidebands.
+    """
+    m = mass
+    w = weights
+
+    L = (m >= left_sb[0]) & (m < left_sb[1])
+    R = (m >= right_sb[0]) & (m < right_sb[1])
+
+    sumw_L = w[L].sum()
+    sumw2_L = (w[L] ** 2).sum()
+    sumw_R = w[R].sum()
+    sumw2_R = (w[R] ** 2).sum()
+
+    width_L = max(1e-9, left_sb[1] - left_sb[0])
+    width_R = max(1e-9, right_sb[1] - right_sb[0])
+    width_SR = max(1e-9, sr[1] - sr[0])
+
+    dens_L = sumw_L / width_L if width_L > 0 else 0.0
+    var_dens_L = sumw2_L / (width_L ** 2) if width_L > 0 else 0.0
+
+    dens_R = sumw_R / width_R if width_R > 0 else 0.0
+    var_dens_R = sumw2_R / (width_R ** 2) if width_R > 0 else 0.0
+
+    have_L = sumw_L > 0.0
+    have_R = sumw_R > 0.0
+
+    if have_L and have_R:
+      centroid_L = 0.5 * (left_sb[0] + left_sb[1])
+      centroid_R = 0.5 * (right_sb[0] + right_sb[1])
+      centroid_SR = 0.5 * (sr[0] + sr[1])
+      span = max(1e-9, centroid_R - centroid_L)
+      w_L = (centroid_R - centroid_SR) / span
+      w_R = (centroid_SR - centroid_L) / span
+      dens = w_L * dens_L + w_R * dens_R
+      var_dens = w_L ** 2 * var_dens_L + w_R ** 2 * var_dens_R
+    elif have_L:
+      dens = dens_L
+      var_dens = var_dens_L
+    elif have_R:
+      dens = dens_R
+      var_dens = var_dens_R
+    else:
+      return 0.0, 0.0
+
+    b_sr = dens * width_SR
+    var_b_sr = var_dens * (width_SR ** 2)
+
+    return float(b_sr), float(var_b_sr)
+
+
+  def plot_category_summary_with_thresholds(
+      self,
+      best_sig_values,
+      sig_peak_list,
+      bkg_side_list,
+      best_cut_params_list,
+      save_path
+  ):
+      """
+      Make a 4-subplot figure showing:
+        1) Asymptotic significance (Z)
+        2) Z sum in quadrature
+        3) Signal under the peak
+        4) Background in sidebands (log scale)
+      Annotate each category's thresholds on the significance subplot.
+      """
+      plt.style.use(hep.style.CMS)
+      n_cats = len(best_sig_values)
+      cat_indices = np.arange(n_cats)
+
+      # Compute the Z sum in quadrature cumulatively.
+      z_sum_quad = []
+      for i in range(1, n_cats + 1):
+          z_sum_quad.append(np.sqrt(np.sum(np.array(best_sig_values[:i])**2)))
+
+      # Create the figure and subplots with a shared x-axis
+      fig, axs = plt.subplots(
+          4, 1, 
+          figsize=(10, 12), 
+          gridspec_kw={'height_ratios': [1, 1, 1, 1], 'hspace': 0}
+      )
+
+      # -- 1) Plot Asymptotic Significance
+      axs[0].plot(cat_indices, best_sig_values, ".b", markersize=8)
+      axs[0].set_ylabel("Asymptotic Significance (Z)", fontsize=10)
+      axs[0].grid(True)
+      # Remove x-tick labels for this subplot (to avoid clutter)
+      axs[0].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+      th_name_to_class = {f"th_bg_{i}":f"th_{self.bkg_class_names[n]}" for n, i in enumerate(self.bkg_classes)}
+      th_name_to_class["th_signal"] = f"th_{self.signal_class_name}"
+      # Annotate threshold values on the significance plot
+      for i in range(n_cats):
+          thresholds_dict = best_cut_params_list[i]
+          # Construct a small text with the thresholds
+          # Example: "th_signal=0.80\nth_bg_0=0.30\nth_bg_1=0.40"
+          threshold_text = "\n".join(
+              f"{th_name_to_class[k]}={v:.4f}" for k, v in thresholds_dict.items()
+          )
+          # Place annotation above each point
+          axs[0].annotate(
+              threshold_text,
+              xy=(i, best_sig_values[i]),
+              xytext=(i, best_sig_values[i] * 1.10),  # adjust vertical offset
+              ha="center",
+              arrowprops=dict(color="black", arrowstyle="->", lw=1),
+              fontsize=10
+          )
+
+      # -- 2) Plot Z sum in quadrature
+      axs[1].plot(cat_indices, z_sum_quad, ".b", markersize=8)
+      axs[1].set_ylabel("Z sum in quadrature", fontsize=10)
+      axs[1].grid(True)
+      axs[1].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+
+      # -- 3) Plot Signal under the peak
+      axs[2].plot(cat_indices, sig_peak_list, ".b", markersize=8)
+      axs[2].set_ylabel("Signal under peak", fontsize=10)
+      axs[2].grid(True)
+      axs[2].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+
+      # -- 4) Plot Background in sidebands (log scale)
+      axs[3].plot(cat_indices, bkg_side_list, ".b", markersize=8)
+      axs[3].set_yscale("log")
+      axs[3].set_ylabel("Bkg in sidebands", fontsize=10)
+      axs[3].set_xlabel("Category Index", fontsize=10)
+      axs[3].grid(True)
+      # annot the background values
+      for i in range(n_cats):
+          axs[3].annotate(
+              f"{bkg_side_list[i]:.5f}",
+              xy=(i, bkg_side_list[i]),
+              xytext=(i, bkg_side_list[i] + (bkg_side_list[i] * 0.5)),
+              fontsize=8,
+              arrowprops=dict(color="black", arrowstyle="->"),
+              ha="center"
+          )
+
+      # Adjust spacing
+      plt.tight_layout()
+      # Save the figure
+      plt.savefig(os.path.join(save_path, "category_summary_new.png"))
+      plt.close(fig)
+
+
+  #############################################
+  # Sequential categorization using Optuna
+  #############################################
+
+  def optmize_SR_sequential(self, samples_input):
+    if self.scores_all is None:
+      raise RuntimeError(
+        "scores_all is not set. Make sure to call load_samples() first."
+      )
+
+    cat_path = os.path.join(self.output_dir, f"{self.cat_folder}")
+    print(f"Creating output directory: {cat_path}")
+    os.makedirs(cat_path, exist_ok=True)
+
+    first_scores = self.scores_all
+
+    # Handle 1D scores from binary classifiers
+    if first_scores.ndim == 1:
+      self.scores_all = self.scores_all.reshape(-1, 1)
+      first_scores = self.scores_all
+
+    # Determine minimum number of score components needed
+    if self.bkg_classes:
+      min_classes_needed = max(self.signal_class, max(self.bkg_classes)) + 1
+    else:
+      min_classes_needed = self.signal_class + 1
+
+    if first_scores.shape[1] < min_classes_needed:
+      print(first_scores)
+      raise RuntimeError(
+        f"Expected score vectors with at least {min_classes_needed} components "
+        f"(signal_class={self.signal_class}, bkg_classes={self.bkg_classes})."
+      )
+
+    # Use configured background classes for score-based cuts
+    bg_classes = self.bkg_classes
+
+    run_significance_list = []
+    run_best_params_list = []
+    run_sig_peak_list = []
+    run_bkg_side_list = []
+
+    total_signal_weight = self.weights_all[self.labels_all == 1].sum()
+    print(f"Total signal weight (all events): {total_signal_weight}")
+
+    for run in range(self.n_runs):
+      print(f"--- Run {run} ---")
+
+      # mask tracking which global events are still available
+      remaining_mask = np.ones(self.scores_all.shape[0], dtype=bool)
+
+      best_cut_params_list = []
+      best_sig_values = []
+      sig_peak_list = []
+      bkg_side_list = []
+
+      # optional: placeholders if you later want dynamic search ranges
+      prev_signal_cut = 1.0
+      prev_bg_cut = {b: 0.0 for b in bg_classes}
+
+      for cat in range(1, self.n_categories + 1):
+        print(f"\n--- Optimizing Category {cat} of {self.n_categories} ---")
+
+        # slice arrays for currently remaining events
+        scores = self.scores_all[remaining_mask]
+        dipho_mass = self.mass_all[remaining_mask]
+        labels = self.labels_all[remaining_mask]
+        weights = self.weights_all[remaining_mask]
+        samples = self.samples_all[remaining_mask]
+
+        if scores.shape[0] == 0:
+          print("No events remaining for further categorization.")
+          break
+
+        def objective(trial):
+          # sample thresholds (kept 0-1 to preserve original behaviour;
+          # prev_*_cut reserved if you later want to restrict ranges)
+          trial.suggest_float("th_signal", 0.0, 1.0)
+          for b in bg_classes:
+            trial.suggest_float(f"th_bg_{b}", 0.0, 1.0)
+          mask = self.mask_selected_events(scores, [trial.params])
+
+          if not np.any(mask):
+            return -1.0
+
+          # Sideband requirement on selected background events
+          side_mask = (
+            ((dipho_mass[mask] < 120) | (dipho_mass[mask] > 130))
+            & (labels[mask] == 0)
+          )
+          bkg_side_val = weights[mask][side_mask].sum()
+          if cat == 1:
+            if (
+              bkg_side_val < self.side_band_threshold_low
+              or bkg_side_val > self.side_band_threshold_high
+            ):
+              return -1.0
+          else:
+            if bkg_side_val < self.side_band_threshold_low:
+              return -1.0
+
+          # SR window
+          mass_mask = (dipho_mass[mask] > 120) & (
+            dipho_mass[mask] < 130
+          )
+          if not np.any(mass_mask):
+            return -1.0
+
+          # compute s and b for Z (with SB interpolation for chosen samples)
+          sel_labels_full = labels[mask]
+          sel_masses_full = dipho_mass[mask]
+          sel_weights_full = weights[mask]
+          sel_samples_full = samples[mask]
+
+          s = sel_weights_full[mass_mask & (sel_labels_full == 1)].sum()
+
+          b_total = 0.0
+
+          interp_list = list(self.interp_samples)
+          interp_mask = (sel_labels_full == 0) & np.isin(sel_samples_full, interp_list)
+
+          if np.any(interp_mask):
+            b_interp, _ = self._sr_from_sidebands_linear(
+              sel_masses_full[interp_mask],
+              sel_weights_full[interp_mask],
+              left_sb=self.mass_left_sb,
+              sr=self.mass_sr,
+              right_sb=self.mass_right_sb,
+            )
+            b_total += b_interp
+
+          sr_low, sr_high = self.mass_sr
+          for sname in self.bkg_samples:
+            if sname in self.interp_samples:
+              continue
+            smask = (sel_labels_full == 0) & (sel_samples_full == sname)
+            if not np.any(smask):
+              continue
+            sr_mask_i = smask & (
+              (sel_masses_full > sr_low) & (sel_masses_full < sr_high)
+            )
+            b_total += sel_weights_full[sr_mask_i].sum()
+
+          if s <= 0.0:
+            return -1.0
+          if b_total <= 0.0:
+            b_total = 1e-9
+
+          z = self.asymptotic_significance(s, b_total)
+          return float(z)
+
+        sampler = optuna.samplers.TPESampler(gamma=self.gamma_fn())
+        study = optuna.create_study(direction="maximize", sampler=sampler)
+        study.optimize(
+          objective, n_trials=self.n_trials_optuna, show_progress_bar=False
+        )
+
+        best_params = study.best_params
+        best_target = study.best_value
+
+        if best_target <= 0.0:
+          print(
+            f"Category {cat}: no positive significance found, stopping categorization for this run."
+          )
+          break
+
+        best_cut_params_list.append(best_params)
+        best_sig_values.append(best_target)
+        print(
+          f"Category {cat}: Best parameters: {best_params} with significance {best_target:.4f}"
+        )
+
+        self.plot_optuna_history(
+          study, cat_path, category=f"run_{run}_cat_{cat}"
+        )
+        self.plot_parallel_coordinates(
+          study, cat_path, category=f"run_{run}_cat_{cat}"
+        )
+
+        # Apply best mask with the optimal thresholds
+        mask_local = scores[:, self.signal_class] > best_params["th_signal"]
+        for b in bg_classes:
+          mask_local &= scores[:, b] < best_params[f"th_bg_{b}"]
+
+        if not np.any(mask_local):
+          print(
+            f"Category {cat}: best parameters select no events, stopping categorization for this run."
+          )
+          break
+
+        sel_labels = labels[mask_local]
+        sel_masses = dipho_mass[mask_local]
+        sel_weights = weights[mask_local]
+
+        # bookeeping (signal in peak, background in sidebands)
+        in_peak = (sel_masses > 120) & (sel_masses < 130)
+        signal_in_peak = sel_weights[in_peak & (sel_labels == 1)].sum()
+        bkg_in_side = sel_weights[
+          ((sel_masses < 120) | (sel_masses > 130)) & (sel_labels == 0)
+        ].sum()
+
+        sig_peak_list.append(signal_in_peak)
+        bkg_side_list.append(bkg_in_side)
+
+        # Update dynamic search ranges (placeholders if you want to change suggest ranges)
+        prev_signal_cut = best_params["th_signal"]
+        for b in bg_classes:
+          prev_bg_cut[b] = best_params[f"th_bg_{b}"]
+
+        # Remove selected events globally for next category
+        global_selected_mask = np.zeros_like(remaining_mask)
+        global_selected_mask[remaining_mask] = mask_local
+        remaining_mask &= ~global_selected_mask
+
+        if not np.any(remaining_mask):
+          print("No events remaining after this category.")
+          break
+
+      run_significance_list.append(best_sig_values)
+      run_best_params_list.append(best_cut_params_list)
+      run_sig_peak_list.append(sig_peak_list)
+      run_bkg_side_list.append(bkg_side_list)
+
+    if not run_significance_list:
+      raise RuntimeError("No successful categorization runs completed.")
+
+    # pick best run based on quadrature sum of per-category significances
+    run_sum_Z_quad = [
+      np.sqrt(np.sum(np.array(sig) ** 2)) for sig in run_significance_list
+    ]
+    max_index = int(np.argmax(run_sum_Z_quad))
+
+    best_sig_values = run_significance_list[max_index]
+    best_cut_params_list = run_best_params_list[max_index]
+    sig_peak_list = run_sig_peak_list[max_index]
+    bkg_side_list = run_bkg_side_list[max_index]
+
+    print("Best run index:", max_index)
+    print("Per-category significances:", best_sig_values)
+    print("Signal in SR (per category):", sig_peak_list)
+    print("Bkg in SB (per category):", bkg_side_list)
+
+    # Build per-category base cuts (from your best_cut_params_list)
+    base_cuts = []
+    for p in best_cut_params_list:
+      parts = [f"{self.signal_class_name}_score > {p['th_signal']}"]
+      for idx, bg_idx in enumerate(self.bkg_classes):
+        name = self.bkg_class_names[idx]
+        parts.append(f"{name}_score < {p[f'th_bg_{bg_idx}']}")
+      if self.apply_boosted_veto:
+        parts.append("is_boosted == 0")
+      base_cuts.append("(" + " & ".join(parts) + ")")
+
+    # Add NOT-previous-cats and dijet mass window to form final category strings
+    cat_strings = {}
+    for i, base in enumerate(base_cuts, start=1):
+      parts = [base]
+      if i >= 2:
+        for j in range(i - 1):
+          parts.append(f"not({base_cuts[j]})")
+      parts.append("dijet_mass > 80")
+      parts.append("dijet_mass < 190")
+      cat_strings[f"cat{i}"] = " & ".join(parts)
+
+    self.plot_category_summary_with_thresholds(
+      best_sig_values,
+      sig_peak_list,
+      bkg_side_list,
+      best_cut_params_list,
+      cat_path
+      )
+
+    # Save a single txt file with the requested JSON-style mapping
+    best_params_path = os.path.join(cat_path, "best_cut_params.txt")
+    with open(best_params_path, "w") as f:
+      f.write(json.dumps(cat_strings, indent=2))
+
+    # also save detailed best parameters as a JSON file
+    best_params_json_path = os.path.join(cat_path, "best_cut_params.json")
+    with open(best_params_json_path, "w") as f:
+      json.dump(best_cut_params_list, f, indent=4)
+
+    return best_cut_params_list, best_sig_values
+
+
+  def mask_selected_events(self, scores, best_cut_params_list):
+    """
+    Given a DataFrame and a subset of SR category best-cut-parameters,
+    remove all events that pass *any* of those category cuts.
+    Returns a tuple of (filtered_df, mask_of_removed_events).
+    """
+    # Start with no event removed
+    mask = np.zeros_like(scores[:, 0], dtype = bool)
+    for params in best_cut_params_list:
+      tmp_mask = np.ones_like(scores[:, 0], dtype = bool)
+      for th in params:
+        if th == 'th_signal':
+          tmp_mask = tmp_mask & (scores[:, self.signal_class] > params[th])
+        elif 'th_cr' in th:
+          idx = int(th.split('_')[2])
+          tmp_mask = tmp_mask & (scores[:, idx] > params[th])
+        else:
+          idx = int(th.split('_')[2])
+          tmp_mask = tmp_mask & (scores[:, idx] < params[th])
+      mask = tmp_mask | mask
+    return mask 
+
+
+  def asymptotic_significance(self, s, b):
+    return float(np.sqrt(2.0 * ((s + b) * np.log(1.0 + s / b) - s)))
+
+
+  def optimize_vbfhh_sr(self, vbfhh_class, vbfhh_samples, n_scan_points=1000, sideband_threshold=10.0):
+    """Scan the VBFHH score and return the threshold that maximises the asymptotic
+    significance in the diphoton SR (120-130 GeV), subject to at least
+    sideband_threshold weighted background events in the sidebands.
+
+    Background is estimated the same way as in optmize_SR_sequential: via
+    sideband linear interpolation for interp_samples, direct SR counting for the rest.
+
+    Parameters
+    ----------
+    vbfhh_class : int
+        Index of the VBFHH score in the score vector.
+    vbfhh_samples : list of str
+        Sample names treated as VBFHH signal.
+    n_scan_points : int
+        Number of evenly-spaced thresholds scanned in [0, 1).
+    sideband_threshold : float
+        Minimum weighted background yield required in the sidebands.
+
+    Returns
+    -------
+    best_threshold : float
+    best_z : float
+    best_s : float
+    best_b : float
+    """
+    if self.scores_all is None:
+      raise RuntimeError("scores_all is not set. Call load_samples() first.")
+
+    thresholds = np.linspace(0.0, 1.0, n_scan_points + 1)[:-1]
+
+    best_threshold = None
+    best_z = -1.0
+    best_s = 0.0
+    best_b = 0.0
+
+    sr_low, sr_high = self.mass_sr
+
+    for threshold in thresholds:
+      mask = self.scores_all[:, vbfhh_class] > threshold
+
+      if not np.any(mask):
+        continue
+
+      sel_masses  = self.mass_all[mask]
+      sel_weights = self.weights_all[mask]
+      sel_samples = self.samples_all[mask]
+
+      is_vbfhh = np.isin(sel_samples, vbfhh_samples)
+
+      # Sideband requirement on non-VBFHH events
+      side_mask = ((sel_masses <= sr_low) | (sel_masses >= sr_high)) & ~is_vbfhh
+      if sel_weights[side_mask].sum() < sideband_threshold:
+        continue
+
+      sr_mask = (sel_masses > sr_low) & (sel_masses < sr_high)
+
+      s = sel_weights[sr_mask & is_vbfhh].sum()
+      if s <= 0.0:
+        continue
+
+      # Background: sideband interpolation for smooth samples, direct SR count for the rest
+      b_total = 0.0
+      interp_list = list(self.interp_samples)
+      interp_mask = ~is_vbfhh & np.isin(sel_samples, interp_list)
+      if np.any(interp_mask):
+        b_interp, _ = self._sr_from_sidebands_linear(
+          sel_masses[interp_mask],
+          sel_weights[interp_mask],
+          left_sb=self.mass_left_sb,
+          sr=self.mass_sr,
+          right_sb=self.mass_right_sb,
+        )
+        b_total += b_interp
+
+      for sname in self.bkg_samples:
+        if sname in self.interp_samples:
+          continue
+        smask = ~is_vbfhh & (sel_samples == sname)
+        if not np.any(smask):
+          continue
+        b_total += sel_weights[smask & sr_mask].sum()
+
+      if b_total <= 0.0:
+        b_total = 1e-9
+
+      z = self.asymptotic_significance(s, b_total)
+
+      if z > best_z:
+        best_z = z
+        best_threshold = threshold
+        best_s = s
+        best_b = b_total
+
+    #print(f"VBFHH SR: best threshold = {best_threshold:.4f}, Z = {best_z:.4f}, s = {best_s:.4g}, b = {best_b:.4g}")
+    return best_threshold, best_z, best_s, best_b
+
+
+  def run_categorisation(self):
+    _ = self.load_samples()
+
+    if self.vbfhh_class is not None and self.vbfhh_samples is not None:
+      sr_low, sr_high = self.mass_sr
+      all_vbfhh_sr_info = []
+
+      for i_cat in range(self.vbfhh_n_categories):
+        print(f"\n--- Optimising VBFHH SR {i_cat + 1} of {self.vbfhh_n_categories} ---")
+
+        best_vbfhh_threshold, best_vbfhh_z, best_vbfhh_s, best_vbfhh_b = self.optimize_vbfhh_sr(
+          vbfhh_class=self.vbfhh_class,
+          vbfhh_samples=self.vbfhh_samples,
+          n_scan_points=self.vbfhh_n_scan_points,
+          sideband_threshold=self.vbfhh_sideband_threshold,
+        )
+
+        if best_vbfhh_threshold is None:
+          print(f"No valid VBFHH SR found at iteration {i_cat + 1}, stopping.")
+          break
+
+        print(f"VBFHH SR {i_cat + 1}: threshold = {best_vbfhh_threshold:.4f}, Z = {best_vbfhh_z:.4f}, s = {best_vbfhh_s:.4g}, b = {best_vbfhh_b:.4g}")
+        vbfhh_mask = self.scores_all[:, self.vbfhh_class] > best_vbfhh_threshold
+        sr_mass_mask = (self.mass_all > sr_low) & (self.mass_all < sr_high)
+        is_vbfhh   = np.isin(self.samples_all, self.vbfhh_samples)
+        is_ggHH    = np.array(["GluGlutoHHto2B2G" in s for s in self.samples_all])
+        is_interp  = np.isin(self.samples_all, list(self.interp_samples))
+        is_singleH = ~is_vbfhh & ~is_ggHH & ~is_interp
+
+        best_ggHH = float(self.weights_all[vbfhh_mask & sr_mass_mask & is_ggHH].sum())
+        best_H    = float(self.weights_all[vbfhh_mask & sr_mass_mask & is_singleH].sum())
+        sdb_mask  = ((self.mass_all <= sr_low) | (self.mass_all >= sr_high)) & ~is_vbfhh
+        best_SDB  = float(self.weights_all[vbfhh_mask & sdb_mask].sum())
+
+        print(f"VBFHH SR {i_cat + 1}: ggHH = {best_ggHH:.4g}, single-H = {best_H:.4g}, SDB = {best_SDB:.4g}")
+
+        all_vbfhh_sr_info.append({
+          "best_threshold": float(best_vbfhh_threshold),
+          "best_z":         float(best_vbfhh_z),
+          "best_s":         float(best_vbfhh_s),
+          "best_b":         float(best_vbfhh_b),
+          "best_ggHH":      best_ggHH,
+          "best_H":         best_H,
+          "best_SDB":       best_SDB,
+        })
+
+        remaining = ~vbfhh_mask
+        print(f"VBFHH SR {i_cat + 1} removes {vbfhh_mask.sum()} events; {remaining.sum()} remain for SR optimisation.")
+        self.scores_all     = self.scores_all[remaining]
+        self.mass_all       = self.mass_all[remaining]
+        self.dijet_mass_all = self.dijet_mass_all[remaining]
+        self.weights_all    = self.weights_all[remaining]
+        self.labels_all     = self.labels_all[remaining]
+        self.samples_all    = self.samples_all[remaining]
+
+        if not np.any(remaining):
+          print("No events remaining, stopping.")
+          break
+
+      cat_path = os.path.join(self.output_dir, self.cat_folder)
+      os.makedirs(cat_path, exist_ok=True)
+      vbfhh_sr_json = os.path.join(cat_path, "vbfhh_sr_info.json")
+      with open(vbfhh_sr_json, "w") as f:
+        json.dump(all_vbfhh_sr_info, f, indent=4)
+      print(f"VBFHH SR info saved to {vbfhh_sr_json}")
+
+    if self.n_categories > 0:
+      if self.SR_strategy == "sequential":
+        best_params, best_sig_values = self.optmize_SR_sequential(None)
+      elif self.SR_strategy == "simultaneous":
+        raise NotImplementedError("Simultaneous SR strategy is not implemented yet.")
+
+
+#############################################
+# Main execution
+#############################################
+
+if __name__ == "__main__":
+  parser = argparse.ArgumentParser(
+    description=(
+      "Categorize multiclass scores using Optuna with dynamic search "
+      "ranges, sideband requirements, and summary plots."
+    )
+  )
+  parser.add_argument(
+    "--n_categories",
+    type=int,
+    default=5,
+    help="Number of categories to optimize",
+  )
+  parser.add_argument(
+    "--base_path", type=str,
+    required=True,
+    help="Base path to the input samples"
+  )
+  parser.add_argument(
+    "--optuna_folder",
+    type=str,
+    default="optuna_categorization",
+    help="Folder name for Optuna results",
+  )
+  parser.add_argument(
+    "--n_trials",
+    type=int,
+    default=200,
+    help="Number of trials for Optuna optimization",
+  )
+  parser.add_argument(
+    "--SR_strategy",
+    type=str,
+    choices=["sequential", "simultaneous"],
+    default="sequential",
+    help="Strategy for SR categorization",
+  )
+  parser.add_argument(
+    "--n_runs",
+    type=int,
+    default=50,
+    help="Number of complete runs for the categorization",
+  )
+  parser.add_argument(
+    "--gamma_strategy",
+    type=str,
+    choices=["sqrt", "linear"],
+    default="linear",
+    help="Gamma strategy for TPE sampler",
+  )
+  parser.add_argument(
+    "--side_band_threshold_low",
+    type=int,
+    default=10,
+    help="Lower threshold for sideband requirements",
+  )
+  parser.add_argument(
+    "--side_band_threshold_high",
+    type=int,
+    default=15,
+    help="Upper threshold for sideband requirements for cat 1",
+  )
+
+  parser.add_argument(
+    "--signal_samples",
+    type=str,
+    required=True,
+    help="Bracket-enclosed comma-separated list of signal sample names "
+         "(e.g. '[GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00]' or '[A,B,C]').",
+  )
+  parser.add_argument(
+    "--signal_class",
+    type=int,
+    default=3,
+    help="Index of the signal class in the score array (default: 3 for ggHH)",
+  )
+  parser.add_argument(
+    "--signal_class_name",
+    type=str,
+    default="ggHH",
+    help="Name of the signal class for output cut strings (default: ggHH)",
+  )
+  parser.add_argument(
+    "--bkg_classes",
+    type=str,
+    default="1,2",
+    help="Comma-separated list of background class indices for score cuts (e.g., '1,2' for ttH and singleH). Use empty string for binary classifier.",
+  )
+  parser.add_argument(
+    "--bkg_samples",
+    type=str,
+    default=None,
+    help="Bracket-enclosed comma-separated list of background sample names "
+         "(e.g. '[VBFHToGG_M_125,VHtoGG_M_125]'). If not provided, defaults are used.",
+  )
+  parser.add_argument(
+    "--bkg_class_names",
+    type=str,
+    default=None,
+    help="Comma-separated list of background class names for output (e.g., 'ttH,singleH'). If not provided, uses 'bkg_<index>' format.",
+  )
+
+  parser.add_argument(
+    "--vbfhh_class",
+    type=int,
+    default=None,
+    help="Index of the VBFHH score in the score vector. If set, a VBFHH SR is optimised first and its events are excluded from the subsequent ggHH SR optimisation.",
+  )
+  parser.add_argument(
+    "--vbfhh_samples",
+    type=str,
+    default=None,
+    help="Bracket-enclosed comma-separated list of VBFHH signal sample names (e.g. '[VBFHH_CV_1p000_C2V_1p000_C3_1p000]').",
+  )
+  parser.add_argument(
+    "--vbfhh_n_scan_points",
+    type=int,
+    default=1000,
+    help="Number of score thresholds to scan for the VBFHH SR optimisation.",
+  )
+  parser.add_argument(
+    "--vbfhh_sideband_threshold",
+    type=float,
+    default=10.0,
+    help="Minimum weighted background yield in the sidebands for the VBFHH SR.",
+  )
+  parser.add_argument(
+    "--vbfhh_n_categories",
+    type=int,
+    default=1,
+    help="Number of VBFHH SRs to optimise sequentially before running the ggHH SR optimisation.",
+  )
+
+  parser.add_argument(
+    "--apply_boosted_veto",
+    action="store_true",
+    default=False,
+    help="If set, exclude events with is_boosted==True from the dataset before categorisation. "
+         "Requires the is_boosted column to be present in the input parquet files.",
+  )
+
+  parser.add_argument(
+    "--output_dir",
+    type=str,
+    default=None,
+    help="Base directory for output files. The optuna folder is created as a subdirectory here. "
+         "Defaults to --base_path if not set.",
+  )
+
+  args = parser.parse_args()
+
+  # Parse bkg_classes from comma-separated string to list of ints
+  # Empty string means no background classes (binary classifier)
+  if args.bkg_classes.strip() == "":
+    bkg_classes = []
+  else:
+    bkg_classes = [int(x.strip()) for x in args.bkg_classes.split(",")]
+
+  # Parse bkg_class_names if provided
+  bkg_class_names = None
+  if args.bkg_class_names is not None:
+    bkg_class_names = [x.strip() for x in args.bkg_class_names.split(",")]
+    if len(bkg_class_names) != len(bkg_classes):
+      raise ValueError(
+        f"Number of bkg_class_names ({len(bkg_class_names)}) must match "
+        f"number of bkg_classes ({len(bkg_classes)})"
+      )
+
+  categoriser = OptunaCategorizer(
+    base_path=args.base_path,
+    cat_folder=args.optuna_folder,
+    n_categories=args.n_categories,
+    n_trials_optuna=args.n_trials,
+    n_runs=args.n_runs,
+    side_band_threshold_low=args.side_band_threshold_low,
+    side_band_threshold_high=args.side_band_threshold_high,
+    SR_strategy=args.SR_strategy,
+    signal_samples=args.signal_samples,
+    signal_class=args.signal_class,
+    signal_class_name=args.signal_class_name,
+    bkg_classes=bkg_classes,
+    bkg_class_names=bkg_class_names,
+    bkg_samples=args.bkg_samples,
+    gamma_strategy=args.gamma_strategy,    
+    vbfhh_class = args.vbfhh_class,
+    vbfhh_samples = args.vbfhh_samples,
+    vbfhh_n_scan_points = args.vbfhh_n_scan_points,
+    vbfhh_sideband_threshold = args.vbfhh_sideband_threshold,
+    vbfhh_n_categories = args.vbfhh_n_categories,
+    output_dir = args.output_dir,
+  )
+  categoriser.apply_boosted_veto = args.apply_boosted_veto
+  categoriser.run_categorisation()

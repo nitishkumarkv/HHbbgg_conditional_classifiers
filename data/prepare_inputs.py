@@ -943,8 +943,10 @@ class PrepareInputs:
                 full_path_to_save = f"{out_path}/{era}/{samples}/"
                 os.makedirs(full_path_to_save, exist_ok=True)
 
+                is_composite = len(file_xsec_pairs) > 1
                 X_chunks, w_chunks = [], []
-                parquet_writer = None
+                parquet_writer = None   # used for single-file samples (streaming)
+                parquet_chunks = []     # used for composite samples (schema unification)
 
                 for file_path, xsec_name in file_xsec_pairs:
                     for batch in self._iter_file_batched(
@@ -964,13 +966,22 @@ class PrepareInputs:
                             ak.fill_none(batch["rel_xsec_weight"], np.nan)
                         ).astype(np.float32))
                         arrow_table = pa.table({field: ak.to_arrow(batch[field]) for field in batch.fields})
-                        if parquet_writer is None:
-                            parquet_writer = pq.ParquetWriter(f"{full_path_to_save}/events.parquet", arrow_table.schema)
-                        parquet_writer.write_table(arrow_table)
+                        if is_composite:
+                            parquet_chunks.append(arrow_table)
+                        else:
+                            if parquet_writer is None:
+                                parquet_writer = pq.ParquetWriter(f"{full_path_to_save}/events.parquet", arrow_table.schema)
+                            parquet_writer.write_table(arrow_table)
                         del batch, arrow_table
 
                 if parquet_writer is not None:
                     parquet_writer.close()
+                if parquet_chunks:
+                    pq.write_table(
+                        pa.concat_tables(parquet_chunks, promote_options="default"),
+                        f"{full_path_to_save}/events.parquet"
+                    )
+                    del parquet_chunks
 
                 if not X_chunks:
                     print(f"WARNING: No events survived selection for {samples} in {era}. Skipping.")
@@ -1081,8 +1092,10 @@ class PrepareInputs:
                     full_path_to_save = f"{out_path}/{era}/{samples}/{sys}/"
                     os.makedirs(full_path_to_save, exist_ok=True)
 
+                    is_composite = len(file_xsec_pairs) > 1
                     X_chunks, w_chunks = [], []
-                    parquet_writer = None
+                    parquet_writer = None   # used for single-file samples (streaming)
+                    parquet_chunks = []     # used for composite samples (schema unification)
 
                     for file_path, xsec_name in file_xsec_pairs:
                         for batch in self._iter_file_batched(
@@ -1102,13 +1115,22 @@ class PrepareInputs:
                                 ak.fill_none(batch["rel_xsec_weight"], np.nan)
                             ).astype(np.float32))
                             arrow_table = pa.table({field: ak.to_arrow(batch[field]) for field in batch.fields})
-                            if parquet_writer is None:
-                                parquet_writer = pq.ParquetWriter(f"{full_path_to_save}/events.parquet", arrow_table.schema)
-                            parquet_writer.write_table(arrow_table)
+                            if is_composite:
+                                parquet_chunks.append(arrow_table)
+                            else:
+                                if parquet_writer is None:
+                                    parquet_writer = pq.ParquetWriter(f"{full_path_to_save}/events.parquet", arrow_table.schema)
+                                parquet_writer.write_table(arrow_table)
                             del batch, arrow_table
 
                     if parquet_writer is not None:
                         parquet_writer.close()
+                    if parquet_chunks:
+                        pq.write_table(
+                            pa.concat_tables(parquet_chunks, promote_options="default"),
+                            f"{full_path_to_save}/events.parquet"
+                        )
+                        del parquet_chunks
 
                     if not X_chunks:
                         print(f"WARNING: No events survived selection for {samples} in {era} for {sys}. Skipping.")
