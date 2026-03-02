@@ -27,7 +27,7 @@ ff_sampledict = {
     "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": "GluGluToHH_kl-5p00_kt-1p00_c2-0p00",
 }
 
-def load_samples(base_path, samples, data=False, syst=""):
+def load_samples(base_path, eras, samples, data=False, syst=""):
     """Load predictions and weights, scaling weights by luminosity."""
     # Example MC file to get the weight columns
     parquet_file = pq.ParquetFile(base_path+"/individual_samples/preEE/ttHtoGG_M_125/"+syst+"/events.parquet")
@@ -35,7 +35,7 @@ def load_samples(base_path, samples, data=False, syst=""):
     # weight_columns = [col for col in all_columns if 'weight' in col]
     weight_columns = ["weight_tot", "weight"]
     dijet_mass_key = "nonResReg_dijet_mass_DNNreg"
-    HH_mass_key = "nonResReg_HHbbggCandidate_mass"
+    HH_mass_key = "nonResReg_vbfpair_HHbbggCandidate_mass"
 
     #"nonResReg_lead_bjet_hFlav", "nonResReg_sublead_bjet_hFlav", "event", "run", "lumi"]#, "is_boosted", "y_proba"] 
     columns = [
@@ -101,89 +101,27 @@ def load_samples(base_path, samples, data=False, syst=""):
         # "nonResReg_sublead_bjet_over_M_regressed"
         ]
 
+    columns_gen = ["lead_genPartFlav", "sublead_genPartFlav"]
+
     samples_input = {
-            # "lumi": [],
-            # "event": [],
-            # "run": [],
-            #"nonResReg_lead_bjet_hFlav": [],
-            #"nonResReg_sublead_bjet_hFlav": [],
-            "mass": [], 
-            "dijet_mass": [], 
-            "HHbbggCandidate_mass": [],
-            "sample": [],
-            "year": [],
-            "era": [],
-            "score": [],
-            "nonRes_score": [],
-            "ttH_score": [],
-            "singleH_score" :[],
-            "ggHH_score":[],
-            # "is_boosted": [],
-            # "y_proba":[]
-            # "eta" : [],
-            # "lead_eta" : [],
-            # "lead_phi" : [],
-            # "lead_mvaID" : [],
-            # "nonResReg_pholead_PtOverM" : [],
-            # "sublead_eta" : [],
-            # "sublead_phi" : [],
-            # "sublead_mvaID" : [],
-            # "nonResReg_phosublead_PtOverM" : [],
-            # "nonResReg_lead_bjet_eta" : [],
-            # "nonResReg_lead_bjet_phi" : [],
-            # "nonResReg_lead_bjet_btagPNetB" : [],
-            # "nonResReg_sublead_bjet_eta" : [],
-            # "nonResReg_sublead_bjet_phi" : [],
-            # "nonResReg_sublead_bjet_btagPNetB" : [],
-            # "nonResReg_DeltaR_j1g1" : [],
-            # "nonResReg_DeltaR_j2g1" : [],
-            # "nonResReg_DeltaR_j1g2" : [],
-            # "nonResReg_DeltaR_j2g2" : [],
-            # "nonResReg_DeltaR_jg_min" : [],
-            # "nonResReg_CosThetaStar_CS" : [],
-            # "nonResReg_CosThetaStar_gg" : [],
-            # "nonResReg_CosThetaStar_jj" : [],
-            # "puppiMET_phi" : [],
-            # "puppiMET_pt" : [],
-            # "n_leptons" : [],
-            # "n_jets" : [],
-            # "nonResReg_chi_t0" : [],
-            # "nonResReg_chi_t1" : [],
-            # "nonResReg_DeltaPhi_j1MET" : [],
-            # "nonResReg_DeltaPhi_j2MET" : [],
-            # "VBF_first_jet_eta" : [],
-            # "VBF_first_jet_phi" : [],
-            # "VBF_second_jet_eta" : [],
-            # "VBF_second_jet_phi" : [],
-            # "VBF_first_jet_PtOverM" : [],
-            # "VBF_second_jet_PtOverM" : [],
-            # "VBF_jet_eta_prod" : [],
-            # "VBF_jet_eta_diff" : [],
-            # "VBF_jet_eta_sum" : [],
-            # "VBF_DeltaR_j1b1" : [],
-            # "VBF_DeltaR_j1b2" : [],
-            # "VBF_DeltaR_j2b1" : [],
-            # "VBF_DeltaR_j2b2" : [],
-            # "VBF_DeltaR_j1g1" : [],
-            # "VBF_DeltaR_j1g2" : [],
-            # "VBF_DeltaR_j2g1" : [],
-            # "VBF_DeltaR_j2g2" : [],
-            # "VBF_DeltaR_jb_min" : [],
-            # "VBF_DeltaR_jg_min" : [],
-            # "VBF_dijet_mass" : [],
-            # "nonResReg_HHbbggCandidate_eta" : [],
-            # "diphoton_PtOverM_ggjj" : [],
-            # "nonResReg_dijet_PtOverM_ggjj" : [],
-            # "deltaR_gg" : [],
-            # "nonResReg_lead_bjet_over_M_regressed" : [],
-            # "nonResReg_sublead_bjet_over_M_regressed" : [],
+        "dijet_mass": [],
+        "HHbbggCandidate_mass": [],
+        "sample": [],
+        "year": [],
+        "era": [],
+        "score": [],
+        "nonRes_score": [],
+        "ttH_score": [],
+        "singleH_score" :[],
+        "ggHH_score":[]
     }
+    
+    for col in columns + columns_gen:
+        if col not in [dijet_mass_key, HH_mass_key]:
+            samples_input[col] = []
+
     for weight in weight_columns:
         samples_input.update({weight: []})
-
-    eras = ["2016preVFP", "2016postVFP", "2017", "2018", "preEE", "postEE", "preBPix", "postBPix", "2024"]
-    if data:
-        eras = ["2016preVFP", "2016postVFP", "2017", "2018", "2022_EraC","2022_EraD","2022_EraE","2022_EraF","2022_EraG","2023_EraC","2023_EraD", "2024_EraC_EG0", "2024_EraC_EG1", "2024_EraD_EG0", "2024_EraD_EG1", "2024_EraE_EG0", "2024_EraE_EG1", "2024_EraF_EG0", "2024_EraF_EG1", "2024_EraG_EG0", "2024_EraG_EG1", "2024_EraH_EG0", "2024_EraH_EG1", "2024_EraIv1_EG0", "2024_EraIv1_EG1", "2024_EraIv2_EG0", "2024_EraIv2_EG1"]
 
     for era in eras:
         print("###########")
@@ -191,10 +129,13 @@ def load_samples(base_path, samples, data=False, syst=""):
         print("###########")
         print()
         for sample in samples:
+            print(sample)
             if (sample in ["GGJets", "DDQCDGJET", "TTGG", "TT", "TTG_10_100", "TTG_100_200", "TTG_200"]) and (syst != ""):
                 continue
 
             if (sample == "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00") & (era == "2016postVFP"):
+                continue
+            elif (sample == "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00") & (era == "2017"):
                 continue
 
             if (era == "2024") & (sample == "VHtoGG_M_125"):
@@ -202,14 +143,14 @@ def load_samples(base_path, samples, data=False, syst=""):
                 path_VH = os.path.join(base_path, "individual_samples"+"/", era, VHsample, syst)
                 y_path_VH = os.path.join(path_VH, 'y.npy')
                 w_path_VH = os.path.join(path_VH, 'rel_w.npy')
-                events = ak.from_parquet(os.path.join(path_VH, 'events.parquet'), columns=columns+weight_columns)
+                events = ak.from_parquet(os.path.join(path_VH, 'events.parquet'), columns=columns+weight_columns+columns_gen)
                 y = np.load(y_path_VH)
 
                 for VHsample in ["WpHtoGG", "ZHtoGG"]:
                     path_VH = os.path.join(base_path, "individual_samples"+"/", era, VHsample, syst)
                     y_path_VH = os.path.join(path_VH, 'y.npy')
                     w_path_VH = os.path.join(path_VH, 'rel_w.npy')
-                    events_VH = ak.from_parquet(os.path.join(path_VH, 'events.parquet'), columns=columns+weight_columns)
+                    events_VH = ak.from_parquet(os.path.join(path_VH, 'events.parquet'), columns=columns+weight_columns+columns_gen)
                     y_VH = np.load(y_path_VH)
 
                     events = ak.concatenate([events, events_VH])
@@ -221,12 +162,21 @@ def load_samples(base_path, samples, data=False, syst=""):
                         continue
                 if data:
                     path = os.path.join(base_path, "individual_samples_data", era, sample)
+                    y_path = os.path.join(path, 'y.npy')
+                    w_path = os.path.join(path, 'rel_w.npy')
+                    events = ak.from_parquet(os.path.join(path, 'events.parquet'), columns=columns+weight_columns)
                 else:
-                    path = os.path.join(base_path, "individual_samples"+"/", era, sample, syst)
-                y_path = os.path.join(path, 'y.npy')
-                w_path = os.path.join(path, 'rel_w.npy')
-                events = ak.from_parquet(os.path.join(path, 'events.parquet'), columns=columns+weight_columns)  # Load events
-
+                    if sample == "DDQCDGJET":
+                        path = os.path.join(base_path, "individual_samples"+"/", era, sample, syst)
+                        y_path = os.path.join(path, 'y.npy')
+                        w_path = os.path.join(path, 'rel_w.npy')
+                        events = ak.from_parquet(os.path.join(path, 'events.parquet'), columns=columns+weight_columns)
+                    else:
+                        path = os.path.join(base_path, "individual_samples"+"/", era, sample, syst)
+                        y_path = os.path.join(path, 'y.npy')
+                        w_path = os.path.join(path, 'rel_w.npy')
+                        events = ak.from_parquet(os.path.join(path, 'events.parquet'), columns=columns+weight_columns+columns_gen)
+                
                 # Check if files exist
                 if not (os.path.exists(y_path)):
                     print(f"Missing y for {path}. Skipping.")
@@ -239,21 +189,21 @@ def load_samples(base_path, samples, data=False, syst=""):
             # samples_input["event"].append(np.array(events['event']))
             # samples_input["run"].append(np.array(events['run']))
 
-            #samples_input["nonResReg_lead_bjet_hFlav"].append(np.array(events['nonResReg_lead_bjet_hFlav']))
-            #samples_input["nonResReg_sublead_bjet_hFlav"].append(np.array(events['nonResReg_sublead_bjet_hFlav']))
-
-            # samples_input["mass"].append(np.array(events['mass']))
             samples_input["dijet_mass"].append(np.array(events[dijet_mass_key]))
             samples_input["HHbbggCandidate_mass"].append(np.array(events[HH_mass_key]))
-            for col in columns:
+            for col in columns + columns_gen:
                 if (col != dijet_mass_key) & (col != HH_mass_key):
-                    samples_input[col].append(np.array(events[col]))
+                    if not(("gen" in col) & ((sample == "DDQCDGJET") | (data))):
+                        samples_input[col].append(np.array(events[col]))
+
+            if (data | (sample == "DDQCDGJET")):
+                samples_input["lead_genPartFlav"].append(np.array([-999] * len(events[dijet_mass_key])))
+                samples_input["sublead_genPartFlav"].append(np.array([-999] * len(events[dijet_mass_key])))
 
             if sample == "":
                 sample = "Data"
             if sample in ff_sampledict.keys():
                 sample = ff_sampledict[sample]
-            print(sample)
             samples_input["sample"].append(np.full(y.shape[0], sample))
 
             if "16" in era:
@@ -283,16 +233,10 @@ def load_samples(base_path, samples, data=False, syst=""):
                     samples_input[weight].append(np.array(ak.ones_like(events['mass'])))  # Default weight if not provided
 
     # Concatenate all data
-    # samples_input["lumi"] = np.concatenate(samples_input["lumi"], axis=0)
-    # samples_input["event"] = np.concatenate(samples_input["event"], axis=0)
-    # samples_input["run"] = np.concatenate(samples_input["run"], axis=0)
-    #samples_input["nonResReg_lead_bjet_hFlav"] = np.concatenate(samples_input["nonResReg_lead_bjet_hFlav"], axis=0)
-    #samples_input["nonResReg_sublead_bjet_hFlav"] = np.concatenate(samples_input["nonResReg_sublead_bjet_hFlav"], axis=0)
-    # samples_input["mass"] = np.concatenate(samples_input["mass"], axis=0)
     samples_input["dijet_mass"] = np.concatenate(samples_input["dijet_mass"], axis=0)
     samples_input["HHbbggCandidate_mass"] = np.concatenate(samples_input["HHbbggCandidate_mass"], axis=0)
 
-    for col in columns:
+    for col in columns + columns_gen:
         if (col != dijet_mass_key) & (col != HH_mass_key):
             samples_input[col] = np.concatenate(samples_input[col], axis=0)
 
@@ -329,7 +273,7 @@ if __name__ == "__main__":
             # "TTG_100_200",
             # "TTG_200",
             "ttHtoGG_M_125",
-            "BBHto2G_M_125",
+            # "BBHto2G_M_125",
             "GluGluHToGG_M_125",
             "VBFHToGG_M_125",
             "VHtoGG_M_125",
@@ -338,6 +282,16 @@ if __name__ == "__main__":
             "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00",
             "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00",
     ]
+
+
+    # Split up eras to merge for memory
+    dict_run_eras = {}
+    dict_run_eras["2016"] = {"mc" : ["2016preVFP", "2016postVFP"], "data": ["2016preVFP", "2016postVFP"]}
+    dict_run_eras["2017"] = {"mc" : ["2017"], "data": ["2017"]}
+    dict_run_eras["2018"] = {"mc" : ["2018"], "data": ["2018"]}
+    dict_run_eras["2022"] = {"mc" : ["preEE", "postEE"], "data": ["2022_EraC","2022_EraD","2022_EraE","2022_EraF","2022_EraG"]}
+    dict_run_eras["2023"] = {"mc" : ["preBPix", "postBPix"], "data": ["2023_EraC","2023_EraD"]}
+    dict_run_eras["2024"] = {"mc" : ["2024"], "data": ["2024_EraC_EG0", "2024_EraC_EG1", "2024_EraD_EG0", "2024_EraD_EG1", "2024_EraE_EG0", "2024_EraE_EG1", "2024_EraF_EG0", "2024_EraF_EG1", "2024_EraG_EG0", "2024_EraG_EG1", "2024_EraH_EG0", "2024_EraH_EG1", "2024_EraIv1_EG0", "2024_EraIv1_EG1", "2024_EraIv2_EG0", "2024_EraIv2_EG1"]}
 
     systs = []
     # systs = [
@@ -357,14 +311,18 @@ if __name__ == "__main__":
     #         "Material_up",
     # ]
     
-    merged_samples_MC = load_samples(base_path, samples)
-    merged_samples_data = load_samples(base_path, [""] ,data=True)
+    for era in dict_run_eras.keys():
+        print(f"Loading samples for {era}.")
+        dict_era = dict_run_eras[era]
 
-    merged_samples = pd.concat([merged_samples_MC, merged_samples_data], ignore_index=True)
-    merged_samples.to_parquet(f"{base_path}/merged_samples.parquet", engine='pyarrow')
+        merged_samples_MC = load_samples(base_path, dict_era["mc"], samples)
+        merged_samples_data = load_samples(base_path, dict_era["data"], [""] ,data=True)
 
-    for syst in systs:
-        print(syst)
-        merged_samples_MC = load_samples(base_path, samples, syst=syst)
-        merged_samples_MC.to_parquet("merged_samples_"+syst+".parquet", engine='pyarrow')
-        print()
+        merged_samples = pd.concat([merged_samples_MC, merged_samples_data], ignore_index=True)
+        merged_samples.to_parquet(f"{base_path}/merged_samples_{era}.parquet", engine='pyarrow')
+
+        for syst in systs:
+            print(syst)
+            merged_samples_MC = load_samples(base_path, dict_era["mc"], samples, syst=syst)
+            merged_samples_MC.to_parquet(f"merged_samples_{syst}_{era}.parquet", engine='pyarrow')
+            print()
