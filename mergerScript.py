@@ -35,15 +35,13 @@ def load_samples(base_path, eras, samples, data=False, syst=""):
     # weight_columns = [col for col in all_columns if 'weight' in col]
     weight_columns = ["weight_tot", "weight"]
     dijet_mass_key = "nonResReg_dijet_mass_DNNreg"
-    HH_mass_key = "nonResReg_HHbbggCandidate_mass"
+    HH_mass_key = "nonResReg_vbfpair_HHbbggCandidate_mass"
 
     #"nonResReg_lead_bjet_hFlav", "nonResReg_sublead_bjet_hFlav", "event", "run", "lumi"]#, "is_boosted", "y_proba"] 
     columns = [
         "mass",
         dijet_mass_key,
         HH_mass_key,
-        "nonRes_dijet_mass",
-        "nonResReg_dijet_mass",
         "n_jets",
         "n_electrons",
         "n_muons",
@@ -89,79 +87,32 @@ def load_samples(base_path, eras, samples, data=False, syst=""):
         "nonResReg_vbfpair_lead_bjet_eta",
         "nonResReg_vbfpair_sublead_bjet_eta",
         "nonResReg_vbfpair_DeltaR_jg_min",
-        "nonResReg_vbfpair_dijet_mass"
+        "nonResReg_vbfpair_dijet_mass",
+        "nonResReg_CosThetaStar_CS",
+        "nonResReg_HHbbggCandidate_eta",
+        "nonResReg_HHbbggCandidate_pt",
+        "nonResReg_M_X"
         ]
 
     columns_gen = ["lead_genPartFlav", "sublead_genPartFlav"]
 
     samples_input = {
-            # "lumi": [],
-            # "event": [],
-            # "run": [],
-            #"nonResReg_lead_bjet_hFlav": [],
-            #"nonResReg_sublead_bjet_hFlav": [],
-            "mass": [], 
-            "dijet_mass": [], 
-            "HHbbggCandidate_mass": [],
-            "sample": [],
-            "year": [],
-            "era": [],
-            "score": [],
-            "nonRes_score": [],
-            "ttH_score": [],
-            "singleH_score" :[],
-            "ggHH_score":[],
-            "nonRes_dijet_mass": [],
-            "nonResReg_dijet_mass": [],
-            "lead_genPartFlav": [],
-            "sublead_genPartFlav": [],
-            "n_jets": [],
-            "n_electrons": [],
-            "n_muons": [],
-            "jet1_pt": [],
-            "jet2_pt": [],
-            "jet3_pt": [],
-            "jet4_pt": [],
-            "jet5_pt": [],
-            "jet6_pt": [],
-            "jet7_pt": [],
-            "jet8_pt": [],
-            "jet9_pt": [],
-            "jet10_pt": [],
-            "nBTight": [],
-            "lead_mvaID": [],
-            "sublead_mvaID": [],
-            "nonResReg_vbfpair_pholead_PtOverM": [],
-            "nonResReg_vbfpair_phosublead_PtOverM": [],
-            "nonResReg_vbfpair_FirstJet_PtOverM": [],
-            "nonResReg_vbfpair_SecondJet_PtOverM": [],
-            "nonResReg_vbfpair_VBF_first_jet_btagPNetB": [],
-            "nonResReg_vbfpair_VBF_second_jet_btagPNetB": [],
-            "nonResReg_vbfpair_VBF_first_jet_btagPNetQvG": [],
-            "nonResReg_vbfpair_VBF_second_jet_btagPNetQvG": [],
-            "nonResReg_vbfpair_CosThetaStar_CS": [],
-            "nonResReg_vbfpair_CosThetaStar_gg": [],
-            "nonResReg_vbfpair_CosThetaStar_jj": [],
-            "nonResReg_vbfpair_M_X": [],
-            "nonResReg_vbfpair_HHbbggCandidate_pt": [],
-            "nonResReg_vbfpair_VBF_first_jet_PtOverM": [],
-            "nonResReg_vbfpair_VBF_second_jet_PtOverM": [],
-            "nonResReg_vbfpair_VBF_jet_eta_prod": [],
-            "nonResReg_vbfpair_VBF_jet_eta_diff": [],
-            "nonResReg_vbfpair_VBF_jet_eta_sum": [],
-            "nonResReg_vbfpair_VBF_DeltaR_jb_min": [],
-            "nonResReg_vbfpair_VBF_DeltaR_jg_min": [],
-            "nonResReg_vbfpair_VBF_Cgg": [],
-            "nonResReg_vbfpair_VBF_Cbb": [],
-            "nonResReg_vbfpair_VBF_dijet_mass": [],
-            "nonResReg_vbfpair_VBF_dijet_vbfpair_Score_jj": [],
-            "nonResReg_vbfpair_lead_bjet_btagPNetB": [],
-            "nonResReg_vbfpair_sublead_bjet_btagPNetB": [],
-            "nonResReg_vbfpair_lead_bjet_eta": [],
-            "nonResReg_vbfpair_sublead_bjet_eta": [],
-            "nonResReg_vbfpair_DeltaR_jg_min": [],
-            "nonResReg_vbfpair_dijet_mass": []
+        "dijet_mass": [],
+        "HHbbggCandidate_mass": [],
+        "sample": [],
+        "year": [],
+        "era": [],
+        "score": [],
+        "nonRes_score": [],
+        "ttH_score": [],
+        "singleH_score" :[],
+        "ggHH_score":[]
     }
+    
+    for col in columns + columns_gen:
+        if col not in [dijet_mass_key, HH_mass_key]:
+            samples_input[col] = []
+
     for weight in weight_columns:
         samples_input.update({weight: []})
 

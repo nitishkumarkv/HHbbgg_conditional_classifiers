@@ -42,9 +42,9 @@ class PrepareInputs:
         self.fill_nan = -9
 
         # Variables needed to construct variables for training (mass also needed for fitting)
-        self.extra_vars_train = ["weight", "mass", "nonResReg_vbfpair_dijet_mass", "nonResReg_vbfpair_HHbbggCandidate_mass", "nonResReg_vbfpair_dijet_pt", "nonResReg_vbfpair_lead_bjet_pt", "nonResReg_vbfpair_sublead_bjet_pt", "pt"]
+        self.extra_vars_train = ["weight", "mass", "nonResReg_dijet_mass_DNNreg", "nonResReg_vbfpair_HHbbggCandidate_mass", "nonResReg_vbfpair_dijet_pt", "nonResReg_vbfpair_lead_bjet_pt", "nonResReg_vbfpair_sublead_bjet_pt", "pt"]
         
-        self.extra_vars_out = ["nonRes_dijet_mass", "nonResReg_dijet_mass", "lead_genPartFlav", "sublead_genPartFlav","n_electrons", "n_muons", "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet7_pt", "jet8_pt", "jet9_pt", "jet10_pt", "nBTight"]
+        self.extra_vars_out = ["nonRes_dijet_mass", "lead_genPartFlav", "sublead_genPartFlav","n_electrons", "n_muons", "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet7_pt", "jet8_pt", "jet9_pt", "jet10_pt", "nBTight", "nonResReg_CosThetaStar_CS", "nonResReg_HHbbggCandidate_eta", "nonResReg_HHbbggCandidate_pt", "nonResReg_M_X"]
 
         # VBF pairiing variables for Yu-Hsuan
         self.extra_vars_out += ["lead_mvaID",
