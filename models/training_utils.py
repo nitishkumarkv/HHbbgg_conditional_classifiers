@@ -331,6 +331,11 @@ if __name__ == "__main__":
             print(f"Early stopping at epoch {epoch}")
             break
 
+        if epoch % 20 == 0:
+            save_checkpoint(epoch, best_model, best_optimizer, best_scheduler, 
+                        train_loss_hist, train_loss_hist_no_absolute_weights, val_loss_hist, train_acc_hist, val_acc_hist, 
+                        best_weights, best_loss, f"{path_to_checkpoint}/mlp_{epoch}.pth")
+
         print(f"Epoch {epoch} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
         print(f"Epoch {epoch} - Train Acc: {train_acc:.4f}, Val Acc: {val_acc:.4f}", '\n')
         print(f"Epoch {epoch} - Train Loss no abs: {train_loss_no_absolute:.4f}", '\n')
