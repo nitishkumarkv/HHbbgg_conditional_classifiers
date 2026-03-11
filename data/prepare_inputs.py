@@ -38,11 +38,11 @@ class PrepareInputs:
             self.write_chunk = self.training_info["write_chunk"]
         self.fill_nan = -9
 
-        #self.extra_vars = ["mass", "nonRes_dijet_mass", "Res_dijet_mass", "nonRes_has_two_btagged_jets", "weight", "pt", "nonRes_dijet_pt", "Res_dijet_pt", "Res_lead_bjet_pt", "Res_sublead_bjet_pt", "Res_lead_bjet_ptPNetCorr", "Res_sublead_bjet_ptPNetCorr", "nonRes_HHbbggCandidate_mass", "Res_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "Res_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "jet1_mass", "jet2_mass", "jet3_mass", "jet4_mass", "jet5_mass", "jet6_mass", "Res_lead_bjet_jet_idx", "Res_sublead_bjet_jet_idx", "jet1_index", "jet2_index", "jet3_index", "jet4_index", "jet5_index", "jet6_index",
-        #                   "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet1_eta", "jet2_eta", "jet3_eta", "jet4_eta", "jet5_eta", "jet6_eta", "jet1_phi", "jet2_phi", "jet3_phi", "jet4_phi", "jet5_phi", "jet6_phi", "lead_phi", "sublead_phi"]
 
-        self.extra_vars = ["mass", "nonRes_dijet_mass", "nonResReg_dijet_mass", "nonResReg_dijet_mass_DNNreg", "nonResReg_HHbbggCandidate_mass", "weight", "pt", "nonResReg_dijet_pt", "nonResReg_lead_bjet_pt", "nonResReg_sublead_bjet_pt", "nonResReg_lead_bjet_eta", "nonResReg_DNNpair_dijet_mass", "nonResReg_DNNpair_dijet_mass_DNNreg", "nonRes_dijet_pt", "nonRes_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "lead_eta", "lead_phi", "sublead_eta", "sublead_phi", "lead_genPartFlav", "sublead_genPartFlav"]
+        self.extra_vars_train = ["weight", "mass", "nonResReg_dijet_mass_DNNreg", "nonResReg_HHbbggCandidate_mass", "nonResReg_dijet_pt", "nonResReg_lead_bjet_pt", "nonResReg_sublead_bjet_pt", "pt"]
         
+        self.extra_vars_out = ["run", "lumi", "event", "nonRes_dijet_mass", "nonResReg_dijet_mass", "lead_genPartFlav", "sublead_genPartFlav","n_electrons", "n_muons", "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet7_pt", "jet8_pt", "jet9_pt", "jet10_pt", "nBTight"] #for ttH category: njets already included as a training var
+
         # prepare process numbers for proccesses in each class
         num_process_each_class = {
             class_: 0 for class_ in self.classes
@@ -109,107 +109,23 @@ class PrepareInputs:
 
         # add deltaR between lead and sublead photon
         events["deltaR_gg"] = self.deltaR(events.lead_eta, events.lead_phi, events.sublead_eta, events.sublead_phi)
-
-        if era == "preEE":
+        
+        if ("2016" in era) | ("VFP" in era):
             events["year"] = 0
-        elif era == "postEE":
-            events["year"] = 0
-        elif era == "preBPix":
+        elif era == "2017":
             events["year"] = 1
-        elif era == "postBPix":
-            events["year"] = 1
-        elif era == "2024":
+        elif era == "2018":
             events["year"] = 2
-
-        # add jet related mass
-            
-        # # Build awkward array of jets
-        # jets = ak.zip({
-        #     "pt": ak.concatenate([events[f"jet{i}_pt"][:, None] for i in range(1, 7)], axis=1),
-        #     "eta": ak.concatenate([events[f"jet{i}_eta"][:, None] for i in range(1, 7)], axis=1),
-        #     "phi": ak.concatenate([events[f"jet{i}_phi"][:, None] for i in range(1, 7)], axis=1),
-        #     "mass": ak.concatenate([events[f"jet{i}_mass"][:, None] for i in range(1, 7)], axis=1),
-        #     "index": ak.concatenate([events[f"jet{i}_index"][:, None] for i in range(1, 7)], axis=1),
-        # }, with_name="Momentum4D")
-        
-        # # Mask out jets that are b-jets
-        # is_not_bjet = (jets.index != events.Res_lead_bjet_jet_idx[:, None]) & \
-        #               (jets.index != events.Res_sublead_bjet_jet_idx[:, None])
-        # jets_clean = jets[is_not_bjet]
-
-        # # Select up to 4 jets
-        # selected_jets = jets_clean[:, :4]
-        
-        # # ΔR to objects
-        # def min_deltaR_to(obj_eta, obj_phi):
-        #     min = ak.min(self.deltaR(selected_jets.eta, selected_jets.phi, obj_eta[:, None], obj_phi[:, None], fill_none=False), axis=1)
-        #     return ak.fill_none(min, -999.0)
-
-        # events["min_deltaR_jet_b1"] = min_deltaR_to(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi)
-        # events["min_deltaR_jet_b2"] = min_deltaR_to(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi)
-        # events["min_deltaR_jet_g1"] = min_deltaR_to(events.lead_eta, events.lead_phi)
-        # events["min_deltaR_jet_g2"] = min_deltaR_to(events.sublead_eta, events.sublead_phi)
-
-        # # deltaR betwreen the jets anf photons, bjets
-        # events["deltaR_g1_j1"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
-        # events["deltaR_g1_j2"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
-        # events["deltaR_g1_j3"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
-        # events["deltaR_g1_j4"] = self.deltaR(events.lead_eta, events.lead_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
-        # events["deltaR_g2_j1"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
-        # events["deltaR_g2_j2"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
-        # events["deltaR_g2_j3"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
-        # events["deltaR_g2_j4"] = self.deltaR(events.sublead_eta, events.sublead_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
-        # events["deltaR_b1_j1"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
-        # events["deltaR_b1_j2"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
-        # events["deltaR_b1_j3"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
-        # events["deltaR_b1_j4"] = self.deltaR(events.Res_lead_bjet_eta, events.Res_lead_bjet_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
-        # events["deltaR_b2_j1"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 0], selected_jets.phi[:, 0])
-        # events["deltaR_b2_j2"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 1], selected_jets.phi[:, 1])
-        # events["deltaR_b2_j3"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 2], selected_jets.phi[:, 2])
-        # events["deltaR_b2_j4"] = self.deltaR(events.Res_sublead_bjet_eta, events.Res_sublead_bjet_phi, selected_jets.eta[:, 3], selected_jets.phi[:, 3])
-
-        # # add jet pt, eta, phi
-        # events["j1_pt"] = selected_jets.pt[:, 0]
-        # events["j2_pt"] = selected_jets.pt[:, 1]
-        # events["j3_pt"] = selected_jets.pt[:, 2]
-        # events["j4_pt"] = selected_jets.pt[:, 3]
-        # events["j1_eta"] = selected_jets.eta[:, 0]
-        # events["j2_eta"] = selected_jets.eta[:, 1]
-        # events["j3_eta"] = selected_jets.eta[:, 2]
-        # events["j4_eta"] = selected_jets.eta[:, 3]
-        # events["j1_phi"] = selected_jets.phi[:, 0]
-        # events["j2_phi"] = selected_jets.phi[:, 1]
-        # events["j3_phi"] = selected_jets.phi[:, 2]
-        # events["j4_phi"] = selected_jets.phi[:, 3]
-       
-
-
-        # # Build Lorentz vectors from selected_jets
-        # jets_vec = selected_jets
-
-        # # Pair indices for 4 jets
-        # pair_indices = [(0, 1), (0, 2), (0, 3),
-        #                 (1, 2), (1, 3),
-        #                 (2, 3)]
-
-        # pair_names = ["j1_j2", "j1_j3", "j1_j4", "j2_j3", "j2_j4", "j3_j4"]
-
-        #for (i, j), name in zip(pair_indices, pair_names):
-        #    # Mask if either jet is invalid (pt == -999)
-        #    valid = (selected_jets.pt[:, i] != -999) & (selected_jets.pt[:, j] != -999)
-
-        #    # Sum vectors and get invariant mass
-        #    m_pair = (jets_vec[:, i] + jets_vec[:, j]).mass
-
-        #    # Set to -999 if invalid
-        #    events[f"mass_{name}"] = ak.where(valid, m_pair, -999.0)
-
-        #    # Compute ΔR for the pair using your self.deltaR
-        #    delta_r = self.deltaR(
-        #        selected_jets.eta[:, i], selected_jets.phi[:, i],
-        #        selected_jets.eta[:, j], selected_jets.phi[:, j]
-        #    )
-        #    events[f"deltaR_{name}"] = ak.where(valid, delta_r, -999.0)
+        elif (era == "preEE") | ("2022" in era):
+            events["year"] = 3
+        elif (era == "postEE") | ("2022" in era):
+            events["year"] = 3
+        elif (era == "preBPix") | ("2023" in era):
+            events["year"] = 4
+        elif (era == "postBPix") | ("2023" in era):
+            events["year"] = 4
+        elif era == "2024":
+            events["year"] = 5
 
         return events
 
@@ -243,49 +159,119 @@ class PrepareInputs:
 
 
     def get_relative_xsec_weight(self, events, sample_type, era):
+        # Using mH = 125.4 GeV
+        # for kl samples and H BRs: https://gitlab.cern.ch/hh/recommendations/-/blob/master/CrossSections.md?ref_type=heads
+        # for singleH at 13.6 TeV: https://twiki.cern.ch/twiki/bin/view/LHCPhysics/LHCHWG136TeVxsec_extrap
+        # for singleH at 13 TeV: https://twiki.cern.ch/twiki/bin/view/LHCPhysics/CERNYellowReportPageAt13TeV#gluon_gluon_Fusion_Process
+        
+        dict_xsec_13TeV = {
+            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": 0.030649e3 * 0.00227 * 0.576 * 2,#0.033969e3 * 0.00227 * 0.576 * 2,  # cross sectio of GluGluToHH * BR(HToGG) * BR(HTobb) * 2 for two combination ### have to recheck if this is correct. 
+            "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": 0.068317e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": 0.013422e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": 0.090488e3 * 0.00227 * 0.576 * 2,
 
-        # for kl samples: https://twiki.cern.ch/twiki/bin/view/LHCPhysics/LHCHWGHH?redirectedfrom=LHCPhysics.LHCHXSWGHH#Latest_recommendations_for_gluon
-        dict_xsec = {
+            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_3p00": 2.617158e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p35": 0.009427e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_1p00": 0.132486e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p10": 0.016068e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_m2p00": 1.791638e3 * 0.00227 * 0.576 * 2,
+
+            # For singleH, XS(process) * BR(HtoGG)
+            # Using mH = 125.4 unless specified otherwise
+            "ttHtoGG_M_125": 0.5033e3 * 0.00227,
+            "BBHto2G_M_125": 0.5223e3 * 0.00227,
+            "GluGluHToGG_M_125": 48.30e3 * 0.00227,
+            "VBFHToGG_M_125": 3.770e3 * 0.00227,
+            "VHtoGG_M_125": 2.2347e3 * 0.00227, # XS is sum of WH and ZH
+
+            "DDQCDGJET": 1.0,
+            "TTG_10_100": 4.216e3,
+            "TTG_100_200": 0.4114e3,
+            "TTG_200": 0.1284e3,
+            "TT": 762.3e3,
             "GGJets": 88.75e3,
+            "TTGG": 0.02391e3,
+
+            "GluGlutoHHto2B2G_EFTReweighted_1D_public": 0.00227 * 0.576 * 2, # will be decided outside, as it can be used as many benchmarks
+            "GluGlutoHHto2B2G_EFTReweighted_1D_private": 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_EFTReweighted_2D_private": 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_EFTReweighted_3D_private": 0.00227 * 0.576 * 2,
+
+            "VBFHH_CV_1_C2V_1_C3_1": 0.0017260e3 * 0.00227 * 0.576 * 2,
+        }
+        dict_xsec_13p6TeV = {
+            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": 0.033969e3 * 0.00227 * 0.576 * 2,#0.033969e3 * 0.00227 * 0.576 * 2,  # cross sectio of GluGluToHH * BR(HToGG) * BR(HTobb) * 2 for two combination ### have to recheck if this is correct. 
+            "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": 0.075495e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": 0.014864e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": 0.099298e3 * 0.00227 * 0.576 * 2,
+
+            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_3p00": 2.900686e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p35": 0.010448e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_1p00": 0.146839e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p10": 0.017809e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_m2p00": 1.985733e3 * 0.00227 * 0.576 * 2,
+          
+            "GluGlutoHHto2B2G_EFTReweighted_1D_public": 0.00227 * 0.576 * 2, # will be decided outside, as it can be used as many benchmarks
+            "GluGlutoHHto2B2G_EFTReweighted_1D_private": 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_EFTReweighted_2D_private": 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_EFTReweighted_3D_private": 0.00227 * 0.576 * 2,
+
+            "VBFHH_CV_1_C2V_1_C3_1": 0.0019292e3 * 0.00227 * 0.576 * 2,
+            "VBFHH_CV_1_C2V_0_C3_1": 0.0296772e3 * 0.00227 * 0.576 * 2,
+            "VBFHH_CV_1p74_C2V_1p37_C3_14p4": 0.4002163e3 * 0.00227 * 0.576 * 2,
+            "VBFHH_CV_2p12_C2V_3p87_C3_m5p96": 0.6800842e3 * 0.00227 * 0.576 * 2,
+            "VBFHH_CV_m0p012_C2V_0p030_C3_10p2": 0.0000127e3 * 0.00227 * 0.576 * 2,
+            "VBFHH_CV_m0p758_C2V_1p44_C3_m19p3": 0.3593242e3 * 0.00227 * 0.576 * 2,
+            "VBFHH_CV_m1p83_C2V_3p57_C3_m3p39": 0.0168528e3 * 0.00227 * 0.576 * 2,
+
+            # For singleH, XS(process) * BR(HtoGG)
+            # Using mH = 125.38 unless specified otherwise
+            "ttHtoGG_M_125": 0.5638e3 * 0.00227,
+            "BBHto2G_M_125": 0.5251e3 * 0.00227, # mH = 125.09
+            "GluGluHToGG_M_125": 51.96e3 * 0.00227,
+            "VBFHToGG_M_125": 4.067e3 * 0.00227,
+            "VHtoGG_M_125": 2.3781e3 * 0.00227, # XS is sum of WH and ZH
+            "WmHtoGG": 0.8801e3 * 0.00227,
+            "WpHtoGG": 0.5620e3 * 0.00227,
+            "ZHtoGG": 0.9361e3 * 0.00227,
+
+            "DDQCDGJET": 1.0,
+            "TTG_10_100": 4.216e3,
+            "TTG_100_200": 0.4114e3,
+            "TTG_200": 0.1284e3,
+            "TT": 762.3e3,
+            "GGJets": 87.51e3,
             "GJetPt20To40": 242.5e3,
             "GJetPt40": 919.1e3,
-            "TTGG": 0.02391e3,  # cross sectio of TTGG 0.01696, copilot: 0.502
-            "ttHtoGG_M_125": 0.5700e3 * 0.00227,  # cross sectio of ttH * BR(HToGG)
-            "BBHto2G_M_125": 0.4385e3 * 0.00227,  # cross sectio of BBH * BR(HToGG)
-            "GluGluHToGG_M_125": 52.23e3 * 0.00227,  # cross sectio of GluGluHToGG * BR(HToGG)
-            "VBFHToGG_M_125": 4.078e3 * 0.00227,
-            "VHtoGG_M_125": 2.4009e3 * 0.00227,
-            "WmHtoGG": 0.8889e3 * 0.00227,
-            "WpHtoGG": 0.5677e3 * 0.00227,
-            "ZHtoGG": 0.9439e3 * 0.00227,
-            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": 0.034e3 * 0.00227 * 0.582 * 2,#0.02964e3 * 0.00227 * 0.582 * 2,  # cross sectio of GluGluToHH * BR(HToGG) * BR(HToGG) * 2 for two combination ### have to recheck if this is correct. 
-            "VBFHHto2B2G_CV_1_C2V_1_C3_1": 0.00173e3 * 0.00227 * 0.582 * 2,  # cross sectio of VBFToHH * BR(HToGG) * BR(HTobb) * 2 for two combination ### have to recheck if this is correct.
-            "DDQCDGJET": 1.0,
-            "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": 0.09965e3 * 0.00227 * 0.582 * 2,
-            "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": 0.07575e3 * 0.00227 * 0.582 * 2,
-            "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": 0.01491e3 * 0.00227 * 0.582 * 2, #using formula listed above the table to extrapolate
-            "TTG_10_100": 4.334e3,
-            "TTG_100_200": 0.44e3,
-            "TTG_200": 0.12e3,
-            "TT": 730e3,
+            "TTGG": 0.02391e3,
         }
+
         luminosities = {
+        "2016preVFP": 19.5,
+        "2016postVFP": 16.8,
+        "2017": 42.07,
+        "2018": 59.56,
         "preEE": 7.98,  # Integrated luminosity for preEE in fb^-1
         "postEE": 26.67,  # Integrated luminosity for postEE in fb^-1
-        "preBPix": 17.794,  # Integrated luminosity for preEE in fb^-1
-        "postBPix": 9.451,  # Integrated luminosity for postEE in fb^-1
-        "2024": 108.95
+        "preBPix": 18.06,  # Integrated luminosity for preEE in fb^-1
+        "postBPix": 9.89,  # Integrated luminosity for postEE in fb^-1
+        "2024": 108.82
         }
 
         lumi = luminosities[era]
         if sample_type == "DDQCDGJET":
             lumi = 1.0
 
-        events["rel_xsec_weight"] = (events.weight) * dict_xsec[sample_type] * lumi
-        events["weight_tot"] = (events.weight) * dict_xsec[sample_type] * lumi
-
+        if era in ["2016preVFP", "2016postVFP", "2017", "2018"]:
+            events["weight_tot"] = (events.weight) * dict_xsec_13TeV[sample_type] * lumi
+        
+        elif era in ["preEE", "postEE", "preBPix", "postBPix", "2024"]:
+            events["weight_tot"] = (events.weight) * dict_xsec_13p6TeV[sample_type] * lumi
+        else:
+            raise ValueError(f"Unknown era: {era}")
+        
         if (era == "2024") & (sample_type == "GGJets"):
-            events["weight_tot"] = (events.weight_tot) * 1.59
+            events["weight_tot"] = (events.weight_tot) * 1.5925
 
         return events
 
@@ -580,7 +566,7 @@ class PrepareInputs:
         vars_for_training = vars_config["vars"] 
         # vars_for_log = vars_config["vars_for_log_transform"]
 
-        vars_to_load = vars_for_training + self.extra_vars
+        vars_to_load = vars_for_training + self.extra_vars_train
 
         for era in self.training_info["samples_info"]["eras"]:
             # for samples in self.sample_to_class.keys():                
@@ -598,6 +584,8 @@ class PrepareInputs:
                 # get relative weights according to cross section of the process
                 events = self.get_relative_xsec_weight(events, samples, era)
 
+                events = events[vars_for_training + ["weight_tot"]]
+
                 # apply mHH bin filter (if configured) and skip sample if empty
                 if self.mhh_var is not None and self.mhh_range is not None:
                     events = self._apply_mhh_filter(events)
@@ -612,7 +600,8 @@ class PrepareInputs:
                 for cls in self.classes:  # first intialize everything to zero
                     events[cls] = ak.zeros_like(events.eta)
 
-                events[self.sample_to_class[samples]] = ak.ones_like(events.pt) # one-hot encoded
+                events[self.sample_to_class[samples]] = ak.ones_like(events.eta) # one-hot encoded
+
                 # comb_inputs.append(events)
                 events["sample_type"] = samples
 
@@ -622,7 +611,7 @@ class PrepareInputs:
                 # plot_correlation_matrix
                 os.makedirs(f"{out_path}/correlation_matrix/", exist_ok=True)
                 corr_out_path = f"{out_path}/correlation_matrix/{samples}_{era}.pdf"
-                self.corr_with_mgg_mjj(events, vars_for_training, corr_out_path)
+                # self.corr_with_mgg_mjj(events, vars_for_training, corr_out_path)
 
                 print("INFO: Appending process samples to whole dataframe")
 
@@ -645,7 +634,7 @@ class PrepareInputs:
 
         X = comb_inputs[vars_for_training]
         Y = comb_inputs[[cls for cls in self.classes]]
-        relative_weights = comb_inputs["rel_xsec_weight"]
+        relative_weights = comb_inputs["weight_tot"]
 
         # perform log transformation for variables if needed
         # for var in vars_for_log:
@@ -738,7 +727,14 @@ class PrepareInputs:
 
         # vars_for_log = vars_config["vars_for_log_transform"]
 
-        vars_to_load = vars_for_training + self.extra_vars
+        vars_VBFHH_MVA = ["nonResReg_vbfpair_pholead_PtOverM", "nonResReg_vbfpair_phosublead_PtOverM", "lead_mvaID", "sublead_mvaID", "nonResReg_vbfpair_FirstJet_PtOverM", "nonResReg_vbfpair_SecondJet_PtOverM", "nonResReg_vbfpair_lead_bjet_btagPNetB", "nonResReg_vbfpair_sublead_bjet_btagPNetB", "nonResReg_vbfpair_DeltaR_jg_min", "nonResReg_vbfpair_CosThetaStar_CS", "nonResReg_vbfpair_CosThetaStar_gg", "nonResReg_vbfpair_CosThetaStar_jj", "nonResReg_vbfpair_VBF_first_jet_btagPNetQvG", "nonResReg_vbfpair_VBF_second_jet_btagPNetQvG","nonResReg_vbfpair_VBF_jet_eta_prod", "nonResReg_vbfpair_VBF_jet_eta_diff", "nonResReg_vbfpair_VBF_DeltaR_jb_min", "nonResReg_vbfpair_VBF_DeltaR_jg_min", "nonResReg_vbfpair_VBF_Cgg", "nonResReg_vbfpair_VBF_Cbb", "nonResReg_vbfpair_VBF_first_jet_PtOverM", "nonResReg_vbfpair_VBF_second_jet_PtOverM", "nonResReg_vbfpair_VBF_dijet_mass", "nonResReg_vbfpair_VBF_dijet_vbfpair_Score_jj", "nonResReg_vbfpair_M_X", "nonResReg_vbfpair_HHbbggCandidate_pt"]
+        vars_VBFHH_MVA += ["nonResReg_vbfpair_dijet_mass"]
+        vars_to_load = vars_for_training + self.extra_vars_train + self.extra_vars_out + vars_VBFHH_MVA
+
+        vars_EFTReweighted  = \
+            ['weight_EFT_kl_10p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_10p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m6p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m6p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_4p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_4p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m13p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m13p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_1p00_kt_1p00_c2_0p00_cg_1p00_c2g_0p00', 'weight_EFT_unc_kl_1p00_kt_1p00_c2_0p00_cg_1p00_c2g_0p00', 'weight_EFT_kl_m0p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m0p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_15p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_15p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m27p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m27p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m15p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m15p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_23p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_23p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_10p73_kt_5p96_c2_4p36_cg_m2p05_c2g_m1p81', 'weight_EFT_unc_kl_10p73_kt_5p96_c2_4p36_cg_m2p05_c2g_m1p81', 'weight_EFT_kl_13p51_kt_m2p19_c2_0p08_cg_3p27_c2g_0p43', 'weight_EFT_unc_kl_13p51_kt_m2p19_c2_0p08_cg_3p27_c2g_0p43', 'weight_EFT_kl_2p40_kt_1p00_c2_0p00_cg_0p20_c2g_m0p20', 'weight_EFT_unc_kl_2p40_kt_1p00_c2_0p00_cg_0p20_c2g_m0p20', 'weight_EFT_kl_m14p00_kt_m2p86_c2_2p55_cg_4p20_c2g_1p87', 'weight_EFT_unc_kl_m14p00_kt_m2p86_c2_2p55_cg_4p20_c2g_1p87', 'weight_EFT_kl_27p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_27p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m8p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m8p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m2p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m2p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m12p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m12p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m2p50_kt_1p00_c2_0p00_cg_0p00_c2g_m1p20', 'weight_EFT_unc_kl_m2p50_kt_1p00_c2_0p00_cg_0p00_c2g_m1p20', 'weight_EFT_kl_16p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_16p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_1p00_kt_1p00_c2_m0p20_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_1p00_kt_1p00_c2_m0p20_cg_0p00_c2g_0p00', 'weight_EFT_kl_m10p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m10p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_1p00_kt_1p00_c2_0p00_cg_1p00_c2g_m2p00', 'weight_EFT_unc_kl_1p00_kt_1p00_c2_0p00_cg_1p00_c2g_m2p00', 'weight_EFT_kl_29p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_29p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m28p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m28p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m5p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m5p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m9p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m9p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m19p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m19p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_5p24_kt_m4p00_c2_m1p24_cg_m3p35_c2g_m0p62', 'weight_EFT_unc_kl_5p24_kt_m4p00_c2_m1p24_cg_m3p35_c2g_m0p62', 'weight_EFT_kl_0p00_kt_0p00_c2_0p00_cg_0p00_c2g_1p00', 'weight_EFT_unc_kl_0p00_kt_0p00_c2_0p00_cg_0p00_c2g_1p00', 'weight_EFT_kl_m9p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m9p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_19p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_19p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_10p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_10p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m22p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m22p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m7p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m7p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m26p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m26p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m3p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m3p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_1p00_kt_1p00_c2_0p00_cg_1p00_c2g_1p10', 'weight_EFT_unc_kl_1p00_kt_1p00_c2_0p00_cg_1p00_c2g_1p10', 'weight_EFT_kl_1p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_1p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_34p45_kt_m0p39_c2_1p79_cg_m1p78_c2g_4p65', 'weight_EFT_unc_kl_34p45_kt_m0p39_c2_1p79_cg_m1p78_c2g_4p65', 'weight_EFT_kl_m17p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m17p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_18p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_18p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_20p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_20p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_14p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_14p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_8p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_8p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_30p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_30p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_11p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_11p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m16p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m16p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_11p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_11p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m4p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m4p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m26p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m26p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_1p00_kt_1p00_c2_0p00_cg_1p50_c2g_m0p50', 'weight_EFT_unc_kl_1p00_kt_1p00_c2_0p00_cg_1p50_c2g_m0p50', 'weight_EFT_kl_m5p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m5p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_1p00_kt_1p00_c2_1p00_cg_1p00_c2g_0p00', 'weight_EFT_unc_kl_1p00_kt_1p00_c2_1p00_cg_1p00_c2g_0p00', 'weight_EFT_kl_1p00_kt_1p00_c2_10p00_cg_1p00_c2g_0p00', 'weight_EFT_unc_kl_1p00_kt_1p00_c2_10p00_cg_1p00_c2g_0p00', 'weight_EFT_kl_20p00_kt_1p00_c2_0p00_cg_0p00_c2g_5p00', 'weight_EFT_unc_kl_20p00_kt_1p00_c2_0p00_cg_0p00_c2g_5p00', 'weight_EFT_kl_m20p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m20p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m12p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m12p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m19p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m19p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_28p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_28p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_21p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_21p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_8p28_kt_6p00_c2_m0p28_cg_1p21_c2g_m3p68', 'weight_EFT_unc_kl_8p28_kt_6p00_c2_m0p28_cg_1p21_c2g_m3p68', 'weight_EFT_kl_12p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_12p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m14p00_kt_m1p26_c2_m1p92_cg_m5p00_c2g_0p95', 'weight_EFT_unc_kl_m14p00_kt_m1p26_c2_m1p92_cg_m5p00_c2g_0p95', 'weight_EFT_kl_m22p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m22p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_4p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_4p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m21p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m21p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_1p32_kt_4p63_c2_3p23_cg_m2p89_c2g_2p81', 'weight_EFT_unc_kl_1p32_kt_4p63_c2_3p23_cg_m2p89_c2g_2p81', 'weight_EFT_kl_15p41_kt_2p83_c2_m0p34_cg_m5p00_c2g_0p38', 'weight_EFT_unc_kl_15p41_kt_2p83_c2_m0p34_cg_m5p00_c2g_0p38', 'weight_EFT_kl_m20p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m20p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m15p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m15p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_6p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_6p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m30p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m30p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m18p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m18p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_3p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_3p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m14p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m14p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_7p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_7p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_12p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_12p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_17p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_17p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_0p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_0p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m8p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m8p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m23p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m23p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m14p00_kt_0p75_c2_5p00_cg_1p62_c2g_1p56', 'weight_EFT_unc_kl_m14p00_kt_0p75_c2_5p00_cg_1p62_c2g_1p56', 'weight_EFT_kl_m24p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m24p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_1p00_kt_1p00_c2_0p00_cg_0p00_c2g_1p00', 'weight_EFT_unc_kl_1p00_kt_1p00_c2_0p00_cg_0p00_c2g_1p00', 'weight_EFT_kl_7p01_kt_6p00_c2_3p97_cg_m3p74_c2g_m1p43', 'weight_EFT_unc_kl_7p01_kt_6p00_c2_3p97_cg_m3p74_c2g_m1p43', 'weight_EFT_kl_m29p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m29p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m10p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m10p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_2p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_2p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_17p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_17p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_6p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_6p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m1p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m1p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m2p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m2p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_13p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_13p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_1p00_kt_1p00_c2_0p00_cg_0p00_c2g_m1p20', 'weight_EFT_unc_kl_1p00_kt_1p00_c2_0p00_cg_0p00_c2g_m1p20', 'weight_EFT_kl_15p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_15p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_24p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_24p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_2p45_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_2p45_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_9p79_kt_6p00_c2_5p00_cg_m8p00_c2g_1p91', 'weight_EFT_unc_kl_9p79_kt_6p00_c2_5p00_cg_m8p00_c2g_1p91', 'weight_EFT_kl_16p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_16p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_4p13_kt_1p40_c2_m3p56_cg_m2p32_c2g_m2p07', 'weight_EFT_unc_kl_4p13_kt_1p40_c2_m3p56_cg_m2p32_c2g_m2p07', 'weight_EFT_kl_29p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_29p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_25p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_25p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_3p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_3p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_1p00_kt_1p00_c2_3p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_1p00_kt_1p00_c2_3p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m27p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m27p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_1p00_kt_5p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_1p00_kt_5p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m16p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m16p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m7p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m7p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m13p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m13p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_0p00_kt_1p00_c2_1p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_0p00_kt_1p00_c2_1p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_0p01_kt_m1p59_c2_5p00_cg_m5p00_c2g_m0p55', 'weight_EFT_unc_kl_0p01_kt_m1p59_c2_5p00_cg_m5p00_c2g_m0p55', 'weight_EFT_kl_1p00_kt_1p00_c2_m0p20_cg_0p00_c2g_m1p20', 'weight_EFT_unc_kl_1p00_kt_1p00_c2_m0p20_cg_0p00_c2g_m1p20', 'weight_EFT_kl_m25p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m25p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m21p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m21p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m3p10_kt_1p45_c2_3p46_cg_m3p38_c2g_m2p57', 'weight_EFT_unc_kl_m3p10_kt_1p45_c2_3p46_cg_m3p38_c2g_m2p57', 'weight_EFT_kl_1p00_kt_1p00_c2_1p00_cg_m0p60_c2g_0p60', 'weight_EFT_unc_kl_1p00_kt_1p00_c2_1p00_cg_m0p60_c2g_0p60', 'weight_EFT_kl_m24p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m24p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m28p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m28p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_1p00_kt_1p00_c2_1p00_cg_6p00_c2g_0p00', 'weight_EFT_unc_kl_1p00_kt_1p00_c2_1p00_cg_6p00_c2g_0p00', 'weight_EFT_kl_18p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_18p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_2p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_2p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m1p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m1p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_1p00_kt_1p00_c2_0p50_cg_m0p80_c2g_0p60', 'weight_EFT_unc_kl_1p00_kt_1p00_c2_0p50_cg_m0p80_c2g_0p60', 'weight_EFT_kl_25p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_25p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_21p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_21p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m11p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m11p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_0p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_0p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_14p10_kt_m3p98_c2_11p06_cg_3p59_c2g_m1p83', 'weight_EFT_unc_kl_14p10_kt_m3p98_c2_11p06_cg_3p59_c2g_m1p83', 'weight_EFT_kl_m6p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m6p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_13p00_kt_4p59_c2_1p27_cg_2p83_c2g_2p14', 'weight_EFT_unc_kl_13p00_kt_4p59_c2_1p27_cg_2p83_c2g_2p14', 'weight_EFT_kl_15p00_kt_1p00_c2_0p00_cg_m1p00_c2g_1p00', 'weight_EFT_unc_kl_15p00_kt_1p00_c2_0p00_cg_m1p00_c2g_1p00', 'weight_EFT_kl_27p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_27p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_9p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_9p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_19p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_19p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m29p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m29p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_7p05_kt_m2p05_c2_3p61_cg_1p89_c2g_2p20', 'weight_EFT_unc_kl_7p05_kt_m2p05_c2_3p61_cg_1p89_c2g_2p20', 'weight_EFT_kl_8p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_8p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_1p00_kt_1p00_c2_0p00_cg_m3p00_c2g_3p00', 'weight_EFT_unc_kl_1p00_kt_1p00_c2_0p00_cg_m3p00_c2g_3p00', 'weight_EFT_kl_14p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_14p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_7p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_7p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_24p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_24p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m14p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m14p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m14p00_kt_1p14_c2_5p00_cg_m0p28_c2g_m2p19', 'weight_EFT_unc_kl_m14p00_kt_1p14_c2_5p00_cg_m0p28_c2g_m2p19', 'weight_EFT_kl_1p00_kt_1p00_c2_0p35_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_1p00_kt_1p00_c2_0p35_cg_0p00_c2g_0p00', 'weight_EFT_kl_m25p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m25p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m17p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m17p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_28p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_28p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_1p00_kt_1p00_c2_0p70_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_1p00_kt_1p00_c2_0p70_cg_0p00_c2g_0p00', 'weight_EFT_kl_m0p07_kt_m2p40_c2_1p20_cg_9p53_c2g_m1p55', 'weight_EFT_unc_kl_m0p07_kt_m2p40_c2_1p20_cg_9p53_c2g_m1p55', 'weight_EFT_kl_1p00_kt_1p00_c2_0p10_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_1p00_kt_1p00_c2_0p10_cg_0p00_c2g_0p00', 'weight_EFT_kl_m23p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m23p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_1p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_1p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_5p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_5p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_26p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_26p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_1p00_kt_1p00_c2_m2p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_1p00_kt_1p00_c2_m2p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_5p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_5p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_22p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_22p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_26p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_26p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_12p97_kt_m0p97_c2_m4p08_cg_4p69_c2g_2p70', 'weight_EFT_unc_kl_12p97_kt_m0p97_c2_m4p08_cg_4p69_c2g_2p70', 'weight_EFT_kl_m4p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m4p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m10p00_kt_1p00_c2_1p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m10p00_kt_1p00_c2_1p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_9p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_9p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_23p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_23p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_13p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_13p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m3p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m3p00_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m11p71_kt_4p15_c2_4p22_cg_1p84_c2g_3p33', 'weight_EFT_unc_kl_m11p71_kt_4p15_c2_4p22_cg_1p84_c2g_3p33', 'weight_EFT_kl_m14p00_kt_m0p74_c2_3p05_cg_2p64_c2g_m1p57', 'weight_EFT_unc_kl_m14p00_kt_m0p74_c2_3p05_cg_2p64_c2g_m1p57', 'weight_EFT_kl_20p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_20p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_22p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_22p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m11p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m11p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_m18p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_unc_kl_m18p50_kt_1p00_c2_0p00_cg_0p00_c2g_0p00', 'weight_EFT_kl_1p00_kt_1p00_c2_0p00_cg_m0p50_c2g_m0p70', 'weight_EFT_unc_kl_1p00_kt_1p00_c2_0p00_cg_m0p50_c2g_m0p70', 'weight_SMEFT_CH_0p00_CHBox_0p00_CHD_0p00_CuH_0p00_CHG_m0p05', 'weight_SMEFT_unc_CH_0p00_CHBox_0p00_CHD_0p00_CuH_0p00_CHG_m0p05', 'weight_SMEFT_CH_m8p50_CHBox_0p00_CHD_0p00_CuH_0p00_CHG_0p00', 'weight_SMEFT_unc_CH_m8p50_CHBox_0p00_CHD_0p00_CuH_0p00_CHG_0p00', 'weight_SMEFT_CH_0p00_CHBox_0p00_CHD_0p00_CuH_m20p00_CHG_0p00', 'weight_SMEFT_unc_CH_0p00_CHBox_0p00_CHD_0p00_CuH_m20p00_CHG_0p00', 'weight_SMEFT_CH_m20p00_CHBox_20p00_CHD_0p00_CuH_0p00_CHG_0p00', 'weight_SMEFT_unc_CH_m20p00_CHBox_20p00_CHD_0p00_CuH_0p00_CHG_0p00', 'weight_SMEFT_CH_m20p00_CHBox_0p00_CHD_0p00_CuH_0p00_CHG_0p10', 'weight_SMEFT_unc_CH_m20p00_CHBox_0p00_CHD_0p00_CuH_0p00_CHG_0p10', 'weight_SMEFT_CH_10p00_CHBox_0p00_CHD_0p00_CuH_0p00_CHG_0p00', 'weight_SMEFT_unc_CH_10p00_CHBox_0p00_CHD_0p00_CuH_0p00_CHG_0p00', 'weight_SMEFT_CH_0p00_CHBox_m10p00_CHD_0p00_CuH_0p00_CHG_0p00', 'weight_SMEFT_unc_CH_0p00_CHBox_m10p00_CHD_0p00_CuH_0p00_CHG_0p00', 'weight_SMEFT_CH_0p00_CHBox_0p00_CHD_10p00_CuH_0p00_CHG_0p10', 'weight_SMEFT_unc_CH_0p00_CHBox_0p00_CHD_10p00_CuH_0p00_CHG_0p10', 'weight_SMEFT_CH_0p00_CHBox_0p00_CHD_10p00_CuH_40p00_CHG_0p00', 'weight_SMEFT_unc_CH_0p00_CHBox_0p00_CHD_10p00_CuH_40p00_CHG_0p00', 'weight_SMEFT_CH_0p00_CHBox_20p00_CHD_0p00_CuH_0p00_CHG_0p10', 'weight_SMEFT_unc_CH_0p00_CHBox_20p00_CHD_0p00_CuH_0p00_CHG_0p10', 'weight_SMEFT_CH_0p00_CHBox_0p00_CHD_10p00_CuH_0p00_CHG_0p00', 'weight_SMEFT_unc_CH_0p00_CHBox_0p00_CHD_10p00_CuH_0p00_CHG_0p00', 'weight_SMEFT_CH_m20p00_CHBox_0p00_CHD_0p00_CuH_40p00_CHG_0p00', 'weight_SMEFT_unc_CH_m20p00_CHBox_0p00_CHD_0p00_CuH_40p00_CHG_0p00', 'weight_SMEFT_CH_0p00_CHBox_0p00_CHD_0p00_CuH_0p00_CHG_0p00', 'weight_SMEFT_unc_CH_0p00_CHBox_0p00_CHD_0p00_CuH_0p00_CHG_0p00', 'weight_SMEFT_CH_2p13_CHBox_0p00_CHD_0p00_CuH_0p00_CHG_0p00', 'weight_SMEFT_unc_CH_2p13_CHBox_0p00_CHD_0p00_CuH_0p00_CHG_0p00', 'weight_SMEFT_CH_0p00_CHBox_20p00_CHD_0p00_CuH_40p00_CHG_0p00', 'weight_SMEFT_unc_CH_0p00_CHBox_20p00_CHD_0p00_CuH_40p00_CHG_0p00', 'weight_SMEFT_CH_0p00_CHBox_0p00_CHD_m5p00_CuH_0p00_CHG_0p00', 'weight_SMEFT_unc_CH_0p00_CHBox_0p00_CHD_m5p00_CuH_0p00_CHG_0p00', 'weight_SMEFT_CH_0p00_CHBox_20p00_CHD_10p00_CuH_0p00_CHG_0p00', 'weight_SMEFT_unc_CH_0p00_CHBox_20p00_CHD_10p00_CuH_0p00_CHG_0p00', 'weight_SMEFT_CH_0p00_CHBox_0p00_CHD_0p00_CuH_40p00_CHG_0p00', 'weight_SMEFT_unc_CH_0p00_CHBox_0p00_CHD_0p00_CuH_40p00_CHG_0p00', 'weight_SMEFT_CH_0p00_CHBox_0p00_CHD_0p00_CuH_0p00_CHG_0p10', 'weight_SMEFT_unc_CH_0p00_CHBox_0p00_CHD_0p00_CuH_0p00_CHG_0p10', 'weight_SMEFT_CH_m20p00_CHBox_0p00_CHD_10p00_CuH_0p00_CHG_0p00', 'weight_SMEFT_unc_CH_m20p00_CHBox_0p00_CHD_10p00_CuH_0p00_CHG_0p00', 'weight_SMEFT_CH_0p00_CHBox_0p00_CHD_0p00_CuH_40p00_CHG_0p10', 'weight_SMEFT_unc_CH_0p00_CHBox_0p00_CHD_0p00_CuH_40p00_CHG_0p10', 'weight_SMEFT_CH_m20p00_CHBox_0p00_CHD_0p00_CuH_0p00_CHG_0p00', 'weight_SMEFT_unc_CH_m20p00_CHBox_0p00_CHD_0p00_CuH_0p00_CHG_0p00', 'weight_SMEFT_CH_0p00_CHBox_20p00_CHD_0p00_CuH_0p00_CHG_0p00', 'weight_SMEFT_unc_CH_0p00_CHBox_20p00_CHD_0p00_CuH_0p00_CHG_0p00']
+
+        vars_gen = ["gen_mHH_hardProc", "gen_pT_HH_hardProc", "gen_CosThetaStar_HH_hardProc"]
 
         samples_path = training_info["samples_info"]["samples_path"]
 
@@ -748,6 +744,12 @@ class PrepareInputs:
                 parquet_path = training_info["samples_info"][era][samples]
                 if self.save_all_columns_sim_nominal:
                     events = ak.from_parquet(f"{samples_path}/{parquet_path}")
+                elif ("GluGlutoHHto2B2G_kl" in samples):
+                    vars_to_load = vars_to_load + vars_gen
+                    events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
+                elif ("EFTReweighted" in samples):
+                    vars_to_load = vars_to_load + vars_EFTReweighted + vars_gen
+                    events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
                 else:
                     events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
 
@@ -774,6 +776,8 @@ class PrepareInputs:
                 os.makedirs(full_path_to_save, exist_ok=True)
                 ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
 
+                events = events[vars_for_training + ["weight_tot"]]
+
                 comb_inputs = pd.DataFrame()
                 i = 0
                 while len(events) > 0:
@@ -784,7 +788,7 @@ class PrepareInputs:
 
                 X = comb_inputs[vars_for_training]
                 #Y = comb_inputs[[cls for cls in self.classes]]
-                relative_weights = comb_inputs["rel_xsec_weight"]
+                relative_weights = comb_inputs["weight_tot"]
 
                 # perform log transformation for variables if needed
                 # for var in vars_for_log:
@@ -843,7 +847,7 @@ class PrepareInputs:
 
         # vars_for_log = vars_config["vars_for_log_transform"]
 
-        vars_to_load = vars_for_training + self.extra_vars
+        vars_to_load = vars_for_training + self.extra_vars_train + self.extra_vars_out
 
         samples_path = training_info["samples_info"]["samples_path"]
 
@@ -886,6 +890,8 @@ class PrepareInputs:
                     os.makedirs(full_path_to_save, exist_ok=True)
                     ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
 
+                    events = events[vars_for_training + ["weight_tot"]]
+
                     comb_inputs = pd.DataFrame()
                     i = 0
                     while len(events) > 0:
@@ -896,7 +902,7 @@ class PrepareInputs:
 
                     X = comb_inputs[vars_for_training]
                     #Y = comb_inputs[[cls for cls in self.classes]]
-                    relative_weights = comb_inputs["rel_xsec_weight"]
+                    relative_weights = comb_inputs["weight_tot"]
 
                     # perform log transformation for variables if needed
                     # for var in vars_for_log:
@@ -955,7 +961,7 @@ class PrepareInputs:
 
         # vars_for_log = vars_config["vars_for_log_transform"]
 
-        vars_to_load = vars_for_training + self.extra_vars
+        vars_to_load = vars_for_training + self.extra_vars_train + self.extra_vars_out
 
         samples_path = training_info["samples_info"]["samples_path"]
         datas = training_info["samples_info"]["data"]
@@ -966,7 +972,12 @@ class PrepareInputs:
             else:
                 events = ak.from_parquet(f"{samples_path}/{datas[data]}", columns=vars_to_load)
 
-            sample_to_era = {"2022_EraE": "postEE", 
+            sample_to_era = {
+                            "2016preVFP": "preVFP",
+                            "2016postVFP": "postVFP",
+                            "2017": "2017",
+                            "2018": "2018",
+                            "2022_EraE": "postEE", 
                             "2022_EraF": "postEE", 
                             "2022_EraG": "postEE", 
                             "2022_EraC": "preEE", 
@@ -1009,6 +1020,8 @@ class PrepareInputs:
             full_path_to_save = f"{out_path}/{data}/"
             os.makedirs(full_path_to_save, exist_ok=True)
             ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
+
+            events = events[vars_for_training]
 
             comb_inputs = pd.DataFrame()
             i = 0
