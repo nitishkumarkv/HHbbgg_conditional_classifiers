@@ -5,7 +5,7 @@ import argparse
 
 # ------ configurations ----- #
 
-# Example for a single file, 3 cats, doing mjj cut
+# Example for a single file, 3 cats, doing mjj cut, boosted flag to false
 # base_path = "/home/mmcginni/HHbbgg_conditional_classifiers/out_Version_20251203_inc2024_year/optuna_categorization_baseline/"
 # dict_inputs = {
 #                 "input_file": ["best_cut_params.json"],
@@ -13,6 +13,7 @@ import argparse
 #                 "n_cats": 3,
 #                 "do_mjjcut": True, #True or False
 #                 "mHH_bins": [] #bin edges include upper and lowermost bins, -1 for no bound, leave emptry if not doing mHH bins. Should have N input_files + 1
+#                 "is_boosted": 0 # -1: no cut on boosted flag, 0: flag to false, 1: flag to true
 # }
 
 # Example for a mHH bins, training per mHH bin
@@ -66,7 +67,11 @@ while ifile < len(dict_inputs["input_file"]):
     
     catstr_mjj = ""
     if dict_inputs["do_mjjcut"]:
-            catstr_mjj = "(dijet_mass > 80 & dijet_mass < 190) & "
+        catstr_mjj = "(dijet_mass > 80 & dijet_mass < 190) & "
+
+    catstr_boosted = ""
+    if (dict_inputs["is_boosted"] == 0) | (dict_inputs["is_boosted"] == 1):
+        catstr_boosted = f"(is_boosted == {dict_inputs["is_boosted"]}) & "
 
     catstr_nots = ""
     icat = 0
@@ -75,7 +80,7 @@ while ifile < len(dict_inputs["input_file"]):
 
         catstr_dnn = f"(ggHH_score > {cuts['th_signal']} & nonRes_score < {cuts['th_bg_0']} & ttH_score < {cuts['th_bg_1']} & singleH_score < {cuts['th_bg_2']})"
 
-        dict_cats_ff[f"cat{dict_inputs['n_cats']*ifile + icat+1}"] = catstr_mHH + catstr_mjj + catstr_dnn + catstr_nots
+        dict_cats_ff[f"cat{dict_inputs['n_cats']*ifile + icat+1}"] = catstr_mHH + catstr_mjj + catstr_boosted + catstr_dnn + catstr_nots
 
         catstr_nots += " & not" + catstr_dnn
         icat += 1

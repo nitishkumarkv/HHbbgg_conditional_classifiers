@@ -319,11 +319,15 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
             ax, ax_ratio = axs
 
         luminosities = {
+        "2016preVFP": 19.5,
+        "2016postVFP": 16.8,
+        "2017": 42.07,
+        "2018": 59.56,
         "preEE": 7.98,  # Integrated luminosity for preEE in fb^-1
         "postEE": 26.67,  # Integrated luminosity for postEE in fb^-1
-        "preBPix": 17.794,  # Integrated luminosity for preEE in fb^-1
-        "postBPix": 9.451,  # Integrated luminosity for postEE in fb^-1
-        "2024": 108.95
+        "preBPix": 18.06,  # Integrated luminosity for preEE in fb^-1
+        "postBPix": 9.89,  # Integrated luminosity for postEE in fb^-1
+        "2024": 108.82
         }
 
         lumi = 0
@@ -493,4 +497,4 @@ if __name__ == "__main__":
 
     out_path = f"{base_path}/"
     plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, signal_scale=1000)
-    plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, signal_scale=1000, only_MC=True)
+    # plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, signal_scale=1000, only_MC=True)
