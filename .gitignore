@@ -1,22 +1,28 @@
-config/*
-out*/
+# Python files
+*.pyc
 */__pycache__
-Version_20250524_MVAID_forPreApp/
-condor/
+
+# Jupyter Notebooks
 notebooks/
+merge_multiclass.ipynb
+
+# Editor files
 .pylintrc
 .vscode/settings.json
+pyproject.toml
+
+config/*
+out*/
+Version_20250524_MVAID_forPreApp/
+condor/
 norm_weights_disco_*.png
 Version_20260127_16-24_kl_year_vbfpair_partial_nobjetpT/
 HHbbgg_classifier_backup_torch2.0.0cuda.yaml
 HHbbgg_classifier_backup_torch2.9.1cu130.yaml
 HHbbgg_classifier.yaml
 HHbbgg_conditional_classifiers.code-workspace
-merge_multiclass.ipynb
 nonResSamples_diphoton_mass_ggFHH_score_cuts.png
 nonResSamples_nonResReg_dijet_mass_DNNreg_score_cuts.png
-prompt.txt
-pyproject.toml
 save_checkpoint_sculpting_plots.sh
 weight_distribution.png
 .cats/Version_20250524_MVAID_forPreApp_80MjjLow_noIsBoosted.json
