@@ -1,5 +1,6 @@
 
 import awkward as ak
+import pyarrow as pa
 import numpy as np
 import matplotlib.pyplot as plt
 import os
@@ -12,6 +13,9 @@ import pandas as pd
 import json
 import mplhep
 from matplotlib.backends.backend_pdf import PdfPages
+
+if not hasattr(pa.lib, "PyExtensionType") and hasattr(pa.lib, "ExtensionType"):
+    pa.lib.PyExtensionType = pa.lib.ExtensionType
 
 
 class OptunaCategorizer:

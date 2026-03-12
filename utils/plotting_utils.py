@@ -4,7 +4,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import mplhep as hep
 import awkward as ak
+import pyarrow as pa
 import yaml
+
+if not hasattr(pa.lib, "PyExtensionType") and hasattr(pa.lib, "ExtensionType"):
+    pa.lib.PyExtensionType = pa.lib.ExtensionType
 
 # Apply CMS style
 hep.style.use("CMS")

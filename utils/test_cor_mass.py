@@ -1,5 +1,6 @@
 import numpy as np
 import awkward as ak
+import pyarrow as pa
 import matplotlib.pyplot as plt
 import argparse
 import json
@@ -8,6 +9,10 @@ import yaml
 import numpy as np
 import matplotlib.pyplot as plt
 import mplhep as hep
+
+if not hasattr(pa.lib, "PyExtensionType") and hasattr(pa.lib, "ExtensionType"):
+    pa.lib.PyExtensionType = pa.lib.ExtensionType
+
 plt.style.use(hep.style.CMS)  # Apply mlhep CMS style
 
 if __name__ == "__main__":

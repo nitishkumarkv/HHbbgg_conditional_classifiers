@@ -11,9 +11,13 @@ from sklearn.metrics import confusion_matrix, classification_report, roc_curve, 
 from sklearn.preprocessing import label_binarize
 import os
 import awkward as ak
+import pyarrow as pa
 import mplhep as hep
 from mlp import MLP
 import pickle
+
+if not hasattr(pa.lib, "PyExtensionType") and hasattr(pa.lib, "ExtensionType"):
+    pa.lib.PyExtensionType = pa.lib.ExtensionType
 
 def load_checkpoint(file_path):
     checkpoint = torch.load(file_path, weights_only=False)

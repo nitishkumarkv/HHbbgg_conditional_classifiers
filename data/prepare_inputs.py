@@ -14,6 +14,11 @@ import pickle
 from vector import register_awkward
 register_awkward()
 
+# Compatibility for pyarrow>=21 where PyExtensionType was removed.
+# Older awkward versions still reference pa.lib.PyExtensionType.
+if not hasattr(pa.lib, "PyExtensionType") and hasattr(pa.lib, "ExtensionType"):
+    pa.lib.PyExtensionType = pa.lib.ExtensionType
+
 class PrepareInputs:
     def __init__(
         self,

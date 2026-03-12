@@ -2,6 +2,7 @@ import mplhep as hep
 import matplotlib.pyplot as plt
 import numpy as np
 import awkward as ak
+import pyarrow as pa
 import pandas as pd
 from scipy.spatial.distance import correlation
 from sklearn.metrics import accuracy_score, log_loss
@@ -12,6 +13,10 @@ from mlp import MLP
 import pickle
 import json
 import os
+
+if not hasattr(pa.lib, "PyExtensionType") and hasattr(pa.lib, "ExtensionType"):
+    pa.lib.PyExtensionType = pa.lib.ExtensionType
+
 hep.style.use("CMS")
 
 

@@ -3,7 +3,11 @@ import os
 import sys
 import pandas as pd
 import awkward as ak
+import pyarrow as pa
 import pyarrow.parquet as pq
+
+if not hasattr(pa.lib, "PyExtensionType") and hasattr(pa.lib, "ExtensionType"):
+    pa.lib.PyExtensionType = pa.lib.ExtensionType
 
 ff_sampledict = {
     "GGJets": "GGJets", 
