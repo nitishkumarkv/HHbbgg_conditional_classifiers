@@ -1,5 +1,6 @@
 import os
 import json
+import sys
 import numpy as np
 import torch
 import torch.nn as nn
@@ -32,13 +33,41 @@ class CustomDataset(Dataset):
 
 
 # Training and evaluation functions
+def is_condor_mode():
+    return os.environ.get("HHBBGG_CONDOR_MODE", "") == "1" or "_CONDOR_SCRATCH_DIR" in os.environ
+
+
+class CondorTqdmStream:
+    def __init__(self, stream):
+        self.stream = stream
+
+    def write(self, text):
+        if not text:
+            return 0
+        return self.stream.write(text.replace("\r", "\n"))
+
+    def flush(self):
+        self.stream.flush()
+
+
+def make_progress_bar(data_loader, desc):
+    if is_condor_mode():
+        return tqdm(
+            data_loader,
+            desc=desc,
+            leave=False,
+            file=CondorTqdmStream(sys.stdout),
+        )
+    return tqdm(data_loader, desc=desc, leave=False)
+
+
 def train_one_epoch(model, optimizer, data_loader, loss_fn, device):
     model.train()
     batch_losses = []
     batch_accs = []
     batch_losses_no_abs = []
 
-    progress_bar = tqdm(data_loader, desc=f"Epoch {epoch} [Training]", leave=False)
+    progress_bar = make_progress_bar(data_loader, desc=f"Epoch {epoch} [Training]")
     for X_batch, y_batch, weights_batch, weights_batch_no in progress_bar:
         X_batch = X_batch.to(device)
         y_batch = y_batch.to(device)
@@ -76,7 +105,7 @@ def evaluate(model, data_loader, loss_fn, device):
     model.eval()
     val_losses = []
     val_accs = []
-    progress_bar = tqdm(data_loader, desc=f"Epoch {epoch} [Validation]", leave=False)
+    progress_bar = make_progress_bar(data_loader, desc=f"Epoch {epoch} [Validation]")
     with torch.no_grad():
         for X_batch, y_batch, weights_batch in progress_bar:
             X_batch = X_batch.to(device)
@@ -129,6 +158,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Preform MLP based classification')
     parser.add_argument('--input_path', type=str, help='Path to the input files')
     parser.add_argument('--training_config_path', type=str, default=10, help='Training configuration path')
+    parser.add_argument('--n_epochs', type=int, default=None, help='Override the number of training epochs')
     #parser.add_argument('', type=str, help='Path to the best parameters')
     args = parser.parse_args()
 
@@ -246,8 +276,9 @@ if __name__ == "__main__":
     best_scheduler = ReduceLROnPlateau(best_optimizer, mode='min', factor=0.5, patience=15, min_lr=1e-6)
 
     # Training loop parameters
-    n_epochs = 100
-    # n_epochs = 500
+    n_epochs = args.n_epochs if args.n_epochs is not None else 100
+    print(f"INFO: Training input path is {input_path}")
+    print(f"INFO: Training outputs will be stored in {path_to_checkpoint}")
     print(f"INFO: Training for {n_epochs} epochs", '\n')
     best_loss = np.inf
     best_weights = None

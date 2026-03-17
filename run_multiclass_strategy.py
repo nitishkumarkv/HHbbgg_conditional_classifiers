@@ -1,11 +1,77 @@
-from data.prepare_inputs import PrepareInputs
 import os
 import argparse
 import subprocess
 import yaml
 import math
+from pathlib import Path
+
+from submission.condor_training import (
+    apply_lightweight_test_preset,
+    better_analyze_job,
+    build_job_spec,
+    ensure_job_files,
+    submit_job,
+    summarize_resource_matches,
+)
+
+def should_run_prepare_inputs(args):
+    return any(
+        [
+            args.prep_inputs_for_training,
+            args.prepare_inputs_pred_sim,
+            args.prepare_inputs_pred_data,
+            args.prepare_inputs_pred_sys,
+        ]
+    )
+
+
+def should_run_training(args):
+    return any(
+        [
+            args.perform_training,
+            args.train_best_model,
+            args.plot_training_results,
+            args.get_permutation_importance,
+            args.get_predictions,
+            args.get_predictions_sys,
+            args.test_mass_sculpting,
+            args.get_data_mc_plots,
+            args.get_score_shape_diff_kl,
+        ]
+    )
+
+
+def should_run_categorisation(args):
+    return args.perform_categorisation
+
+
+def validate_requested_actions(args, parser):
+    if not any(
+        [
+            should_run_prepare_inputs(args),
+            should_run_training(args),
+            should_run_categorisation(args),
+            args.submit_training_to_condor,
+            args.condor_better_analyze,
+        ]
+    ):
+        parser.error(
+            "No action was selected. Choose a pipeline step such as --prepare_inputs, "
+            "--train_best_model, --perform_training, --perform_categorisation, or "
+            "--condor_better_analyze."
+        )
+
+    if args.submit_training_to_condor and not (args.train_best_model or args.perform_training):
+        parser.error(
+            "--submit_training_to_condor only changes where the training step runs; "
+            "it does not select a training step by itself. "
+            "Add --train_best_model for a Condor training submission, or "
+            "--perform_training to request the full training pipeline."
+        )
+
 
 def prepare_inputs(args, out_path_override=None, mhh_var=None, mhh_range=None):
+    from data.prepare_inputs import PrepareInputs
 
     config_path = args.config_path
     out_path = out_path_override or args.out_path
@@ -57,6 +123,9 @@ def perform_training(args):
 
     do_random_search = training_config["do_random_search"]
 
+    if args.submit_training_to_condor and do_random_search:
+        raise ValueError("Condor submission mode supports training only. Run random search locally first or disable do_random_search in the config.")
+
     # do random search
     if do_random_search:
         print('INFO: Performing random search')
@@ -64,8 +133,54 @@ def perform_training(args):
 
     # perform trainging
     if args.train_best_model:
+        if args.submit_training_to_condor:
+            print('INFO: Submitting the best-model training to Condor')
+            spec = build_job_spec(
+                repo_root=Path(__file__).resolve().parent,
+                out_path=out_path,
+                input_path=out_path,
+                training_config_path=training_config_path,
+                tag=args.condor_tag,
+                condor_work_dir=args.condor_work_dir,
+                cpus=args.condor_cpus,
+                memory_gb=args.condor_memory_gb,
+                disk_gb=args.condor_disk_gb,
+                gpus=args.condor_gpus,
+                accounting_group=args.condor_accounting_group,
+                job_flavour=args.condor_job_flavour,
+                requirements=args.condor_requirements,
+                n_epochs=args.n_epochs,
+                schedd=args.condor_schedd,
+                submission_mode=args.condor_submission_mode,
+            )
+            ensure_job_files(spec)
+            print(f"INFO: Condor workspace: {spec.condor_root}")
+            print(f"INFO: Condor submission mode: {spec.submission_mode}")
+            print(f"INFO: Submit file: {spec.submit_path}")
+            print(f"INFO: Wrapper script: {spec.wrapper_path}")
+            print("INFO: Begin Condor submit file")
+            print(spec.submit_path.read_text(encoding="utf-8"))
+            print("INFO: End Condor submit file")
+            print("INFO: Begin Condor wrapper script")
+            print(spec.wrapper_path.read_text(encoding="utf-8"))
+            print("INFO: End Condor wrapper script")
+            maybe_print_condor_resource_diagnostics(args, spec)
+            result = submit_job(spec, dry_run=args.condor_dry_run)
+            if args.condor_dry_run:
+                print('INFO: Dry-run enabled; submit files were rendered but no job was queued.')
+            else:
+                print(f"INFO: Submitted Condor cluster id: {result['cluster_id'] or 'unknown'}")
+                if result.get("schedd"):
+                    print(f"INFO: Submitted via schedd: {result['schedd']}")
+                    print(f"INFO: Query with: condor_q -name {result['schedd']} -nobatch {result['cluster_id']}")
+                elif result.get("cluster_id"):
+                    print(f"INFO: Query with: condor_q -nobatch {result['cluster_id']}")
+            return
         print('INFO: Training the best model')
-        subprocess.run(f"python3 models/training_utils.py --input_path {out_path} --training_config_path {training_config_path}", shell=True)
+        cmd = f"python3 models/training_utils.py --input_path {out_path} --training_config_path {training_config_path}"
+        if args.n_epochs is not None:
+            cmd += f" --n_epochs {args.n_epochs}"
+        subprocess.run(cmd, shell=True)
 
     # plot the training results
     if args.plot_training_results:
@@ -106,6 +221,33 @@ def perform_categorisation(args):
     pass
 
 
+def maybe_print_condor_resource_diagnostics(args, spec):
+    if not args.condor_diagnose_resources:
+        return
+
+    print("INFO: Querying HTCondor pool for machines that satisfy this request")
+    summary = summarize_resource_matches(spec)
+    print(f"INFO: Match constraint: {summary['constraint']}")
+    print(f"INFO: Available constraint: {summary['available_constraint']}")
+    print(f"INFO: Capable slots: {summary['capable_slots']}")
+    print(f"INFO: Capable machines: {summary['capable_machines']}")
+    print(f"INFO: Currently available slots: {summary['available_slots']}")
+    print(f"INFO: Currently available machines: {summary['available_machines']}")
+    print(f"INFO: Example capable machines: {summary['capable_examples']}")
+    print(f"INFO: Example available machines: {summary['available_examples']}")
+
+
+def maybe_run_condor_better_analyze(args):
+    if not args.condor_better_analyze:
+        return False
+
+    print(f"INFO: Running condor_q -better-analyze for cluster {args.condor_better_analyze}")
+    if args.condor_schedd:
+        print(f"INFO: Using schedd override {args.condor_schedd}")
+    print(better_analyze_job(args.condor_better_analyze, schedd=args.condor_schedd))
+    return True
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Perform MLP based classification')
     parser.add_argument('--config_path', type=str, help='Path to the configuration files')
@@ -127,8 +269,28 @@ if __name__ == "__main__":
     parser.add_argument('--no_auto_prep_phase', action='store_true', help='Do not auto-run training-prep for all bins when downstream steps are requested')
     parser.add_argument('--mhh_bin', type=str, default=None, help='(Optional) Process only this mHH bin. Can be the bin index (0-based) or the bin name like "mHH_bin_0_to_350"')
     parser.add_argument('--get_score_shape_diff_kl', action='store_true', help='Get score shape differences using kl samples')
+    parser.add_argument('--submit_training_to_condor', action='store_true', help='Submit the training step to HTCondor instead of running it locally')
+    parser.add_argument('--condor_work_dir', type=str, default=None, help='Optional directory for rendered Condor job files. Defaults to <out_path>/condor_runs/')
+    parser.add_argument('--condor_tag', type=str, default=None, help='Optional tag to include in the Condor run directory name')
+    parser.add_argument('--condor_cpus', type=int, default=4, help='Requested CPU cores for the Condor training job')
+    parser.add_argument('--condor_memory_gb', type=int, default=32, help='Requested memory in GB for the Condor training job')
+    parser.add_argument('--condor_disk_gb', type=int, default=20, help='Requested disk in GB for the Condor training job')
+    parser.add_argument('--condor_gpus', type=int, default=1, help='Requested GPUs for the Condor training job')
+    parser.add_argument('--condor_accounting_group', type=str, default=None, help='Optional HTCondor accounting group')
+    parser.add_argument('--condor_job_flavour', type=str, default=None, help='Optional job flavour to include in the submit file')
+    parser.add_argument('--condor_requirements', type=str, default=None, help='Optional raw HTCondor requirements expression')
+    parser.add_argument('--condor_schedd', type=str, default=None, help='Optional schedd override for condor_submit. If unset, use your normal HTCondor default routing.')
+    parser.add_argument('--condor_submission_mode', type=str, choices=['spool', 'eossubmit'], default='spool', help='How to submit from lxplus/EOS: use standard schedds with condor_submit -spool (default) or load the CERN EosSubmit schedds.')
+    parser.add_argument('--n_epochs', '--condor_epochs', dest='n_epochs', type=int, default=None, help='Optional epoch override for training, used in both local and Condor modes.')
+    parser.add_argument('--condor_lightweight_test', action='store_true', help='Submit a short real Condor training test: 1 epoch with the espresso job flavour (~20 minutes at CERN)')
+    parser.add_argument('--condor_diagnose_resources', action='store_true', help='Query HTCondor to count machines/slots that can satisfy the requested CPU/GPU/memory/disk requirements')
+    parser.add_argument('--condor_better_analyze', type=str, default=None, help='Run condor_q -better-analyze for the given cluster id and exit')
+    parser.add_argument('--condor_dry_run', action='store_true', help='Render Condor job files without submitting a job')
     parser.add_argument('--do_all', action='store_true', help='Perform all steps')
     args = parser.parse_args()
+
+    if maybe_run_condor_better_analyze(args):
+        raise SystemExit(0)
 
     if args.do_all:
         args.prepare_inputs = True
@@ -141,6 +303,9 @@ if __name__ == "__main__":
         args.prepare_inputs_pred_data = True
         args.prepare_inputs_pred_sys = False
 
+    if args.condor_lightweight_test:
+        apply_lightweight_test_preset(args)
+
     if args.perform_training:
         args.train_best_model = True
         args.plot_training_results = True
@@ -151,6 +316,17 @@ if __name__ == "__main__":
         args.get_data_mc_plots = True
         args.get_score_shape_diff_kl = True
 
+    if args.submit_training_to_condor:
+        args.plot_training_results = False
+        args.get_permutation_importance = False
+        args.get_predictions = False
+        args.get_predictions_sys = False
+        args.test_mass_sculpting = False
+        args.get_data_mc_plots = False
+        args.get_score_shape_diff_kl = False
+
+    validate_requested_actions(args, parser)
+
     # load training config to check for mHH binning
     training_config_path = f"{args.config_path}/training_config.yaml"
     with open(training_config_path, 'r') as f:
@@ -160,9 +336,12 @@ if __name__ == "__main__":
 
     if mhh_binning is None:
         # normal single-run behavior
-        prepare_inputs(args)
-        perform_training(args)
-        perform_categorisation(args)
+        if should_run_prepare_inputs(args):
+            prepare_inputs(args)
+        if should_run_training(args):
+            perform_training(args)
+        if should_run_categorisation(args):
+            perform_categorisation(args)
     else:
     # build bin edges: assume edges list defines internal edges, with implicit 0 and inf
         variable = mhh_binning.get('variable', None)
@@ -264,12 +443,15 @@ if __name__ == "__main__":
             print(f"INFO: Running pipeline for bin {bin_name}: {lo} <= {variable} < {hi}")
 
             # Prepare inputs for this bin (pass mhh var/range into PrepareInputs via prepare_inputs wrapper)
-            prepare_inputs(args, out_path_override=per_bin_out, mhh_var=variable, mhh_range=(lo, hi))
+            if should_run_prepare_inputs(args):
+                prepare_inputs(args, out_path_override=per_bin_out, mhh_var=variable, mhh_range=(lo, hi))
 
             # Run training and post-processing using this per-bin output directory
             # Temporarily override args.out_path for training steps
             old_out = args.out_path
             args.out_path = per_bin_out
-            perform_training(args)
-            perform_categorisation(args)
+            if should_run_training(args):
+                perform_training(args)
+            if should_run_categorisation(args):
+                perform_categorisation(args)
             args.out_path = old_out
