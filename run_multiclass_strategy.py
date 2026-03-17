@@ -269,6 +269,8 @@ if __name__ == "__main__":
     parser.add_argument('--no_auto_prep_phase', action='store_true', help='Do not auto-run training-prep for all bins when downstream steps are requested')
     parser.add_argument('--mhh_bin', type=str, default=None, help='(Optional) Process only this mHH bin. Can be the bin index (0-based) or the bin name like "mHH_bin_0_to_350"')
     parser.add_argument('--get_score_shape_diff_kl', action='store_true', help='Get score shape differences using kl samples')
+    parser.add_argument('--n_epochs', '--condor_epochs', dest='n_epochs', type=int, default=None, help='Optional epoch override for training, used in both local and Condor modes.')
+
     parser.add_argument('--submit_training_to_condor', action='store_true', help='Submit the training step to HTCondor instead of running it locally')
     parser.add_argument('--condor_work_dir', type=str, default=None, help='Optional directory for rendered Condor job files. Defaults to <out_path>/condor_runs/')
     parser.add_argument('--condor_tag', type=str, default=None, help='Optional tag to include in the Condor run directory name')
@@ -281,11 +283,11 @@ if __name__ == "__main__":
     parser.add_argument('--condor_requirements', type=str, default=None, help='Optional raw HTCondor requirements expression')
     parser.add_argument('--condor_schedd', type=str, default=None, help='Optional schedd override for condor_submit. If unset, use your normal HTCondor default routing.')
     parser.add_argument('--condor_submission_mode', type=str, choices=['spool', 'eossubmit'], default='spool', help='How to submit from lxplus/EOS: use standard schedds with condor_submit -spool (default) or load the CERN EosSubmit schedds.')
-    parser.add_argument('--n_epochs', '--condor_epochs', dest='n_epochs', type=int, default=None, help='Optional epoch override for training, used in both local and Condor modes.')
     parser.add_argument('--condor_lightweight_test', action='store_true', help='Submit a short real Condor training test: 1 epoch with the espresso job flavour (~20 minutes at CERN)')
     parser.add_argument('--condor_diagnose_resources', action='store_true', help='Query HTCondor to count machines/slots that can satisfy the requested CPU/GPU/memory/disk requirements')
     parser.add_argument('--condor_better_analyze', type=str, default=None, help='Run condor_q -better-analyze for the given cluster id and exit')
     parser.add_argument('--condor_dry_run', action='store_true', help='Render Condor job files without submitting a job')
+
     parser.add_argument('--do_all', action='store_true', help='Perform all steps')
     args = parser.parse_args()
 

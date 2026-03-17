@@ -9,7 +9,10 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import Dataset, DataLoader
 from tqdm.auto import tqdm
 import copy
-from mlp import MLP
+try:
+    from mlp import MLP
+except ImportError:
+    from .mlp import MLP
 import torch.nn.functional as F
 import yaml
 
