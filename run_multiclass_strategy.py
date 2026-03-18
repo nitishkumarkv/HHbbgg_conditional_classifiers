@@ -279,7 +279,7 @@ if __name__ == "__main__":
     parser.add_argument('--condor_disk_gb', type=int, default=20, help='Requested disk in GB for the Condor training job')
     parser.add_argument('--condor_gpus', type=int, default=1, help='Requested GPUs for the Condor training job')
     parser.add_argument('--condor_accounting_group', type=str, default=None, help='Optional HTCondor accounting group')
-    parser.add_argument('--condor_job_flavor', dest='condor_job_flavor', type=str, default=None, help='Optional job flavor to include in the submit file.')
+    parser.add_argument('--condor_job_flavor', dest='condor_job_flavor', type=str, default='testmatch', help='Job flavor to include in the submit file. Defaults to testmatch.')
     parser.add_argument('--condor_requirements', type=str, default=None, help='Optional raw HTCondor requirements expression')
     parser.add_argument('--condor_schedd', type=str, default=None, help='Optional schedd override for condor_submit. If unset, use your normal HTCondor default routing.')
     parser.add_argument('--condor_submission_mode', type=str, choices=['spool', 'eossubmit'], default='spool', help='How to submit from lxplus/EOS: use standard schedds with condor_submit -spool (default) or load the CERN EosSubmit schedds.')

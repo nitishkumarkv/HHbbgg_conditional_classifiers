@@ -43,7 +43,7 @@ python3 run_multiclass_strategy.py \
   --condor_job_flavor tomorrow
 ```
 
-By default this uses standard lxplus schedd routing together with `condor_submit -spool`, so `condor_q` will follow the usual schedd assignment (e.g. `bigbird19.cern.ch`).
+By default this uses standard lxplus schedd routing together with `condor_submit -spool`, so `condor_q` will follow the usual schedd assignment (e.g. `bigbird19.cern.ch`). If you do not pass `--condor_job_flavor`, submitted jobs default to `testmatch`.
 
 To force submission to a specific schedd instead of your normal HTCondor default routing:
 

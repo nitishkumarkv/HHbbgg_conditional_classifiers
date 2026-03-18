@@ -14,6 +14,16 @@ from typing import Dict, Optional
 from uuid import uuid4
 import yaml
 
+JOB_FLAVOR_TO_MAX_RUNTIME_SECONDS = {
+    "espresso": 20 * 60,
+    "microcentury": 60 * 60,
+    "longlunch": 2 * 60 * 60,
+    "workday": 8 * 60 * 60,
+    "tomorrow": 24 * 60 * 60,
+    "testmatch": 3 * 24 * 60 * 60,
+    "nextweek": 7 * 24 * 60 * 60,
+}
+
 
 @dataclass
 class CondorJobSpec:
@@ -34,7 +44,7 @@ class CondorJobSpec:
     disk_gb: int = 20
     gpus: int = 1
     accounting_group: Optional[str] = None
-    job_flavor: Optional[str] = None
+    job_flavor: Optional[str] = "testmatch"
     requirements: Optional[str] = None
     n_epochs: Optional[int] = None
     schedd: Optional[str] = None
@@ -61,7 +71,7 @@ def build_job_spec(
     disk_gb: int = 20,
     gpus: int = 1,
     accounting_group: Optional[str] = None,
-    job_flavor: Optional[str] = None,
+    job_flavor: Optional[str] = "testmatch",
     requirements: Optional[str] = None,
     n_epochs: Optional[int] = None,
     schedd: Optional[str] = None,
@@ -234,6 +244,7 @@ def render_submit_file(spec: CondorJobSpec) -> str:
         lines.append(f"accounting_group = {spec.accounting_group}")
     if spec.job_flavor:
         lines.append(f'+JobFlavor = "{spec.job_flavor}"')
+        lines.append(f"+MaxRuntime = {job_flavor_to_max_runtime_seconds(spec.job_flavor)}")
     if spec.requirements:
         lines.append(f"requirements = {spec.requirements}")
     lines.append("queue 1")
@@ -324,6 +335,15 @@ def better_analyze_job(cluster_id: str, schedd: Optional[str] = None) -> str:
 def _metadata_dict(spec: CondorJobSpec) -> Dict[str, object]:
     data = asdict(spec)
     return {key: str(value) if isinstance(value, Path) else value for key, value in data.items()}
+
+
+def job_flavor_to_max_runtime_seconds(job_flavor: str) -> int:
+    normalized = job_flavor.strip().lower()
+    try:
+        return JOB_FLAVOR_TO_MAX_RUNTIME_SECONDS[normalized]
+    except KeyError as exc:
+        known = ", ".join(sorted(JOB_FLAVOR_TO_MAX_RUNTIME_SECONDS))
+        raise ValueError(f"Unsupported job flavor '{job_flavor}'. Known flavors: {known}.") from exc
 
 
 def _build_output_destination(spec: CondorJobSpec) -> Optional[str]:

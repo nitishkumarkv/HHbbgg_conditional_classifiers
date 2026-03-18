@@ -11,6 +11,7 @@ from submission.condor_training import (
     build_job_spec,
     build_submit_command,
     build_machine_constraint,
+    job_flavor_to_max_runtime_seconds,
     load_environment_config,
     parse_submit_schedd_from_log,
     render_submit_file,
@@ -88,6 +89,18 @@ class CondorTrainingTests(unittest.TestCase):
             self.assertIn("models/training_utils.py", wrapper)
             self.assertIn("export HHBBGG_CONDOR_MODE=1", wrapper)
 
+    def test_default_job_flavor_is_testmatch(self):
+        spec = build_job_spec(
+            repo_root="/tmp/repo",
+            out_path="/tmp/out",
+            input_path="/tmp/out",
+            training_config_path="/tmp/cfg/training_config.yaml",
+        )
+        submit_text = render_submit_file(spec)
+        self.assertEqual(spec.job_flavor, "testmatch")
+        self.assertIn('+JobFlavor = "testmatch"', submit_text)
+        self.assertIn("+MaxRuntime = 259200", submit_text)
+
     def test_environment_config_is_loaded_from_run_config_directory(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             base = Path(tmpdir)
@@ -137,9 +150,19 @@ class CondorTrainingTests(unittest.TestCase):
             self.assertIn("request_memory = 64 GB", submit_text)
             self.assertIn("accounting_group = group_cms.test", submit_text)
             self.assertIn('+JobFlavor = "tomorrow"', submit_text)
+            self.assertIn("+MaxRuntime = 86400", submit_text)
             self.assertIn("log = train_$(ClusterId).log", submit_text)
             self.assertIn("output = train_$(ClusterId).$(Process).out", submit_text)
             self.assertIn("error = train_$(ClusterId).$(Process).err", submit_text)
+
+    def test_job_flavor_runtime_mapping_matches_cern_batch_docs(self):
+        self.assertEqual(job_flavor_to_max_runtime_seconds("espresso"), 1200)
+        self.assertEqual(job_flavor_to_max_runtime_seconds("microcentury"), 3600)
+        self.assertEqual(job_flavor_to_max_runtime_seconds("longlunch"), 7200)
+        self.assertEqual(job_flavor_to_max_runtime_seconds("workday"), 28800)
+        self.assertEqual(job_flavor_to_max_runtime_seconds("tomorrow"), 86400)
+        self.assertEqual(job_flavor_to_max_runtime_seconds("testmatch"), 259200)
+        self.assertEqual(job_flavor_to_max_runtime_seconds("nextweek"), 604800)
 
     def test_spool_submit_file_sets_output_destination_for_eos(self):
         spec = build_job_spec(
