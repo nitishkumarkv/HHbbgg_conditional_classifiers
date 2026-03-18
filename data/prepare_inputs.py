@@ -44,9 +44,9 @@ class PrepareInputs:
         self.fill_nan = -9
 
 
-        self.extra_vars_train = ["weight", "mass", "nonResReg_dijet_mass_DNNreg", "nonResReg_HHbbggCandidate_mass", "nonResReg_dijet_pt", "nonResReg_lead_bjet_pt", "nonResReg_sublead_bjet_pt", "pt"]
+        self.extra_vars_train = ["weight", "mass", "nonRes_dijet_mass", "nonResReg_dijet_mass", "nonResReg_dijet_mass_DNNreg", "nonResReg_vbfpair_dijet_mass", "nonResReg_vbfpair_HHbbggCandidate_mass", "nonResReg_HHbbggCandidate_mass", "nonResReg_dijet_pt", "nonResReg_lead_bjet_pt", "nonResReg_sublead_bjet_pt", "pt"]
         
-        self.extra_vars_out = ["nonRes_dijet_mass", "nonResReg_dijet_mass", "lead_genPartFlav", "sublead_genPartFlav","n_electrons", "n_muons", "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet7_pt", "jet8_pt", "jet9_pt", "jet10_pt", "nBTight"] #for ttH category: njets already included as a training var
+        self.extra_vars_out = ["lead_genPartFlav", "sublead_genPartFlav","n_electrons", "n_muons", "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet7_pt", "jet8_pt", "jet9_pt", "jet10_pt", "nBTight"] #for ttH category: njets already included as a training var
 
         # prepare process numbers for proccesses in each class
         num_process_each_class = {
@@ -175,6 +175,13 @@ class PrepareInputs:
             "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": 0.013422e3 * 0.00227 * 0.576 * 2,
             "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": 0.090488e3 * 0.00227 * 0.576 * 2,
 
+            "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_1p00": 0.132486e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p10": 0.016068e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p35": 0.009427e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_3p00": 2.617158e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_m2p00": 1.791638e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_m20p00_kt_1p00_c2_2p24": 1.752648e3 * 0.00227 * 0.576 * 2, 
+
             # For singleH, XS(process) * BR(HtoGG)
             # Using mH = 125.4 unless specified otherwise
             "ttHtoGG_M_125": 0.5033e3 * 0.00227,
@@ -196,6 +203,13 @@ class PrepareInputs:
             "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": 0.075495e3 * 0.00227 * 0.576 * 2,
             "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": 0.014864e3 * 0.00227 * 0.576 * 2,
             "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": 0.099298e3 * 0.00227 * 0.576 * 2,
+
+            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_3p00": 2.900686e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p35": 0.010448e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_1p00": 0.146839e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p10": 0.017809e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_m2p00": 1.985733e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_m20p00_kt_1p00_c2_2p24": 1.752648e3 * 1.108268907 * 0.00227 * 0.576 * 2, 
 
             # For singleH, XS(process) * BR(HtoGG)
             # Using mH = 125.38 unless specified otherwise
@@ -362,7 +376,7 @@ class PrepareInputs:
 
         "nonResReg_dijet_mass", "nonResReg_dijet_mass_DNNreg"
 
-        corr_matrix = np.zeros([len(vars_for_training), 4])
+        corr_matrix = np.zeros([len(vars_for_training), 5])
         for i in range(len(vars_for_training)):
             var = vars_for_training[i]
             # calculate correlation with mgg and mjj, do not include -999 values
@@ -386,22 +400,61 @@ class PrepareInputs:
             var_values = events[var][mask]
             corr_matrix[i, 3] = np.corrcoef(nonResReg_dijet_mass_DNNreg, var_values)[0, 1]
 
+            mask = ((events[var] > -998.0) & (events.nonResReg_vbfpair_dijet_mass > -998.0))
+            nonResReg_vbfpair_dijet_mass = events.nonResReg_vbfpair_dijet_mass[mask]
+            var_values = events[var][mask]
+            corr_matrix[i, 4] = np.corrcoef(nonResReg_vbfpair_dijet_mass, var_values)[0, 1]
+
         # plot the correlation matrix
         plt.figure(figsize=(18, len(vars_for_training)))
         plt.imshow(corr_matrix, vmin=-1, vmax=1, cmap='coolwarm')
         # annotate the values
         for i in range(len(vars_for_training)):
-            for j in range(4):
+            for j in range(5):
                 # format the value to 2 decimal places
                 plt.text(j, i, f"{corr_matrix[i, j]:.2f}", ha='center', va='center', color='b')
 
-        plt.xticks([0, 1, 2, 3], ['mass', 'nonRes_dijet_mass', 'nonResReg_dijet_mass', 'nonResReg_dijet_mass_DNNreg'], rotation=90)
+        plt.xticks([0, 1, 2, 3, 4], ['mass', 'nonRes_dijet_mass', 'nonResReg_dijet_mass', 'nonResReg_dijet_mass_DNNreg', 'nonResReg_vbfpair_dijet_mass'], rotation=90)
         plt.yticks(range(len(vars_for_training)), vars_for_training)
         plt.colorbar()
         plt.savefig(f'{out_path}', dpi=300, )
         plt.clf()
         plt.close()
 
+    def plot_correlation_matrix(self, events, vars_for_training, out_path):
+        corr_matrix = np.zeros([len(vars_for_training), len(vars_for_training)])
+
+        for i in range(len(vars_for_training)):
+            var_i = vars_for_training[i]
+            for j in range(len(vars_for_training)):
+                var_j = vars_for_training[j]
+
+                # calculate pair-wise correlation, do not include -999 values
+                mask = ((events[var_i] > -998.0) & (events[var_j] > -998.0))
+                values_i = events[var_i][mask]
+                values_j = events[var_j][mask]
+
+                if len(values_i) > 1:
+                    corr_matrix[i, j] = np.corrcoef(values_i, values_j)[0, 1]
+                else:
+                    corr_matrix[i, j] = np.nan
+
+        # plot the correlation matrix
+        plt.figure(figsize=(len(vars_for_training), len(vars_for_training)))
+        plt.imshow(corr_matrix, vmin=-1, vmax=1, cmap='coolwarm')
+
+        # annotate the values
+        for i in range(len(vars_for_training)):
+            for j in range(len(vars_for_training)):
+                plt.text(j, i, f"{corr_matrix[i, j]:.2f}", ha='center', va='center', color='b')
+
+        plt.xticks(range(len(vars_for_training)), vars_for_training, rotation=90)
+        plt.yticks(range(len(vars_for_training)), vars_for_training)
+        plt.colorbar()
+        plt.tight_layout()
+        plt.savefig(f'{out_path}', dpi=300)
+        plt.clf()
+        plt.close()
     
     def preselection(self, events):
         
@@ -541,6 +594,9 @@ class PrepareInputs:
 
         vars_to_load = vars_for_training + self.extra_vars_train
 
+        # Dictionary to accumulate events by sample (across all eras)
+        sample_events_dict = {sample: [] for sample in self.sample_to_class.keys()}
+
         for era in self.training_info["samples_info"]["eras"]:
             # for samples in self.sample_to_class.keys():                
             for samples in self.training_info["samples_info"][era].keys():                
@@ -557,7 +613,7 @@ class PrepareInputs:
                 # get relative weights according to cross section of the process
                 events = self.get_relative_xsec_weight(events, samples, era)
 
-                events = events[vars_for_training + ["weight_tot"]]
+                events = events[vars_to_load + ["weight_tot"]]
 
                 # apply mHH bin filter (if configured) and skip sample if empty
                 if self.mhh_var is not None and self.mhh_range is not None:
@@ -581,10 +637,14 @@ class PrepareInputs:
                 # add process number which is specific for each class
                 events["process_number"] = self.process_numbers[samples]
 
+                # # store events for plot of correlation combining all eras)
+                # sample_events_dict[samples].append(events)
+
                 # plot_correlation_matrix
                 os.makedirs(f"{out_path}/correlation_matrix/", exist_ok=True)
-                corr_out_path = f"{out_path}/correlation_matrix/{samples}_{era}.pdf"
-                # self.corr_with_mgg_mjj(events, vars_for_training, corr_out_path)
+                corr_out_path = f"{out_path}/correlation_matrix/corr_mgg_mjj_{samples}_{era}.pdf"
+                self.corr_with_mgg_mjj(events, vars_for_training, corr_out_path)
+                self.plot_correlation_matrix(events, vars_for_training, f"{out_path}/correlation_matrix/corr_matrix_{samples}_{era}.pdf")
 
                 print("INFO: Appending process samples to whole dataframe")
 
@@ -598,10 +658,29 @@ class PrepareInputs:
                 # events = pd.DataFrame(ak.to_list(events))
                 # comb_inputs = pd.concat([comb_inputs, events])
 
+        # # Plot correlation matrices (one per sample, combining all eras)
+        # print("\nINFO: Computing correlation matrices for each sample (combined across all eras)")
+        # os.makedirs(f"{out_path}/correlation_matrix/", exist_ok=True)
+        
+        # for sample in self.sample_to_class.keys():
+        #     if len(sample_events_dict[sample]) == 0:
+        #         continue
+            
+        #     # Concatenate all eras for this sample
+        #     sample_combined = ak.concatenate(sample_events_dict[sample])
+            
+        #     print(f"INFO: Plotting correlation matrices for {sample} ({len(sample_combined)} events from all eras)")
+            
+        #     # Plot corr_mgg_mjj
+        #     self.corr_with_mgg_mjj(sample_combined, vars_for_training, f"{out_path}/correlation_matrix/corr_mgg_mjj_{sample}.pdf")
+            
+        #     # Plot full correlation matrix
+        #     self.plot_correlation_matrix(sample_combined, vars_for_training, f"{out_path}/correlation_matrix/corr_matrix_{sample}.pdf")
+
         print("INFO: Plotting variables")
         plot_path = f"{out_path}/var_plots/"
         os.makedirs(plot_path, exist_ok=True)
-        # self.plot_variables(comb_inputs, vars_for_training, plot_path)
+        self.plot_variables(comb_inputs, vars_for_training, plot_path)
         for cls in self.classes:
             print("\n", f"INFO: Number of events in {cls}: {sum(comb_inputs[cls])}")
 
@@ -668,11 +747,26 @@ class PrepareInputs:
         np.save(f"{out_path}/class_weights_only_positive", class_weights_only_positive)
         np.save(f"{out_path}/class_weights_for_val", class_weights_for_val)
         
+        # save process numbers (which MC sample each event belongs to within its class)
+        np.save(f"{out_path}/proc_num_train", proc_num_train)
+        np.save(f"{out_path}/proc_num_val", proc_num_val)
+        
         if X_test is not None:
             np.save(f"{out_path}/X_test", X_test)
             np.save(f"{out_path}/rel_w_test", rel_w_test)
             np.save(f"{out_path}/y_test", y_test)
             np.save(f"{out_path}/class_weights_for_test", class_weights_for_test)
+            np.save(f"{out_path}/proc_num_test", proc_num_test)
+
+        # save process number mapping (sample name -> process number within class)
+        with open(f"{out_path}/process_numbers_mapping.json", 'w') as f:
+            # Convert to int for JSON serialization
+            mapping = {sample: int(proc_num) for sample, proc_num in self.process_numbers.items()}
+            json.dump(mapping, f, indent=2)
+        
+        # also save sample_to_class mapping for reference
+        with open(f"{out_path}/sample_to_class_mapping.json", 'w') as f:
+            json.dump(self.sample_to_class, f, indent=2)
 
         # save the training mean ans std_dev. This will be used for standardizing data
         mean_std_dict = {
