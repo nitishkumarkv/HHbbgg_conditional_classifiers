@@ -56,7 +56,7 @@ class CondorTrainingTests(unittest.TestCase):
             submit_training_to_condor = False
             train_best_model = False
             n_epochs = None
-            condor_job_flavour = None
+            condor_job_flavor = None
             condor_tag = None
 
         args = Args()
@@ -64,7 +64,7 @@ class CondorTrainingTests(unittest.TestCase):
         self.assertTrue(args.submit_training_to_condor)
         self.assertTrue(args.train_best_model)
         self.assertEqual(args.n_epochs, 1)
-        self.assertEqual(args.condor_job_flavour, "espresso")
+        self.assertEqual(args.condor_job_flavor, "espresso")
         self.assertEqual(args.condor_tag, "lightweight-test")
 
     def test_wrapper_contains_environment_bootstrap_and_epoch_override(self):
@@ -127,7 +127,7 @@ class CondorTrainingTests(unittest.TestCase):
                 memory_gb=64,
                 disk_gb=50,
                 accounting_group="group_cms.test",
-                job_flavour="tomorrow",
+                job_flavor="tomorrow",
             )
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", UserWarning)
@@ -136,7 +136,7 @@ class CondorTrainingTests(unittest.TestCase):
             self.assertIn("request_cpus = 8", submit_text)
             self.assertIn("request_memory = 64 GB", submit_text)
             self.assertIn("accounting_group = group_cms.test", submit_text)
-            self.assertIn('+JobFlavour = "tomorrow"', submit_text)
+            self.assertIn('+JobFlavor = "tomorrow"', submit_text)
             self.assertIn("log = train_$(ClusterId).log", submit_text)
             self.assertIn("output = train_$(ClusterId).$(Process).out", submit_text)
             self.assertIn("error = train_$(ClusterId).$(Process).err", submit_text)

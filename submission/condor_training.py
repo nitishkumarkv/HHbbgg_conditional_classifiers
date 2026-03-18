@@ -34,7 +34,7 @@ class CondorJobSpec:
     disk_gb: int = 20
     gpus: int = 1
     accounting_group: Optional[str] = None
-    job_flavour: Optional[str] = None
+    job_flavor: Optional[str] = None
     requirements: Optional[str] = None
     n_epochs: Optional[int] = None
     schedd: Optional[str] = None
@@ -61,7 +61,7 @@ def build_job_spec(
     disk_gb: int = 20,
     gpus: int = 1,
     accounting_group: Optional[str] = None,
-    job_flavour: Optional[str] = None,
+    job_flavor: Optional[str] = None,
     requirements: Optional[str] = None,
     n_epochs: Optional[int] = None,
     schedd: Optional[str] = None,
@@ -94,7 +94,7 @@ def build_job_spec(
         disk_gb=disk_gb,
         gpus=gpus,
         accounting_group=accounting_group,
-        job_flavour=job_flavour,
+        job_flavor=job_flavor,
         requirements=requirements,
         n_epochs=n_epochs,
         schedd=schedd,
@@ -232,8 +232,8 @@ def render_submit_file(spec: CondorJobSpec) -> str:
         lines.append(f"request_gpus = {spec.gpus}")
     if spec.accounting_group:
         lines.append(f"accounting_group = {spec.accounting_group}")
-    if spec.job_flavour:
-        lines.append(f'+JobFlavour = "{spec.job_flavour}"')
+    if spec.job_flavor:
+        lines.append(f'+JobFlavor = "{spec.job_flavor}"')
     if spec.requirements:
         lines.append(f"requirements = {spec.requirements}")
     lines.append("queue 1")
@@ -450,6 +450,6 @@ def apply_lightweight_test_preset(args) -> None:
     args.submit_training_to_condor = True
     args.train_best_model = True
     args.n_epochs = 1
-    args.condor_job_flavour = "espresso"
+    args.condor_job_flavor = "espresso"
     if getattr(args, "condor_tag", None) is None:
         args.condor_tag = "lightweight-test"

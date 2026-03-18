@@ -40,7 +40,7 @@ python3 run_multiclass_strategy.py \
   --train_best_model \
   --submit_training_to_condor \
   --condor_accounting_group group_cms \
-  --condor_job_flavour tomorrow
+  --condor_job_flavor tomorrow
 ```
 
 By default this uses standard lxplus schedd routing together with `condor_submit -spool`, so `condor_q` will follow the usual schedd assignment (e.g. `bigbird19.cern.ch`).
@@ -88,7 +88,7 @@ python3 run_multiclass_strategy.py \
   --train_best_model \
   --submit_training_to_condor \
   --n_epochs 1 \
-  --condor_job_flavour espresso \
+  --condor_job_flavor espresso \
   --condor_dry_run
 ```
 

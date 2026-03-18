@@ -147,7 +147,7 @@ def perform_training(args):
                 disk_gb=args.condor_disk_gb,
                 gpus=args.condor_gpus,
                 accounting_group=args.condor_accounting_group,
-                job_flavour=args.condor_job_flavour,
+                job_flavor=args.condor_job_flavor,
                 requirements=args.condor_requirements,
                 n_epochs=args.n_epochs,
                 schedd=args.condor_schedd,
@@ -279,11 +279,11 @@ if __name__ == "__main__":
     parser.add_argument('--condor_disk_gb', type=int, default=20, help='Requested disk in GB for the Condor training job')
     parser.add_argument('--condor_gpus', type=int, default=1, help='Requested GPUs for the Condor training job')
     parser.add_argument('--condor_accounting_group', type=str, default=None, help='Optional HTCondor accounting group')
-    parser.add_argument('--condor_job_flavour', type=str, default=None, help='Optional job flavour to include in the submit file')
+    parser.add_argument('--condor_job_flavor', dest='condor_job_flavor', type=str, default=None, help='Optional job flavor to include in the submit file.')
     parser.add_argument('--condor_requirements', type=str, default=None, help='Optional raw HTCondor requirements expression')
     parser.add_argument('--condor_schedd', type=str, default=None, help='Optional schedd override for condor_submit. If unset, use your normal HTCondor default routing.')
     parser.add_argument('--condor_submission_mode', type=str, choices=['spool', 'eossubmit'], default='spool', help='How to submit from lxplus/EOS: use standard schedds with condor_submit -spool (default) or load the CERN EosSubmit schedds.')
-    parser.add_argument('--condor_lightweight_test', action='store_true', help='Submit a short real Condor training test: 1 epoch with the espresso job flavour (~20 minutes at CERN)')
+    parser.add_argument('--condor_lightweight_test', action='store_true', help='Submit a short real Condor training test: 1 epoch with the espresso job flavor (~20 minutes at CERN)')
     parser.add_argument('--condor_diagnose_resources', action='store_true', help='Query HTCondor to count machines/slots that can satisfy the requested CPU/GPU/memory/disk requirements')
     parser.add_argument('--condor_better_analyze', type=str, default=None, help='Run condor_q -better-analyze for the given cluster id and exit')
     parser.add_argument('--condor_dry_run', action='store_true', help='Render Condor job files without submitting a job')
