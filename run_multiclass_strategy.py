@@ -8,6 +8,13 @@ from pathlib import Path
 from submission.condor_training import (
     apply_lightweight_test_preset,
     better_analyze_job,
+)
+from submission.condor_prepare_inputs import (
+    build_prepare_job_spec,
+    ensure_job_files as ensure_prepare_job_files,
+    submit_prepare_job,
+)
+from submission.condor_training import (
     build_job_spec,
     ensure_job_files,
     submit_job,
@@ -51,6 +58,7 @@ def validate_requested_actions(args, parser):
             should_run_prepare_inputs(args),
             should_run_training(args),
             should_run_categorisation(args),
+            args.submit_prepare_to_condor,
             args.submit_training_to_condor,
             args.condor_better_analyze,
         ]
@@ -59,6 +67,14 @@ def validate_requested_actions(args, parser):
             "No action was selected. Choose a pipeline step such as --prepare_inputs, "
             "--train_best_model, --perform_training, --perform_categorisation, or "
             "--condor_better_analyze."
+        )
+
+    if args.submit_prepare_to_condor and not should_run_prepare_inputs(args):
+        parser.error(
+            "--submit_prepare_to_condor needs a prepare action. "
+            "Add --prepare_inputs, --prep_inputs_for_training, "
+            "--prepare_inputs_pred_sim, --prepare_inputs_pred_data or "
+            "--prepare_inputs_pred_sys."
         )
 
     if args.submit_training_to_condor and not (args.train_best_model or args.perform_training):
@@ -110,6 +126,71 @@ def prepare_inputs(args, out_path_override=None, mhh_var=None, mhh_range=None):
     if args.prepare_inputs_pred_sys:
         print('INFO: Preparing the inputs for prediction systematics', '\n')
         prep_inputs.prep_inputs_for_prediction_sim_sys()
+
+
+def _run_prepare_inputs_on_condor(
+    args,
+    out_path,
+    mhh_var=None,
+    mhh_range=None,
+) -> dict:
+    spec = build_prepare_job_spec(
+        repo_root=Path(__file__).resolve().parent,
+        out_path=out_path,
+        config_path=args.config_path,
+        training_config_path=f"{args.config_path}/training_config.yaml",
+        tag=args.condor_tag,
+        condor_work_dir=args.condor_work_dir,
+        cpus=args.condor_cpus,
+        memory_gb=args.condor_memory_gb,
+        disk_gb=args.condor_disk_gb,
+        gpus=args.condor_gpus,
+        accounting_group=args.condor_accounting_group,
+        max_input_files=args.condor_prepare_max_input_files,
+        max_rows_per_file=args.condor_prepare_max_rows_per_file,
+        job_flavor=args.condor_job_flavor,
+        requirements=args.condor_requirements,
+        schedd=args.condor_schedd,
+        submission_mode=args.condor_submission_mode,
+        prep_inputs_for_training=args.prep_inputs_for_training,
+        prepare_inputs_pred_sim=args.prepare_inputs_pred_sim,
+        prepare_inputs_pred_data=args.prepare_inputs_pred_data,
+        prepare_inputs_pred_sys=args.prepare_inputs_pred_sys,
+        mhh_var=mhh_var,
+        mhh_range=mhh_range,
+    )
+    ensure_prepare_job_files(spec)
+    print(f"INFO: Condor prepare workspace: {spec.condor_root}")
+    print(f"INFO: Condor submission mode: {spec.submission_mode}")
+    print(f"INFO: Prepare submit file: {spec.submit_path}")
+    print(f"INFO: Prepare wrapper script: {spec.wrapper_path}")
+    print("INFO: Begin Condor prepare submit file")
+    print(spec.submit_path.read_text(encoding="utf-8"))
+    print("INFO: End Condor prepare submit file")
+    print("INFO: Begin Condor prepare wrapper script")
+    print(spec.wrapper_path.read_text(encoding="utf-8"))
+    print("INFO: End Condor prepare wrapper script")
+    maybe_print_condor_resource_diagnostics(args, spec)
+    return submit_prepare_job(spec, dry_run=args.condor_dry_run)
+
+
+def run_prepare_inputs_step(args, out_path_override=None, mhh_var=None, mhh_range=None):
+    if args.submit_prepare_to_condor:
+        result = _run_prepare_inputs_on_condor(args, out_path_override or args.out_path, mhh_var=mhh_var, mhh_range=mhh_range)
+        if args.condor_dry_run:
+            print("INFO: Dry-run enabled; prepare submit files were rendered but no job was queued.")
+        else:
+            if result.get("cluster_id"):
+                print(f"INFO: Submitted prepare job cluster id: {result['cluster_id']}")
+            if result.get("schedd"):
+                print(f"INFO: Query with: condor_q -name {result['schedd']} -nobatch {result['cluster_id']}")
+            elif result.get("cluster_id"):
+                print(f"INFO: Query with: condor_q -nobatch {result['cluster_id']}")
+        return result
+
+    if mhh_range is not None and (mhh_var is None):
+        raise ValueError("When mhh_range is set, mhh_var must also be set.")
+    return prepare_inputs(args, out_path_override=out_path_override, mhh_var=mhh_var, mhh_range=mhh_range)
 
 def perform_training(args):
 
@@ -271,6 +352,10 @@ if __name__ == "__main__":
     parser.add_argument('--get_score_shape_diff_kl', action='store_true', help='Get score shape differences using kl samples')
     parser.add_argument('--n_epochs', '--condor_epochs', dest='n_epochs', type=int, default=None, help='Optional epoch override for training, used in both local and Condor modes.')
 
+    parser.add_argument('--submit_prepare_to_condor', action='store_true', help='Submit dataset preparation steps to HTCondor instead of running them locally')
+    parser.add_argument('--condor_lightweight_prepare_test', action='store_true', help='Enable lightweight Condor prepare jobs (limited parquet files/events)')
+    parser.add_argument('--condor_prepare_max_input_files', type=int, default=None, help='Maximum number of parquet files to process when lightweight prepare mode is enabled')
+    parser.add_argument('--condor_prepare_max_rows_per_file', type=int, default=None, help='Maximum number of rows to read per parquet file when lightweight prepare mode is enabled')
     parser.add_argument('--submit_training_to_condor', action='store_true', help='Submit the training step to HTCondor instead of running it locally')
     parser.add_argument('--condor_work_dir', type=str, default=None, help='Optional directory for rendered Condor job files. Defaults to <out_path>/condor_runs/')
     parser.add_argument('--condor_tag', type=str, default=None, help='Optional tag to include in the Condor run directory name')
@@ -307,6 +392,18 @@ if __name__ == "__main__":
 
     if args.condor_lightweight_test:
         apply_lightweight_test_preset(args)
+    if args.condor_lightweight_prepare_test:
+        if getattr(args, "condor_prepare_max_input_files", None) is None:
+            args.condor_prepare_max_input_files = 1
+        if getattr(args, "condor_prepare_max_rows_per_file", None) is None:
+            args.condor_prepare_max_rows_per_file = 20000
+        args.condor_job_flavor = "espresso"
+        if args.condor_tag is None:
+            args.condor_tag = "prepare-lightweight-test"
+        args.condor_cpus = 1
+        args.condor_memory_gb = 8
+        args.condor_disk_gb = 10
+        args.condor_gpus = 0
 
     if args.perform_training:
         args.train_best_model = True
@@ -339,7 +436,7 @@ if __name__ == "__main__":
     if mhh_binning is None:
         # normal single-run behavior
         if should_run_prepare_inputs(args):
-            prepare_inputs(args)
+            run_prepare_inputs_step(args)
         if should_run_training(args):
             perform_training(args)
         if should_run_categorisation(args):
@@ -430,7 +527,7 @@ if __name__ == "__main__":
                 tmp_args.prepare_inputs_pred_data = False
                 tmp_args.prepare_inputs_pred_sys = False
 
-                prepare_inputs(tmp_args, out_path_override=per_bin_out, mhh_var=variable, mhh_range=(lo, hi))
+                run_prepare_inputs_step(tmp_args, out_path_override=per_bin_out, mhh_var=variable, mhh_range=(lo, hi))
 
         # Phase 2: run the requested per-bin pipeline (may include prepare_inputs for
         # prediction, perform_training, and plotting). Default per-bin folder name is
@@ -446,7 +543,7 @@ if __name__ == "__main__":
 
             # Prepare inputs for this bin (pass mhh var/range into PrepareInputs via prepare_inputs wrapper)
             if should_run_prepare_inputs(args):
-                prepare_inputs(args, out_path_override=per_bin_out, mhh_var=variable, mhh_range=(lo, hi))
+                run_prepare_inputs_step(args, out_path_override=per_bin_out, mhh_var=variable, mhh_range=(lo, hi))
 
             # Run training and post-processing using this per-bin output directory
             # Temporarily override args.out_path for training steps

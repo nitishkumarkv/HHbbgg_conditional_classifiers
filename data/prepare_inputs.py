@@ -28,6 +28,8 @@ class PrepareInputs:
         predict_parquet_info: Optional[Dict[str, Any]] = None,
         mhh_var: Optional[str] = None,
         mhh_range: Optional[List[float]] = None,
+        max_input_files: Optional[int] = None,
+        max_rows_per_file: Optional[int] = None,
         ) -> None:
         self.model_type = "mlp"
         self.input_var_json = input_var_json
@@ -42,6 +44,9 @@ class PrepareInputs:
             self.weight_scheme_process = self.training_info["weight_scheme_process"]
             self.write_chunk = self.training_info["write_chunk"]
         self.fill_nan = -9
+        self.max_input_files = max_input_files
+        self.max_rows_per_file = max_rows_per_file
+        self._files_processed = 0
 
 
         self.extra_vars_train = ["weight", "mass", "nonRes_dijet_mass", "nonResReg_dijet_mass", "nonResReg_dijet_mass_DNNreg", "nonResReg_vbfpair_dijet_mass", "nonResReg_vbfpair_HHbbggCandidate_mass", "nonResReg_HHbbggCandidate_mass", "nonResReg_dijet_pt", "nonResReg_lead_bjet_pt", "nonResReg_sublead_bjet_pt", "pt"]
@@ -82,6 +87,36 @@ class PrepareInputs:
             self.mhh_range = (lo, hi)
         else:
             self.mhh_range = None
+
+    def _apply_input_caps(self, events):
+        if self.max_rows_per_file is None:
+            return events
+
+        try:
+            max_rows = int(self.max_rows_per_file)
+        except (TypeError, ValueError):
+            return events
+
+        if max_rows <= 0:
+            return events[:0]
+
+        return events[:max_rows]
+
+    def _can_process_more_input_files(self) -> bool:
+        if self.max_input_files is None:
+            return True
+        if int(self.max_input_files) <= 0:
+            return False
+        return self._files_processed < self.max_input_files
+
+    def _record_input_file(self) -> bool:
+        if self.max_input_files is None:
+            return False
+        self._files_processed += 1
+        return self._files_processed >= self.max_input_files
+
+    def _reset_input_file_counter(self) -> None:
+        self._files_processed = 0
         
 
     def load_vars(self, path):
@@ -578,6 +613,7 @@ class PrepareInputs:
 
 
     def prep_inputs_for_training(self):
+        self._reset_input_file_counter()
 
         fill_nan = self.fill_nan
 
@@ -597,13 +633,20 @@ class PrepareInputs:
         # Dictionary to accumulate events by sample (across all eras)
         sample_events_dict = {sample: [] for sample in self.sample_to_class.keys()}
 
+        stop_processing = False
+
         for era in self.training_info["samples_info"]["eras"]:
             # for samples in self.sample_to_class.keys():                
             for samples in self.training_info["samples_info"][era].keys():                
+                if stop_processing or not self._can_process_more_input_files():
+                    stop_processing = True
+                    break
 
                 samples_path = self.training_info["samples_info"]["samples_path"]
                 parquet_path = self.training_info["samples_info"][era][samples]
                 events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
+                events = self._apply_input_caps(events)
+                stop_processing = self._record_input_file()
 
                 events = self.preselection(events)
 
@@ -657,6 +700,11 @@ class PrepareInputs:
 
                 # events = pd.DataFrame(ak.to_list(events))
                 # comb_inputs = pd.concat([comb_inputs, events])
+                if stop_processing:
+                    print("INFO: Maximum input file limit reached for lightweight prepare mode. Stopping early.")
+                    break
+            if stop_processing:
+                break
 
         # # Plot correlation matrices (one per sample, combining all eras)
         # print("\nINFO: Computing correlation matrices for each sample (combined across all eras)")
@@ -679,6 +727,12 @@ class PrepareInputs:
 
         print("INFO: Plotting variables")
         plot_path = f"{out_path}/var_plots/"
+        if len(comb_inputs) == 0:
+            raise ValueError(
+                "No events remained after lightweight caps and selections. "
+                "Increase --max_input_files or --max_rows_per_file."
+            )
+
         os.makedirs(plot_path, exist_ok=True)
         self.plot_variables(comb_inputs, vars_for_training, plot_path)
         for cls in self.classes:
@@ -779,6 +833,7 @@ class PrepareInputs:
         return 0
     
     def prep_inputs_for_prediction_sim(self):
+        self._reset_input_file_counter()
 
         fill_nan = self.fill_nan
         training_info = self.training_info
@@ -798,14 +853,21 @@ class PrepareInputs:
 
         samples_path = training_info["samples_info"]["samples_path"]
 
+        stop_processing = False
+
         for era in training_info["samples_info"]["eras"]:
             for samples in training_info["samples_info"][era].keys():
+                if stop_processing or not self._can_process_more_input_files():
+                    stop_processing = True
+                    break
                 
                 parquet_path = training_info["samples_info"][era][samples]
                 if self.save_all_columns_sim_nominal:
                     events = ak.from_parquet(f"{samples_path}/{parquet_path}")
                 else:
                     events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
+                events = self._apply_input_caps(events)
+                stop_processing = self._record_input_file()
 
                 print(f"INFO: Number of events in {samples} for {era}: {len(events)}")
 
@@ -824,7 +886,7 @@ class PrepareInputs:
                     if len(events) == 0:
                         print(f"WARNING: No events left in sample {samples} for era {era} after mHH filter {self.mhh_range}. Skipping.")
                         continue
-                
+
                 # also save the event
                 full_path_to_save = f"{out_path}/{era}/{samples}/"
                 os.makedirs(full_path_to_save, exist_ok=True)
@@ -883,9 +945,16 @@ class PrepareInputs:
                 with open(f"{out_path}/mean_std_dict.pkl", 'wb') as f:
                     pickle.dump(mean_std_dict, f)
 
+                if stop_processing:
+                    print("INFO: Maximum input file limit reached for lightweight prepare mode. Stopping early.")
+                    break
+            if stop_processing:
+                break
+
         return 0
 
     def prep_inputs_for_prediction_sim_sys(self):
+        self._reset_input_file_counter()
 
         fill_nan = self.fill_nan
         training_info = self.training_info
@@ -905,9 +974,18 @@ class PrepareInputs:
 
         samples_path = training_info["samples_info"]["samples_path"]
 
+        stop_processing = False
+
         for era in training_info["samples_info"]["eras"]:
             for samples in training_info["samples_info"][era].keys():
+                if stop_processing or not self._can_process_more_input_files():
+                    stop_processing = True
+                    break
+
                 for sys in training_info["systematics"]:
+                    if stop_processing or not self._can_process_more_input_files():
+                        stop_processing = True
+                        break
 
                     if samples in ["GGJets", "DDQCDGJET", "TTG_10_100", "TTG_100_200", "TTG_200", "TT", "TTGG"]:
                         continue
@@ -920,6 +998,8 @@ class PrepareInputs:
                         events = ak.from_parquet(f"{samples_path}/{parquet_path}")
                     else:
                         events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
+                    events = self._apply_input_caps(events)
+                    stop_processing = self._record_input_file()
 
                     print(f"INFO: Number of events in {samples} for {era} for {sys}: {len(events)}")
 
@@ -997,9 +1077,16 @@ class PrepareInputs:
                     with open(f"{out_path}/mean_std_dict.pkl", 'wb') as f:
                         pickle.dump(mean_std_dict, f)
 
+                    if stop_processing:
+                        print("INFO: Maximum input file limit reached for lightweight prepare mode. Stopping early.")
+                        break
+            if stop_processing:
+                break
+
         return 0
     
     def prep_inputs_for_prediction_data(self):
+        self._reset_input_file_counter()
 
         fill_nan = self.fill_nan
         training_info = self.training_info
@@ -1020,42 +1107,51 @@ class PrepareInputs:
         samples_path = training_info["samples_info"]["samples_path"]
         datas = training_info["samples_info"]["data"]
 
+        stop_processing = False
+
+        sample_to_era = {
+            "2016preVFP": "preVFP",
+            "2016postVFP": "postVFP",
+            "2017": "2017",
+            "2018": "2018",
+            "2022_EraE": "postEE", 
+            "2022_EraF": "postEE", 
+            "2022_EraG": "postEE", 
+            "2022_EraC": "preEE", 
+            "2022_EraD": "preEE",
+            "2023_EraCv1to3": "preBPix", 
+            "2023_EraCv4": "preBPix",
+            "2023_EraC": "preBPix",
+            "2023_EraD": "postBPix",
+            "2024_EraC_EG0": "2024",
+            "2024_EraC_EG1": "2024",
+            "2024_EraD_EG0": "2024",
+            "2024_EraD_EG1": "2024",
+            "2024_EraE_EG0": "2024",
+            "2024_EraE_EG1": "2024",
+            "2024_EraF_EG0": "2024",
+            "2024_EraF_EG1": "2024",
+            "2024_EraG_EG0": "2024",
+            "2024_EraG_EG1": "2024",
+            "2024_EraH_EG0": "2024",
+            "2024_EraH_EG1": "2024",
+            "2024_EraIv1_EG0": "2024",
+            "2024_EraIv1_EG1": "2024",
+            "2024_EraIv2_EG0": "2024",
+            "2024_EraIv2_EG1": "2024",
+        }
+
         for data in datas:
+            if stop_processing or not self._can_process_more_input_files():
+                stop_processing = True
+                break
+
             if self.save_all_columns_data:
                 events = ak.from_parquet(f"{samples_path}/{datas[data]}")
             else:
                 events = ak.from_parquet(f"{samples_path}/{datas[data]}", columns=vars_to_load)
-
-            sample_to_era = {
-                            "2016preVFP": "preVFP",
-                            "2016postVFP": "postVFP",
-                            "2017": "2017",
-                            "2018": "2018",
-                            "2022_EraE": "postEE", 
-                            "2022_EraF": "postEE", 
-                            "2022_EraG": "postEE", 
-                            "2022_EraC": "preEE", 
-                            "2022_EraD": "preEE",
-                            "2023_EraCv1to3": "preBPix", 
-                            "2023_EraCv4": "preBPix",
-                            "2023_EraC": "preBPix",
-                            "2023_EraD": "postBPix",
-                            "2024_EraC_EG0": "2024",
-                            "2024_EraC_EG1": "2024",
-                            "2024_EraD_EG0": "2024",
-                            "2024_EraD_EG1": "2024",
-                            "2024_EraE_EG0": "2024",
-                            "2024_EraE_EG1": "2024",
-                            "2024_EraF_EG0": "2024",
-                            "2024_EraF_EG1": "2024",
-                            "2024_EraG_EG0": "2024",
-                            "2024_EraG_EG1": "2024",
-                            "2024_EraH_EG0": "2024",
-                            "2024_EraH_EG1": "2024",
-                            "2024_EraIv1_EG0": "2024",
-                            "2024_EraIv1_EG1": "2024",
-                            "2024_EraIv2_EG0": "2024",
-                            "2024_EraIv2_EG1": "2024"}
+            events = self._apply_input_caps(events)
+            stop_processing = self._record_input_file()
 
             # add preselection
             events = self.preselection_for_pred(events)
@@ -1064,11 +1160,11 @@ class PrepareInputs:
             if self.mhh_var is not None and self.mhh_range is not None:
                 events = self._apply_mhh_filter(events)
                 if len(events) == 0:
-                    print(f"WARNING: No events left in sample {samples} for era {era} after mHH filter {self.mhh_range}. Skipping.")
+                    print(f"WARNING: No events left in sample {data} after mHH filter {self.mhh_range}. Skipping.")
                     continue
 
             # add more variables
-            events = self.add_var(events, sample_to_era[data])
+            events = self.add_var(events, sample_to_era.get(data, "2024"))
 
             # also save the event
             full_path_to_save = f"{out_path}/{data}/"
@@ -1083,7 +1179,7 @@ class PrepareInputs:
                 events_intermediate = events[:self.write_chunk]
                 events = events[self.write_chunk:]
                 comb_inputs = pd.concat([comb_inputs, pd.DataFrame(ak.to_list(events_intermediate))])
-                i+=1
+                i += 1
 
             X = comb_inputs[vars_for_training]
 
@@ -1097,7 +1193,6 @@ class PrepareInputs:
             mask = (X < -998.0)
             X[mask] = np.nan
 
-
             # get mean according to training data set
             scale_file = f"{inputs_path}/mean_std_dict.pkl"
             with open(scale_file, 'rb') as f:
@@ -1110,7 +1205,6 @@ class PrepareInputs:
             X = self.standardize(X, mean, std)
             X = np.nan_to_num(X, nan=fill_nan)
 
-
             # save all the numpy arrays
             print(f"INFO: saving inputs for {data}")
             #full_path_to_save = f"{out_path}/"
@@ -1118,11 +1212,15 @@ class PrepareInputs:
 
             # ak.to_parquet(events, f"{full_path_to_save}/events.parquet")
             mean_std_dict = {
-                    "mean": mean,
-                    "std_dev": std
-                }
+                "mean": mean,
+                "std_dev": std
+            }
             with open(f"{out_path}/mean_std_dict.pkl", 'wb') as f:
                 pickle.dump(mean_std_dict, f)
+
+            if stop_processing:
+                print("INFO: Maximum input file limit reached for lightweight prepare mode. Stopping early.")
+                break
 
         return
     
