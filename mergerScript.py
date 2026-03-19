@@ -35,7 +35,7 @@ def load_samples(base_path, eras, samples, data=False, syst=""):
     # weight_columns = [col for col in all_columns if 'weight' in col]
     weight_columns = ["weight_tot", "weight"]
     dijet_mass_key = "nonResReg_dijet_mass_DNNreg"
-    HH_mass_key = "nonResReg_vbfpair_HHbbggCandidate_mass"
+    HH_mass_key = "nonResReg_HHbbggCandidate_mass"
 
     #"nonResReg_lead_bjet_hFlav", "nonResReg_sublead_bjet_hFlav", "event", "run", "lumi"]#, "is_boosted", "y_proba"] 
     columns = [

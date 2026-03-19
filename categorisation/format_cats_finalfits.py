@@ -26,13 +26,14 @@ import argparse
 #                 "mHH_bins": [-1, 350, 650, -1]
 # }
 
-base_path = "/eos/user/m/mmcginni/Documents/HHtobbgg/HHbbgg_conditional_classifiers_TRAINONGPU/out_Version_20251203_inc2024_year/optuna_categorization_baseline/"
+base_path = "/home/mmcginni/HHbbgg_conditional_classifiers/out_Version_Version_20260127_16-24_kl_year_vbfpair_partial_nobjetpT/optuna_categorization_fitsb_notfinished/"
 dict_inputs = {
                 "input_file": ["best_cut_params.json"],
-                "output_file": ["best_cut_params_finalfits_nomjjcut.json"], #leave empty to have the same as input, with _finalfits at the end
-                "n_cats": 5,
-                "do_mjjcut": False, #True or False
-                "mHH_bins": [] #bin edges include upper and lowermost bins, -1 for no bound, leave emptry if not doing mHH bins. Should have N input_files + 1
+                "output_file": ["best_cut_params_finalfits_fitsb.json"], #leave empty to have the same as input, with _finalfits at the end
+                "n_cats": 4,
+                "do_mjjcut": True, #True or False
+                "mHH_bins": [], #bin edges include upper and lowermost bins, -1 for no bound, leave emptry if not doing mHH bins. Should have N input_files + 1
+                "is_boosted": -1 # -1: no cut on boosted flag, 0: flag to false, 1: flag to true
 }
 
 # --------------------------- #
@@ -71,7 +72,7 @@ while ifile < len(dict_inputs["input_file"]):
 
     catstr_boosted = ""
     if (dict_inputs["is_boosted"] == 0) | (dict_inputs["is_boosted"] == 1):
-        catstr_boosted = f"(is_boosted == {dict_inputs["is_boosted"]}) & "
+        catstr_boosted = f"(is_boosted == {dict_inputs['is_boosted']}) & "
 
     catstr_nots = ""
     icat = 0
