@@ -52,6 +52,8 @@ def load_samples(base_path, samples, classes, var_prefix, eras, no_syst_samples,
     print(f"Using file {example_file} as an example to get the parquet schema")
     all_columns = pq.ParquetFile(example_file).schema.names
     weight_columns = [col for col in all_columns if 'weight' in col]
+    if 'weight_tot' not in weight_columns:
+        weight_columns.append('weight_tot')
     dijet_mass_key = f"{var_prefix}_dijet_mass_DNNreg"
     score_keys = [f"{cls}_score" for cls in classes]
 

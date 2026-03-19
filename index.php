@@ -107,7 +107,7 @@ if ($_GET['noplots']) {
 <div style="display: block; clear:both;">
 <h2><a name="files">Other files</a></h2>
 <ul>
-<?
+<?php
 foreach (glob("*") as $filename) {
     if ($_GET['noplots'] || !in_array($filename, $displayed)) {
         if (isset($_GET['match'])) {
@@ -117,9 +117,7 @@ foreach (glob("*") as $filename) {
                 if (!fnmatch('*'.$_GET['match'].'*', $filename)) continue;
              }
         }
-        if (is_dir($filename)) {
-            print "<li>[DIR] <a href=\"$filename\">$filename</a></li>";
-        } else {
+        if (!is_dir($filename)) {
             print "<li><a href=\"$filename\">$filename</a></li>";
         }
     }
