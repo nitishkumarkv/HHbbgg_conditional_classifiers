@@ -24,7 +24,9 @@ def plot_score_shape_diff_kl(folder):
     if len(folder.split('/')) == 4:
         save_folder += f"/{folder.split('/')[1]}"
 
-    kl_sample_list = ["GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00"]
+    kl_sample_list = ["GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00", "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00",
+                      "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_3p00", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p35", "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_1p00", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p10",
+                      "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_m2p00", "GluGlutoHHto2B2G_kl_m20p00_kt_1p00_c2_2p24"]
 
     events_dict = {}
     score_dict = {}
@@ -33,6 +35,12 @@ def plot_score_shape_diff_kl(folder):
         'GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00': r"$k_{\lambda}$=0",
         'GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00': r"$k_{\lambda}$=2.45",
         'GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00': r"$k_{\lambda}$=5",
+        'GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_3p00': r"$c_{2}$=3",
+        'GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p35': r"$c_{2}$=0.35",
+        'GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_1p00': r"$k_{\lambda}$=0, $c_{2}$=1",
+        'GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p10': r"$c_{2}$=0.1",
+        'GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_m2p00': r"$c_{2}$=-2",
+        'GluGlutoHHto2B2G_kl_m20p00_kt_1p00_c2_2p24': r"$k_{\lambda}$=-20, $c_{2}$=2.24"
     }
 
     for sample in kl_sample_list:
