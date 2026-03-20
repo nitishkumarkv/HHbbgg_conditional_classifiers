@@ -846,6 +846,7 @@ class PrepareInputs:
         with open(f"{inputs_path}/input_vars.txt", 'r') as f:
             vars = json.load(f)
         vars_for_training = vars
+        reported_x_features = False
 
         # vars_for_log = vars_config["vars_for_log_transform"]
 
@@ -933,6 +934,9 @@ class PrepareInputs:
                 X = np.nan_to_num(X, nan=fill_nan)
 
                 # save all the numpy arrays
+                if not reported_x_features:
+                    print(f"INFO: Final prediction-X feature count: {X.shape[1]}")
+                    reported_x_features = True
                 print("INFO: saving inputs for mlp")
                 np.save(f"{full_path_to_save}/X", X)
                 np.save(f"{full_path_to_save}/rel_w", relative_weights)
@@ -967,6 +971,7 @@ class PrepareInputs:
         with open(f"{inputs_path}/input_vars.txt", 'r') as f:
             vars = json.load(f)
         vars_for_training = vars
+        reported_x_features = False
 
         # vars_for_log = vars_config["vars_for_log_transform"]
 
@@ -1065,6 +1070,9 @@ class PrepareInputs:
                     X = np.nan_to_num(X, nan=fill_nan)
 
                     # save all the numpy arrays
+                    if not reported_x_features:
+                        print(f"INFO: Final prediction-X feature count: {X.shape[1]}")
+                        reported_x_features = True
                     #print("INFO: saving inputs for mlp")
                     np.save(f"{full_path_to_save}/X", X)
                     np.save(f"{full_path_to_save}/rel_w", relative_weights)
@@ -1099,6 +1107,7 @@ class PrepareInputs:
         with open(f"{inputs_path}/input_vars.txt", 'r') as f:
             vars = json.load(f)
         vars_for_training = vars
+        reported_x_features = False
 
         # vars_for_log = vars_config["vars_for_log_transform"]
 
@@ -1206,6 +1215,9 @@ class PrepareInputs:
             X = np.nan_to_num(X, nan=fill_nan)
 
             # save all the numpy arrays
+            if not reported_x_features:
+                print(f"INFO: Final prediction-X feature count: {X.shape[1]}")
+                reported_x_features = True
             print(f"INFO: saving inputs for {data}")
             #full_path_to_save = f"{out_path}/"
             np.save(f"{full_path_to_save}/X", X)
