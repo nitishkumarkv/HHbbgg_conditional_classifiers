@@ -64,7 +64,9 @@ if __name__ == "__main__":
     plt.xlabel("epochs")
     plt.ylabel("cross entropy")
     plt.legend()
-    plt.savefig(f'{path_for_plots}/loss_plot.png')
+    outpath = f'{path_for_plots}/loss_plot.png'
+    plt.savefig(outpath)
+    print(f"INFO: >>> {outpath}")
     plt.clf()
 
     plt.plot(train_loss_hist_no_absolute_weights, label="train")
@@ -72,14 +74,18 @@ if __name__ == "__main__":
     plt.xlabel("epochs")
     plt.ylabel("cross entropy")
     plt.legend()
-    plt.savefig(f'{path_for_plots}/loss_plot_no_abs.png')
+    outpath = f'{path_for_plots}/loss_plot_no_abs.png'
+    plt.savefig(outpath)
+    print(f"INFO: >>> {outpath}")
     plt.clf()
 
     # plot learning rate
     plt.plot(lr_hist)
     plt.xlabel("epochs")
     plt.ylabel("learning rate")
-    plt.savefig(f'{path_for_plots}/lr_plot.png')
+    outpath = f'{path_for_plots}/lr_plot.png'
+    plt.savefig(outpath)
+    print(f"INFO: >>> {outpath}")
     plt.clf()
 
     #plot accuracy
@@ -88,7 +94,9 @@ if __name__ == "__main__":
     plt.xlabel("epochs")
     plt.ylabel("accuracy")
     plt.legend()
-    plt.savefig(f'{path_for_plots}/acc_plot.png')
+    outpath = f'{path_for_plots}/acc_plot.png'
+    plt.savefig(outpath)
+    print(f"INFO: >>> {outpath}")
     plt.clf()
 
 
@@ -115,9 +123,9 @@ if __name__ == "__main__":
     try:
         proc_num_train = np.load(f'{inputs_for_MLP}/proc_num_train.npy')
         proc_num_val = np.load(f'{inputs_for_MLP}/proc_num_val.npy')
-        with open(f'{inputs_for_MLP}/process_numbers_mapping.json', 'r') as f:
+        with open(f'{inputs_for_MLP}/process_numbers_mapping.json', 'r', encoding="utf-8") as f:
             process_numbers_mapping = json.load(f)
-        with open(f'{inputs_for_MLP}/sample_to_class_mapping.json', 'r') as f:
+        with open(f'{inputs_for_MLP}/sample_to_class_mapping.json', 'r', encoding="utf-8") as f:
             sample_to_class_mapping = json.load(f)
         # Create reverse mapping: process number -> sample name for each class
         process_num_to_sample = {sample: proc_num for sample, proc_num in process_numbers_mapping.items()}
@@ -157,17 +165,22 @@ if __name__ == "__main__":
     plt.legend(loc="lower right", fontsize=10)
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig(f'{path_for_plots}/roc_curve_one_vs_all.png')
+    outpath = f'{path_for_plots}/roc_curve_one_vs_all.png'
+    plt.savefig(outpath)
+    print(f"INFO: >>> {outpath}")
 
     plt.xlim([0.0001, 1.0])
     plt.xscale('log')
-    plt.savefig(f'{path_for_plots}/roc_curve_one_vs_all_logx.png')
+    outpath = f'{path_for_plots}/roc_curve_one_vs_all_logx.png'
+    plt.savefig(outpath)
+    print(f"INFO: >>> {outpath}")
     plt.clf()
 
     # save auc scores
-    with open(f'{path_for_plots}/roc_curve_one_vs_all.json', 'w') as f:
+    outpath = f'{path_for_plots}/roc_curve_one_vs_all.json'
+    with open(outpath, 'w', encoding="utf-8") as f:
         json.dump(one_vs_all_auc_dict, f)
-
+    print(f"INFO: >>> {outpath}")
 
     # One-vs-One ROC Curves
     # For each pair of classes
@@ -214,16 +227,22 @@ if __name__ == "__main__":
     plt.tight_layout()
 
     # Save the combined plot
-    plt.savefig(f'{path_for_plots}/roc_curve_{class_name_i}_vs_all_individual.png')
+    outpath = f'{path_for_plots}/roc_curve_{class_name_i}_vs_all_individual.png'
+    plt.savefig(outpath)
+    print(f"INFO: >>> {outpath}")
 
     plt.xlim([0.0001, 1.0])
     plt.xscale('log')
-    plt.savefig(f'{path_for_plots}/roc_curve_{class_name_i}_vs_all_individual_logx.png')
+    outpath = f'{path_for_plots}/roc_curve_{class_name_i}_vs_all_individual_logx.png'
+    plt.savefig(outpath)
+    print(f"INFO: >>> {outpath}")
     plt.clf()
 
     #save the auc scores
-    with open(f'{path_for_plots}/GluGluToHH_vs_all.json', 'w') as f:
+    outpath = f'{path_for_plots}/GluGluToHH_vs_all.json'
+    with open(outpath, 'w', encoding="utf-8") as f:
         json.dump(GluGluToHH_one_vs_one_roc, f)
+    print(f"INFO: >>> {outpath}")
 
     if n_classes>4:
         # One-vs-One ROC Curves
@@ -271,17 +290,23 @@ if __name__ == "__main__":
         plt.tight_layout()
 
         # Save the combined plot
-        plt.savefig(f'{path_for_plots}/roc_curve_{class_name_i}_vs_all_individual.png')
+        outpath = f'{path_for_plots}/roc_curve_{class_name_i}_vs_all_individual.png'
+        plt.savefig(outpath)
+        print(f"INFO: >>> {outpath}")
 
         plt.xlim([0.0001, 1.0])
         plt.xscale('log')
-        plt.savefig(f'{path_for_plots}/roc_curve_{class_name_i}_vs_all_individual_logx.png')
+        outpath = f'{path_for_plots}/roc_curve_{class_name_i}_vs_all_individual_logx.png'
+        plt.savefig(outpath)
+        print(f"INFO: >>> {outpath}")
 
         plt.clf()
 
         # save AUC scores
-        with open(f'{path_for_plots}/VBFToHH_vs_all.json', 'w') as f:
+        outpath = f'{path_for_plots}/VBFToHH_vs_all.json'
+        with open(outpath, 'w', encoding="utf-8") as f:
             json.dump(VBFToHH_one_vs_one_roc, f)
+        print(f"INFO: >>> {outpath}")
 
     y_val = y_train
     y_pred_val = y_pred_train
@@ -307,10 +332,14 @@ if __name__ == "__main__":
     plt.legend(loc="lower right", fontsize=10)
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig(f'{path_for_plots}/train_roc_curve_one_vs_all.png')
+    outpath = f'{path_for_plots}/train_roc_curve_one_vs_all.png'
+    plt.savefig(outpath)
+    print(f"INFO: >>> {outpath}")
     plt.xlim([0.0001, 1.0])
     plt.xscale('log')
-    plt.savefig(f'{path_for_plots}/train_roc_curve_one_vs_all_logx.png')
+    outpath = f'{path_for_plots}/train_roc_curve_one_vs_all_logx.png'
+    plt.savefig(outpath)
+    print(f"INFO: >>> {outpath}")
     plt.clf()
 
     if n_classes>4:
@@ -355,7 +384,9 @@ if __name__ == "__main__":
         plt.tight_layout()
     
         # Save the combined plot
-        plt.savefig(f'{path_for_plots}/train_roc_curve_{class_name_i}_vs_all_individual.png')
+        outpath = f'{path_for_plots}/train_roc_curve_{class_name_i}_vs_all_individual.png'
+        plt.savefig(outpath)
+        print(f"INFO: >>> {outpath}")
         plt.close()
 
     # One-vs-One ROC Curves
@@ -398,7 +429,9 @@ if __name__ == "__main__":
     plt.tight_layout()
 
     # Save the combined plot
-    plt.savefig(f'{path_for_plots}/train_roc_curve_{class_name_i}_vs_all_individual.png')
+    outpath = f'{path_for_plots}/train_roc_curve_{class_name_i}_vs_all_individual.png'
+    plt.savefig(outpath)
+    print(f"INFO: >>> {outpath}")
     plt.close()
 
 import numpy as np
@@ -515,7 +548,9 @@ for i in range(n_classes):
     # mplhep.cms.label(loc=0, data=True, label='Preliminary')
 
     fig.tight_layout()
-    fig.savefig(f'{path_for_plots}/{class_name}_score.png')
+    outpath = f'{path_for_plots}/{class_name}_score.png'
+    fig.savefig(outpath)
+    print(f"INFO: >>> {outpath}")
     plt.close(fig)
 
 
@@ -584,17 +619,23 @@ if has_process_number:
             fig.tight_layout()
             
             # Save normal scale version
-            fig.savefig(f'{path_for_plots}/roc_per_sample_{target_class_name}_vs_others.png', dpi=150)
+            outpath = f'{path_for_plots}/roc_per_sample_{target_class_name}_vs_others.png'
+            fig.savefig(outpath, dpi=150)
+            print(f"INFO: >>> {outpath}")
             
             # Save log scale version
             ax.set_xlim([0.0001, 1.0])
             ax.set_xscale('log')
-            fig.savefig(f'{path_for_plots}/roc_per_sample_{target_class_name}_vs_others_logx.png', dpi=150)
+            outpath = f'{path_for_plots}/roc_per_sample_{target_class_name}_vs_others_logx.png'
+            fig.savefig(outpath, dpi=150)
+            print(f"INFO: >>> {outpath}")
             plt.close(fig)
             
             # Save AUC scores to JSON
-            with open(f'{path_for_plots}/roc_per_sample_{target_class_name}_vs_others.json', 'w') as f:
+            outpath = f'{path_for_plots}/roc_per_sample_{target_class_name}_vs_others.json'
+            with open(outpath, 'w', encoding="utf-8") as f:
                 json.dump(sample_roc_dict, f, indent=2)
+            print(f"INFO: >>> {outpath}")
             
             print(f"INFO: Per-sample ROC curves for {target_class_name} completed!")
         else:
@@ -703,7 +744,9 @@ if has_process_number:
             ax.grid(True, alpha=0.3)
             
             fig.tight_layout()
-            fig.savefig(f'{path_for_plots}/{target_class_name}_per_sample_score.png', dpi=150)
+            outpath = f'{path_for_plots}/{target_class_name}_per_sample_score.png'
+            fig.savefig(outpath, dpi=150)
+            print(f"INFO: >>> {outpath}")
             plt.close(fig)
             
             print(f"INFO: Per-sample validation plots for {target_class_name} completed!")
@@ -752,7 +795,9 @@ for i in range(n_classes):
 
 plt.colorbar(im, ax=ax)
 fig.tight_layout()
-fig.savefig(f'{path_for_plots}/confusion_matrix_validation.png', dpi=150)
+outpath = f'{path_for_plots}/confusion_matrix_validation.png'
+fig.savefig(outpath, dpi=150)
+print(f"INFO: >>> {outpath}")
 plt.close(fig)
 
 # Training confusion matrix
@@ -781,7 +826,9 @@ for i in range(n_classes):
 
 plt.colorbar(im, ax=ax)
 fig.tight_layout()
-fig.savefig(f'{path_for_plots}/confusion_matrix_training.png', dpi=150)
+outpath = f'{path_for_plots}/confusion_matrix_training.png'
+fig.savefig(outpath, dpi=150)
+print(f"INFO: >>> {outpath}")
 plt.close(fig)
 
 print("INFO: Confusion matrices completed!")
