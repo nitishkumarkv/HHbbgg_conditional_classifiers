@@ -723,7 +723,11 @@ cm_val = confusion_matrix(y_val_labels, y_pred_val_labels)
 
 # Plot validation confusion matrix
 fig, ax = plt.subplots(figsize=(10, 8))
-im = ax.imshow(cm_val, interpolation='auto', cmap=plt.cm.Blues)
+try:
+    im = ax.imshow(cm_val, interpolation='auto', cmap=plt.cm.Blues)
+except ValueError:
+    # Fallback to 'nearest' interpolation if 'auto' fails (matplotlib 3.9 version compatibility)
+    im = ax.imshow(cm_val, interpolation='nearest', cmap=plt.cm.Blues)
 ax.set_xlabel('Predicted Label', fontsize=12)
 ax.set_ylabel('True Label', fontsize=12)
 ax.set_title('Confusion Matrix - Validation Set', fontsize=14, fontweight='bold')
@@ -749,7 +753,11 @@ y_train_labels = np.argmax(y_train, axis=1)
 cm_train = confusion_matrix(y_train_labels, y_pred_train_labels)
 
 fig, ax = plt.subplots(figsize=(10, 8))
-im = ax.imshow(cm_train, interpolation='auto', cmap=plt.cm.Blues)
+try:
+    im = ax.imshow(cm_train, interpolation='auto', cmap=plt.cm.Blues)
+except ValueError:
+    # Fallback to 'nearest' interpolation if 'auto' fails (matplotlib 3.9 version compatibility)
+    im = ax.imshow(cm_train, interpolation='nearest', cmap=plt.cm.Blues)
 ax.set_xlabel('Predicted Label', fontsize=12)
 ax.set_ylabel('True Label', fontsize=12)
 ax.set_title('Confusion Matrix - Training Set', fontsize=14, fontweight='bold')
