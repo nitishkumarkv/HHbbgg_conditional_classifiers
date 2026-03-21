@@ -716,6 +716,14 @@ if has_process_number:
 # ============================================================================
 print("\nINFO: Generating confusion matrices...")
 
+# Fixes problem with VBFToHH_sig in class_names when it is not present y predictions
+# TODO: very hacky and will break if DNN out shape changes
+if "VBFToHH_sig" in class_names and y_pred_val_.shape[1] <= 4:
+    print("WARNING: 'VBFToHH_sig' found in class_names but not present in predictions. Removing from class_names for confusion matrix plotting.")
+    class_names_pruned = [name for name in class_names if name != "VBFToHH_sig"]
+else:
+    class_names_pruned = class_names
+
 # Validation confusion matrix
 y_pred_val_labels = np.argmax(y_pred_val_, axis=1)
 y_val_labels = np.argmax(y_val_, axis=1)
@@ -733,8 +741,8 @@ ax.set_ylabel('True Label', fontsize=12)
 ax.set_title('Confusion Matrix - Validation Set', fontsize=14, fontweight='bold')
 ax.set_xticks(range(n_classes))
 ax.set_yticks(range(n_classes))
-ax.set_xticklabels(class_names, rotation=45, ha='right')
-ax.set_yticklabels(class_names)
+ax.set_xticklabels(class_names_pruned, rotation=45, ha='right')
+ax.set_yticklabels(class_names_pruned)
 
 # Add text annotations
 for i in range(n_classes):
@@ -763,8 +771,8 @@ ax.set_ylabel('True Label', fontsize=12)
 ax.set_title('Confusion Matrix - Training Set', fontsize=14, fontweight='bold')
 ax.set_xticks(range(n_classes))
 ax.set_yticks(range(n_classes))
-ax.set_xticklabels(class_names, rotation=45, ha='right')
-ax.set_yticklabels(class_names)
+ax.set_xticklabels(class_names_pruned, rotation=45, ha='right')
+ax.set_yticklabels(class_names_pruned)
 
 for i in range(n_classes):
     for j in range(n_classes):
