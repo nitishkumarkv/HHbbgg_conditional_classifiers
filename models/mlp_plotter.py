@@ -16,7 +16,10 @@ from mlp import MLP
 import pickle
 
 def load_checkpoint(file_path):
-    checkpoint = torch.load(file_path, weights_only=False)
+    if torch.cuda.is_available():
+        checkpoint = torch.load(file_path, weights_only=False)
+    else:
+        checkpoint = torch.load(file_path, weights_only=False, map_location=torch.device('cpu'))
     #model.load_state_dict(checkpoint['model_state_dict'])
     #optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     #scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
@@ -741,17 +744,26 @@ if has_process_number:
 # ============================================================================
 print("\nINFO: Generating confusion matrices...")
 
-# Validation confusion matrix
-y_pred_val_labels = np.argmax(y_pred_val_, axis=1)
-y_val_labels = np.argmax(y_val_, axis=1)
-cm_val = confusion_matrix(y_val_labels, y_pred_val_labels)
+def normalize_confusion_matrix_rows(cm):
+    row_sums = cm.sum(axis=1, keepdims=True)
+    # Avoid division by zero for classes that may have zero events.
+    row_sums[row_sums == 0] = 1
+    return cm.astype(float) / row_sums
 
-# Plot validation confusion matrix
+# Combine train and validation for one confusion matrix over all datasets.
+y_pred_all = np.vstack([y_pred_train, y_pred_val_])
+y_true_all = np.vstack([y_train, y_val_])
+
+y_pred_all_labels = np.argmax(y_pred_all, axis=1)
+y_true_all_labels = np.argmax(y_true_all, axis=1)
+cm_all = confusion_matrix(y_true_all_labels, y_pred_all_labels, labels=range(n_classes))
+cm_all_norm = normalize_confusion_matrix_rows(cm_all)
+
+# Plot confusion matrix for all datasets
 fig, ax = plt.subplots(figsize=(10, 8))
-im = ax.imshow(cm_val, interpolation='nearest', cmap=plt.cm.Blues)
+im = ax.imshow(cm_all_norm, interpolation='nearest', cmap=plt.cm.Blues, vmin=0.0, vmax=1.0)
 ax.set_xlabel('Predicted Label', fontsize=12)
 ax.set_ylabel('True Label', fontsize=12)
-ax.set_title('Confusion Matrix - Validation Set', fontsize=14, fontweight='bold')
 ax.set_xticks(range(n_classes))
 ax.set_yticks(range(n_classes))
 ax.set_xticklabels(class_names, rotation=45, ha='right')
@@ -760,37 +772,12 @@ ax.set_yticklabels(class_names)
 # Add text annotations
 for i in range(n_classes):
     for j in range(n_classes):
-        text = ax.text(j, i, f'{cm_val[i, j]:.0f}', ha="center", va="center", 
-                      color="white" if cm_val[i, j] > cm_val.max() / 2 else "black", fontsize=11)
+        text = ax.text(j, i, f'{cm_all_norm[i, j]:.2f}', ha="center", va="center", 
+                      color="white" if cm_all_norm[i, j] > 0.5 else "black", fontsize=11)
 
 plt.colorbar(im, ax=ax)
 fig.tight_layout()
-fig.savefig(f'{path_for_plots}/confusion_matrix_validation.png', dpi=150)
-plt.close(fig)
-
-# Training confusion matrix
-y_pred_train_labels = np.argmax(y_pred_train, axis=1)
-y_train_labels = np.argmax(y_train, axis=1)
-cm_train = confusion_matrix(y_train_labels, y_pred_train_labels)
-
-fig, ax = plt.subplots(figsize=(10, 8))
-im = ax.imshow(cm_train, interpolation='nearest', cmap=plt.cm.Blues)
-ax.set_xlabel('Predicted Label', fontsize=12)
-ax.set_ylabel('True Label', fontsize=12)
-ax.set_title('Confusion Matrix - Training Set', fontsize=14, fontweight='bold')
-ax.set_xticks(range(n_classes))
-ax.set_yticks(range(n_classes))
-ax.set_xticklabels(class_names, rotation=45, ha='right')
-ax.set_yticklabels(class_names)
-
-for i in range(n_classes):
-    for j in range(n_classes):
-        text = ax.text(j, i, f'{cm_train[i, j]:.0f}', ha="center", va="center", 
-                      color="white" if cm_train[i, j] > cm_train.max() / 2 else "black", fontsize=11)
-
-plt.colorbar(im, ax=ax)
-fig.tight_layout()
-fig.savefig(f'{path_for_plots}/confusion_matrix_training.png', dpi=150)
+fig.savefig(f'{path_for_plots}/confusion_matrix.png', dpi=150)
 plt.close(fig)
 
 print("INFO: Confusion matrices completed!")
