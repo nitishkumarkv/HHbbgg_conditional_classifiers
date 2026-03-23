@@ -333,7 +333,7 @@ if __name__ == "__main__":
             # "TTG_100_200",
             # "TTG_200",
             "ttHtoGG_M_125",
-            "BBHto2G_M_125",
+            # "BBHto2G_M_125",
             "GluGluHToGG_M_125",
             "VBFHToGG_M_125",
             "VHtoGG_M_125",
