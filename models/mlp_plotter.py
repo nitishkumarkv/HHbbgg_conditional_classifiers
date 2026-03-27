@@ -20,7 +20,10 @@ if not hasattr(pa.lib, "PyExtensionType") and hasattr(pa.lib, "ExtensionType"):
     pa.lib.PyExtensionType = pa.lib.ExtensionType
 
 def load_checkpoint(file_path):
-    checkpoint = torch.load(file_path, weights_only=False)
+    if torch.cuda.is_available():
+        checkpoint = torch.load(file_path, weights_only=False)
+    else:
+        checkpoint = torch.load(file_path, weights_only=False, map_location=torch.device('cpu'))
     #model.load_state_dict(checkpoint['model_state_dict'])
     #optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     #scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
@@ -137,6 +140,14 @@ if __name__ == "__main__":
 
     # Class names
     class_names = ["non_resonant_bkg", "ttH", "other_single_H", "GluGluToHH", "VBFToHH_sig"]
+    json_class_to_model_class = {
+        "is_non_resonant_bkg": "non_resonant_bkg",
+        "is_ttH_bkg": "ttH",
+        "is_single_H_bkg": "other_single_H",
+        "is_GluGluToHH_sig": "GluGluToHH",
+        "is_VBFToHH_sig": "VBFToHH_sig"
+    }
+
     #n_classes = len(class_names)
     n_classes = y_val.shape[1]
 
@@ -570,31 +581,33 @@ if has_process_number:
     
     if class_idx is not None:
         # Get all samples belonging to this class
-        samples_in_class = [sample for sample, cls in sample_to_class_mapping.items() 
-                           if cls == target_class_name]
+        samples_in_class = [sample for sample, cls in sample_to_class_mapping.items() if cls == f"is_{target_class_name}_sig"]
         
         if len(samples_in_class) > 1:
             print(f"Processing class '{target_class_name}' with samples: {samples_in_class}")
             
-            fig, ax = plt.subplots(figsize=(10, 8))
+            fig, ax = plt.subplots(figsize=(8, 6))
             sample_roc_dict = {}
             
-            for sample_name in samples_in_class:
+            sample_colors = plt.cm.tab20(np.linspace(0, 1, max(len(samples_in_class), 1)))
+
+            for sample_idx, sample_name in enumerate(samples_in_class):
                 proc_num = process_numbers_mapping[sample_name]
+                color = sample_colors[sample_idx]
                 
                 # Signal: events from GluGluToHH AND this specific sample
-                class_mask = (y_val[:, class_idx] == 1)
+                class_mask = (y_val_[:, class_idx] == 1)
                 sample_mask = (proc_num_val == proc_num)
                 signal_mask = class_mask & sample_mask
                 
                 # Background: all events NOT from GluGluToHH (other classes)
-                background_mask = (y_val[:, class_idx] == 0)
+                background_mask = (y_val_[:, class_idx] == 0)
                 
                 # Create binary labels: this sample vs all other classes
-                y_true_binary = np.zeros(len(y_val))
+                y_true_binary = np.zeros(len(y_val_))
                 y_true_binary[signal_mask] = 1
-                y_score = y_pred_val[:, class_idx]
-                weights = rel_w_val.copy()
+                y_score = y_pred_val_[:, class_idx]
+                weights = rel_w_val_.copy()
                 
                 # Compute ROC curve
                 if np.sum(y_true_binary) > 0 and np.sum(background_mask) > 0:
@@ -602,20 +615,19 @@ if has_process_number:
                     fpr, tpr = zip(*sorted(zip(fpr, tpr)))
                     roc_auc = auc(fpr, tpr)
                     
-                    ax.plot(fpr, tpr, label=f'{sample_name} (AUC = {roc_auc:.4f})', linewidth=2.5)
+                    ax.plot(fpr, tpr, color=color, label=f'{sample_name} (AUC = {roc_auc:.4f})')
                     sample_roc_dict[f"{sample_name}_fpr"] = list(fpr)
                     sample_roc_dict[f"{sample_name}_tpr"] = list(tpr)
                     sample_roc_dict[f"{sample_name}_auc"] = float(roc_auc)
             
             # Plot diagonal
-            ax.plot([0, 1], [0, 1], 'k--', linewidth=1.5)
+            ax.plot([0, 1], [0, 1], 'k--')
             ax.set_xlim([0.0, 1.0])
             ax.set_ylim([0.0, 1.05])
-            ax.set_xlabel('False Positive Rate (Other Classes)', fontsize=12)
-            ax.set_ylabel('True Positive Rate', fontsize=12)
-            ax.set_title(f'Per-Sample ROC: {target_class_name} vs Other Classes', fontsize=14, fontweight='bold')
-            ax.legend(loc="lower right", fontsize=11)
-            ax.grid(True, alpha=0.3)
+            ax.set_xlabel('FPR', fontsize=12)
+            ax.set_ylabel('TPR', fontsize=12)
+            ax.legend(loc="lower right", fontsize=10)
+            ax.grid(True)
             fig.tight_layout()
             
             # Save normal scale version
@@ -626,6 +638,7 @@ if has_process_number:
             # Save log scale version
             ax.set_xlim([0.0001, 1.0])
             ax.set_xscale('log')
+            ax.legend(loc="upper left", fontsize=10)
             outpath = f'{path_for_plots}/roc_per_sample_{target_class_name}_vs_others_logx.png'
             fig.savefig(outpath, dpi=150)
             print(f"INFO: >>> {outpath}")
@@ -642,123 +655,6 @@ if has_process_number:
             print(f"WARNING: Class '{target_class_name}' has only {len(samples_in_class)} sample(s). Skipping per-sample ROC.")
 
 
-# ============================================================================
-# Per-sample validation plots for GluGluToHH
-# ============================================================================
-if has_process_number:
-    print("\nINFO: Generating per-sample validation plots for GluGluToHH...")
-    
-    target_class_name = "GluGluToHH"
-    try:
-        class_idx = class_names.index(target_class_name)
-    except ValueError:
-        print(f"WARNING: Class '{target_class_name}' not found in class_names")
-        class_idx = None
-    
-    if class_idx is not None:
-        samples_in_class = [sample for sample, cls in sample_to_class_mapping.items() 
-                           if cls == target_class_name]
-        
-        if len(samples_in_class) > 1:
-            print(f"Processing per-sample validation plots for '{target_class_name}' with samples: {samples_in_class}")
-            
-            # Create one figure for all samples
-            fig, ax = plt.subplots(figsize=(12, 8))
-            
-            colors_per_sample = plt.cm.tab10(np.linspace(0, 1, len(samples_in_class)))
-            
-            max_y = 0
-            
-            for sample_idx, sample_name in enumerate(samples_in_class):
-                proc_num = process_numbers_mapping[sample_name]
-                color = colors_per_sample[sample_idx]
-                
-                # --- TRAIN data for this sample ---
-                class_mask_train = (y_train[:, class_idx] == 1)
-                sample_mask_train = (proc_num_train == proc_num)
-                mask_train = class_mask_train & sample_mask_train
-                
-                y_vals_train = y_pred_train[mask_train, class_idx]
-                weights_train = rel_w_train[mask_train]
-                weights_sq_train = weights_train ** 2
-                
-                if len(y_vals_train) > 0:
-                    hist_raw_train, bin_edges = np.histogram(y_vals_train, bins=25, weights=weights_train, range=(0, 1))
-                    hist_sq_raw_train, _ = np.histogram(y_vals_train, bins=bin_edges, weights=weights_sq_train, range=(0, 1))
-                    bin_widths = np.diff(bin_edges)
-                    
-                    total_weight_train = np.sum(hist_raw_train)
-                    if total_weight_train > 0:
-                        hist_density_train = hist_raw_train / (total_weight_train * bin_widths)
-                        uncertainty_density_train = np.sqrt(hist_sq_raw_train) / (total_weight_train * bin_widths)
-                        bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
-                        
-                        max_y = max(max_y, np.max(hist_density_train + uncertainty_density_train))
-                        
-                        # Step line for train
-                        ax.step(bin_centers, hist_density_train, where='mid', 
-                               label=f'Train {sample_name}', color=color, linewidth=2.5, linestyle='-')
-                        
-                        # Shaded uncertainty band for train
-                        ax.fill_between(bin_centers, 
-                                       hist_density_train - uncertainty_density_train,
-                                       hist_density_train + uncertainty_density_train,
-                                       step='mid', color=color, alpha=0.2)
-                
-                # --- VALIDATION data for this sample ---
-                class_mask_val = (y_val_[:, class_idx] == 1)
-                sample_mask_val = (proc_num_val == proc_num)
-                mask_val = class_mask_val & sample_mask_val
-                
-                y_vals_val = y_pred_val_[mask_val, class_idx]
-                weights_val = rel_w_val_[mask_val]
-                weights_sq_val = weights_val ** 2
-                
-                if len(y_vals_val) > 0:
-                    hist_raw_val, bin_edges_val = np.histogram(y_vals_val, bins=25, weights=weights_val, range=(0, 1))
-                    hist_sq_raw_val, _ = np.histogram(y_vals_val, bins=bin_edges_val, weights=weights_sq_val, range=(0, 1))
-                    bin_widths_val = np.diff(bin_edges_val)
-                    
-                    total_weight_val = np.sum(hist_raw_val)
-                    if total_weight_val > 0:
-                        hist_density_val = hist_raw_val / (total_weight_val * bin_widths_val)
-                        uncertainty_density_val = np.sqrt(hist_sq_raw_val) / (total_weight_val * bin_widths_val)
-                        bin_centers_val = 0.5 * (bin_edges_val[:-1] + bin_edges_val[1:])
-                        
-                        max_y = max(max_y, np.max(hist_density_val + uncertainty_density_val))
-                        
-                        # Error bars for validation
-                        ax.errorbar(bin_centers_val, hist_density_val, yerr=uncertainty_density_val, 
-                                   fmt='o', label=f'Valid {sample_name}', color=color, 
-                                   markersize=6, capsize=2, elinewidth=1.5, alpha=0.8)
-            
-            # Labels and style
-            ax.set_xlabel(f'{target_class_name} score', fontsize=12)
-            ax.set_ylabel('a.u.', fontsize=12)
-            ax.set_yscale('log')
-            ax.set_ylim(bottom=1e-3, top=max_y * 100)
-            ax.set_xlim(left=0, right=1)
-            ax.set_title(f'Per-Sample Score Distributions: {target_class_name}', fontsize=14, fontweight='bold')
-            
-            ax.legend(ncol=2, fontsize=10, loc='upper right')
-            ax.grid(True, alpha=0.3)
-            
-            fig.tight_layout()
-            outpath = f'{path_for_plots}/{target_class_name}_per_sample_score.png'
-            fig.savefig(outpath, dpi=150)
-            print(f"INFO: >>> {outpath}")
-            plt.close(fig)
-            
-            print(f"INFO: Per-sample validation plots for {target_class_name} completed!")
-        else:
-            print(f"WARNING: Class '{target_class_name}' has only {len(samples_in_class)} sample(s). Skipping per-sample plots.")
-
-
-# ============================================================================
-# Confusion Matrices
-# ============================================================================
-print("\nINFO: Generating confusion matrices...")
-
 # Fixes problem with VBFToHH_sig in class_names when it is not present y predictions
 # TODO: very hacky and will break if DNN out shape changes
 if "VBFToHH_sig" in class_names and y_pred_val_.shape[1] <= 4:
@@ -767,21 +663,165 @@ if "VBFToHH_sig" in class_names and y_pred_val_.shape[1] <= 4:
 else:
     class_names_pruned = class_names
 
-# Validation confusion matrix
-y_pred_val_labels = np.argmax(y_pred_val_, axis=1)
-y_val_labels = np.argmax(y_val_, axis=1)
-cm_val = confusion_matrix(y_val_labels, y_pred_val_labels)
+# ============================================================================
+# Per-sample validation plots for GluGluToHH
+# ============================================================================
+if has_process_number:
+    print("\nINFO: Generating class-wise score plots with all GGHH signal samples...")
 
-# Plot validation confusion matrix
+    gghh_json_class = "is_GluGluToHH_sig"
+    gghh_model_class = json_class_to_model_class[gghh_json_class]
+
+    try:
+        gghh_class_idx = class_names.index(gghh_model_class)
+    except ValueError:
+        print(f"WARNING: Class '{gghh_model_class}' not found in class_names")
+        gghh_class_idx = None
+
+    if gghh_class_idx is not None:
+        samples_in_class = [sample for sample, cls in sample_to_class_mapping.items() if cls == gghh_json_class]
+
+        if len(samples_in_class) > 0:
+            print(f"Processing GGHH samples: {samples_in_class}")
+
+            valid_samples = [s for s in samples_in_class if s in process_numbers_mapping]
+            missing_samples = [s for s in samples_in_class if s not in process_numbers_mapping]
+            for sample_name in missing_samples:
+                print(f"WARNING: Sample '{sample_name}' not found in process_numbers_mapping. Skipping.")
+
+            sample_colors = plt.cm.tab20(np.linspace(0, 1, max(len(valid_samples), 1)))
+
+            for class_plot_idx, (json_class_name, model_class_name) in enumerate(json_class_to_model_class.items()):
+                if model_class_name not in class_names_pruned:
+                    print(f"WARNING: Mapped class '{model_class_name}' is missing from class_names_pruned. Skipping this class.")
+                    continue
+
+                score_idx = class_names_pruned.index(model_class_name)
+                fig, ax = plt.subplots(figsize=(8, 6))
+                max_y = 0
+
+                for sample_idx, sample_name in enumerate(valid_samples):
+                    proc_num = process_numbers_mapping[sample_name]
+                    color = sample_colors[sample_idx]
+
+                    mask_train_sample = (y_train[:, gghh_class_idx] == 1) & (proc_num_train == proc_num)
+                    mask_val_sample = (y_val_[:, gghh_class_idx] == 1) & (proc_num_val == proc_num)
+
+                    if np.sum(mask_train_sample) == 0 and np.sum(mask_val_sample) == 0:
+                        continue
+
+                    y_vals_train = y_pred_train[mask_train_sample, score_idx]
+                    weights_train = rel_w_train[mask_train_sample]
+                    weights_sq_train = weights_train ** 2
+
+                    if len(y_vals_train) > 0:
+                        hist_raw_train, bin_edges = np.histogram(y_vals_train, bins=25, weights=weights_train, range=(0, 1))
+                        hist_sq_raw_train, _ = np.histogram(y_vals_train, bins=bin_edges, weights=weights_sq_train, range=(0, 1))
+                        bin_widths = np.diff(bin_edges)
+
+                        total_weight_train = np.sum(hist_raw_train)
+                        if total_weight_train > 0:
+                            hist_density_train = hist_raw_train / (total_weight_train * bin_widths)
+                            uncertainty_density_train = np.sqrt(hist_sq_raw_train) / (total_weight_train * bin_widths)
+                            bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+
+                            max_y = max(max_y, np.max(hist_density_train + uncertainty_density_train))
+
+                            ax.step(
+                                bin_centers,
+                                hist_density_train,
+                                where='mid',
+                                label=f'Train {sample_name}',
+                                color=color,
+                                linewidth=2,
+                            )
+                            ax.fill_between(
+                                bin_centers,
+                                hist_density_train - uncertainty_density_train,
+                                hist_density_train + uncertainty_density_train,
+                                step='mid',
+                                color=color,
+                                alpha=0.2,
+                            )
+
+                    y_vals_val = y_pred_val_[mask_val_sample, score_idx]
+                    weights_val = rel_w_val_[mask_val_sample]
+                    weights_sq_val = weights_val ** 2
+
+                    if len(y_vals_val) > 0:
+                        hist_raw_val, bin_edges_val = np.histogram(y_vals_val, bins=25, weights=weights_val, range=(0, 1))
+                        hist_sq_raw_val, _ = np.histogram(y_vals_val, bins=bin_edges_val, weights=weights_sq_val, range=(0, 1))
+                        bin_widths_val = np.diff(bin_edges_val)
+
+                        total_weight_val = np.sum(hist_raw_val)
+                        if total_weight_val > 0:
+                            hist_density_val = hist_raw_val / (total_weight_val * bin_widths_val)
+                            uncertainty_density_val = np.sqrt(hist_sq_raw_val) / (total_weight_val * bin_widths_val)
+                            bin_centers_val = 0.5 * (bin_edges_val[:-1] + bin_edges_val[1:])
+
+                            max_y = max(max_y, np.max(hist_density_val + uncertainty_density_val))
+
+                            ax.errorbar(
+                                bin_centers_val,
+                                hist_density_val,
+                                yerr=uncertainty_density_val,
+                                fmt='o',
+                                label=f'Valid {sample_name}',
+                                color=color,
+                                markersize=5,
+                                capsize=2,
+                                elinewidth=1,
+                            )
+
+                if max_y <= 0:
+                    print(f"WARNING: No valid histogram content for class '{model_class_name}'. Skipping figure save.")
+                    plt.close(fig)
+                    continue
+
+                ax.set_xlabel(f'{model_class_name} score')
+                ax.set_ylabel('a.u.', fontsize=12)
+                ax.set_yscale('log')
+                ax.set_ylim(bottom=1e-3, top=max_y * 100)
+                ax.set_xlim(left=0, right=1)
+                ax.legend(ncol=2, fontsize=5)
+
+                fig.tight_layout()
+                outpath = f'{path_for_plots}/gghh_samples_{model_class_name}_score.png'
+                fig.savefig(outpath, dpi=150)
+                print(f"INFO: >>> {outpath}")
+                plt.close(fig)
+
+            print("INFO: Class-wise all-sample score plots completed!")
+            
+            print(f"INFO: Per-sample validation plots for {target_class_name} completed!")
+        else:
+            print("WARNING: No samples found for class 'is_GluGluToHH_sig'. Skipping per-sample plots.")
+
+
+# ============================================================================
+# Confusion Matrices
+# ============================================================================
+print("\nINFO: Generating confusion matrices...")
+
+def normalize_confusion_matrix_rows(cm):
+    row_sums = cm.sum(axis=1, keepdims=True)
+    # Avoid division by zero for classes that may have zero events.
+    row_sums[row_sums == 0] = 1
+    return cm.astype(float) / row_sums
+# Combine train and validation for one confusion matrix over all datasets.
+y_pred_all = np.vstack([y_pred_train, y_pred_val_])
+y_true_all = np.vstack([y_train, y_val_])
+
+y_pred_all_labels = np.argmax(y_pred_all, axis=1)
+y_true_all_labels = np.argmax(y_true_all, axis=1)
+cm_all = confusion_matrix(y_true_all_labels, y_pred_all_labels, labels=range(n_classes))
+cm_all_norm = normalize_confusion_matrix_rows(cm_all)
+
+# Plot confusion matrix for all datasets
 fig, ax = plt.subplots(figsize=(10, 8))
-try:
-    im = ax.imshow(cm_val, interpolation='auto', cmap=plt.cm.Blues)
-except ValueError:
-    # Fallback to 'nearest' interpolation if 'auto' fails (matplotlib 3.9 version compatibility)
-    im = ax.imshow(cm_val, interpolation='nearest', cmap=plt.cm.Blues)
+im = ax.imshow(cm_all_norm, interpolation='nearest', cmap=plt.cm.Blues, vmin=0.0, vmax=1.0)
 ax.set_xlabel('Predicted Label', fontsize=12)
 ax.set_ylabel('True Label', fontsize=12)
-ax.set_title('Confusion Matrix - Validation Set', fontsize=14, fontweight='bold')
 ax.set_xticks(range(n_classes))
 ax.set_yticks(range(n_classes))
 ax.set_xticklabels(class_names_pruned, rotation=45, ha='right')
@@ -790,46 +830,14 @@ ax.set_yticklabels(class_names_pruned)
 # Add text annotations
 for i in range(n_classes):
     for j in range(n_classes):
-        text = ax.text(j, i, f'{cm_val[i, j]:.0f}', ha="center", va="center", 
-                      color="white" if cm_val[i, j] > cm_val.max() / 2 else "black", fontsize=11)
+        text = ax.text(j, i, f'{cm_all_norm[i, j]:.2f}', ha="center", va="center", 
+                      color="white" if cm_all_norm[i, j] > 0.5 else "black", fontsize=11)
 
 plt.colorbar(im, ax=ax)
 fig.tight_layout()
-outpath = f'{path_for_plots}/confusion_matrix_validation.png'
+outpath = f'{path_for_plots}/confusion_matrix.png'
 fig.savefig(outpath, dpi=150)
-print(f"INFO: >>> {outpath}")
+
 plt.close(fig)
-
-# Training confusion matrix
-y_pred_train_labels = np.argmax(y_pred_train, axis=1)
-y_train_labels = np.argmax(y_train, axis=1)
-cm_train = confusion_matrix(y_train_labels, y_pred_train_labels)
-
-fig, ax = plt.subplots(figsize=(10, 8))
-try:
-    im = ax.imshow(cm_train, interpolation='auto', cmap=plt.cm.Blues)
-except ValueError:
-    # Fallback to 'nearest' interpolation if 'auto' fails (matplotlib 3.9 version compatibility)
-    im = ax.imshow(cm_train, interpolation='nearest', cmap=plt.cm.Blues)
-ax.set_xlabel('Predicted Label', fontsize=12)
-ax.set_ylabel('True Label', fontsize=12)
-ax.set_title('Confusion Matrix - Training Set', fontsize=14, fontweight='bold')
-ax.set_xticks(range(n_classes))
-ax.set_yticks(range(n_classes))
-ax.set_xticklabels(class_names_pruned, rotation=45, ha='right')
-ax.set_yticklabels(class_names_pruned)
-
-for i in range(n_classes):
-    for j in range(n_classes):
-        text = ax.text(j, i, f'{cm_train[i, j]:.0f}', ha="center", va="center", 
-                      color="white" if cm_train[i, j] > cm_train.max() / 2 else "black", fontsize=11)
-
-plt.colorbar(im, ax=ax)
-fig.tight_layout()
-outpath = f'{path_for_plots}/confusion_matrix_training.png'
-fig.savefig(outpath, dpi=150)
 print(f"INFO: >>> {outpath}")
-plt.close(fig)
-
 print("INFO: Confusion matrices completed!")
-
