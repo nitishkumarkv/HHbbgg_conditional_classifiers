@@ -42,6 +42,7 @@ class PrepareInputs:
             self.classes = self.training_info["classes"]
             self.random_seed = self.training_info["random_seed"]
             self.weight_scheme_process = self.training_info["weight_scheme_process"]
+            self.class_weight_scale = {class_name: float(self.training_info.get("class_weight_scale", {}).get(class_name, 1.0)) for class_name in self.classes}
             self.write_chunk = self.training_info["write_chunk"]
         self.fill_nan = -9
         self.max_input_files = max_input_files
@@ -49,7 +50,7 @@ class PrepareInputs:
         self._files_processed = 0
 
 
-        self.extra_vars_train = ["weight", "mass", "nonRes_dijet_mass", "nonResReg_dijet_mass", "nonResReg_dijet_mass_DNNreg", "nonResReg_vbfpair_dijet_mass", "nonResReg_vbfpair_HHbbggCandidate_mass", "nonResReg_HHbbggCandidate_mass", "nonResReg_dijet_pt", "nonResReg_lead_bjet_pt", "nonResReg_sublead_bjet_pt", "pt"]
+        self.extra_vars_train = ["weight", "mass", "nonRes_dijet_mass", "nonResReg_dijet_mass", "nonRes_M_X", "nonResReg_M_X", "nonResReg_dijet_mass_DNNreg", "nonResReg_vbfpair_dijet_mass", "nonResReg_vbfpair_HHbbggCandidate_mass", "nonResReg_HHbbggCandidate_mass", "nonResReg_dijet_pt", "nonResReg_lead_bjet_pt", "nonResReg_sublead_bjet_pt", "pt"]
         
         self.extra_vars_out = ["lead_genPartFlav", "sublead_genPartFlav","n_electrons", "n_muons", "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet7_pt", "jet8_pt", "jet9_pt", "jet10_pt", "nBTight"] #for ttH category: njets already included as a training var
 
@@ -141,15 +142,83 @@ class PrepareInputs:
 
     def add_var(self, events, era):
 
-        events["diphoton_PtOverM_ggjj"] = events.pt / events.nonResReg_HHbbggCandidate_mass
-        events["nonResReg_dijet_PtOverM_ggjj"] = events.nonResReg_dijet_pt / events.nonResReg_HHbbggCandidate_mass
+        # events["diphoton_PtOverM_ggjj"] = events.pt / events.nonResReg_HHbbggCandidate_mass
+        # events["nonResReg_dijet_PtOverM_ggjj"] = events.nonResReg_dijet_pt / events.nonResReg_HHbbggCandidate_mass
 
         events["nonResReg_lead_bjet_over_M_regressed"] = events.nonResReg_lead_bjet_pt / events.nonResReg_dijet_mass_DNNreg
         events["nonResReg_sublead_bjet_over_M_regressed"] = events.nonResReg_sublead_bjet_pt / events.nonResReg_dijet_mass_DNNreg
 
         # add deltaR between lead and sublead photon
-        events["deltaR_gg"] = self.deltaR(events.lead_eta, events.lead_phi, events.sublead_eta, events.sublead_phi)
-        
+        # events["deltaR_gg"] = self.deltaR(events.lead_eta, events.lead_phi, events.sublead_eta, events.sublead_phi)
+
+        btagVariable = "btag"
+        if era == "preEE":
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.047, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.245, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.6734, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.7862, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.961, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.047, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.245, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.6734, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.7862, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.961, int)
+        elif era == "postEE":
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.0499, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.2605, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.6915, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.8033, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.9664, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.0499, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.2605, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.6915, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.8033, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.9664, int)
+        elif era == "preBPix":
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.0358, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.1917, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.6172, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.7515, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.9659, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.0358, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.1917, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.6172, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.7515, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.9659, int)
+        elif era == "postBPix":
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.0359, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.1919, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.6133, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.7544, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.9688, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.0359, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.1919, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.6133, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.7544, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.9688, int)
+        elif era == "2024" or era == "2025":
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.0246, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.1272, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.4648, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.6298, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.9739, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.0246, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.1272, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.4648, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.6298, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.9739, int)
+        else: # Accounts for Run 2 inclusively, copying the 2024 WPs for now
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.0246, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.1272, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.4648, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.6298, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.9739, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.0246, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.1272, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.4648, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.6298, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.9739, int)
+
         if ("2016" in era) | ("VFP" in era):
             events["year"] = 0
         elif era == "2017":
@@ -305,7 +374,10 @@ class PrepareInputs:
 
         for i in range(y_train.shape[1]):
 
-            if self.weight_scheme_process[self.class_idx_to_name[i]] == "equal_weight":
+            class_name = self.class_idx_to_name[i]
+            class_scale = self.class_weight_scale.get(class_name, 1.0)
+
+            if self.weight_scheme_process[class_name] == "equal_weight":
                 cls_bool = (y_train[:, i] == 1)
 
                 true_class_weights_ = ak.zeros_like(rel_w_train)
@@ -322,22 +394,22 @@ class PrepareInputs:
                     only_positive_rel_xsec_weight_for_class = rel_w_train * cls_bool * (rel_w_train > 0) * (proc_num_train == proc)
                     class_weights_only_positive_ = class_weights_only_positive_ + (only_positive_rel_xsec_weight_for_class / np.sum(only_positive_rel_xsec_weight_for_class))
 
-                # normalize the weights for this class to be one
-                true_class_weights = true_class_weights + (true_class_weights_ / np.sum(true_class_weights_))
-                class_weights_for_training_abs = class_weights_for_training_abs + (class_weights_for_training_abs_ / np.sum(class_weights_for_training_abs_))
-                class_weights_only_positive = class_weights_only_positive + (class_weights_only_positive_ / np.sum(class_weights_only_positive_))
+                # normalize the weights for this class to be class_scale
+                true_class_weights = true_class_weights + class_scale * (true_class_weights_ / np.sum(true_class_weights_))
+                class_weights_for_training_abs = class_weights_for_training_abs + class_scale * (class_weights_for_training_abs_ / np.sum(class_weights_for_training_abs_))
+                class_weights_only_positive = class_weights_only_positive + class_scale * (class_weights_only_positive_ / np.sum(class_weights_only_positive_))
                 
             else:
                 cls_bool = (y_train[:, i] == 1)
 
                 rel_xsec_weight_for_class = rel_w_train * cls_bool
-                true_class_weights = true_class_weights + (rel_xsec_weight_for_class / np.sum(rel_xsec_weight_for_class))
+                true_class_weights = true_class_weights + class_scale * (rel_xsec_weight_for_class / np.sum(rel_xsec_weight_for_class))
 
                 abs_rel_xsec_weight_for_class = abs(rel_w_train) * cls_bool
-                class_weights_for_training_abs = class_weights_for_training_abs + (abs_rel_xsec_weight_for_class / np.sum(abs_rel_xsec_weight_for_class))
+                class_weights_for_training_abs = class_weights_for_training_abs + class_scale * (abs_rel_xsec_weight_for_class / np.sum(abs_rel_xsec_weight_for_class))
 
                 only_positive_rel_xsec_weight_for_class = rel_w_train * cls_bool * (rel_w_train > 0)
-                class_weights_only_positive = class_weights_only_positive + (only_positive_rel_xsec_weight_for_class / np.sum(only_positive_rel_xsec_weight_for_class))
+                class_weights_only_positive = class_weights_only_positive + class_scale * (only_positive_rel_xsec_weight_for_class / np.sum(only_positive_rel_xsec_weight_for_class))
 
         for i in range(y_train.shape[1]):
             print(f"(number of events: sum of class_weights_for_training_abs) for class number {i+1} = ({sum(y_train[:, i])}: {sum(class_weights_for_training_abs[y_train[:, i] == 1])})")
@@ -359,8 +431,10 @@ class PrepareInputs:
         class_weights_for_val = ak.zeros_like(rel_w_val)
 
         for i in range(y_val.shape[1]):
+            class_name = self.class_idx_to_name[i]
+            class_scale = self.class_weight_scale.get(class_name, 1.0)
             
-            if self.weight_scheme_process[self.class_idx_to_name[i]] == "equal_weight":
+            if self.weight_scheme_process[class_name] == "equal_weight":
                 cls_bool = (y_val[:, i] == 1)
                 class_weights_for_val_ = ak.zeros_like(rel_w_val)
 
@@ -368,13 +442,13 @@ class PrepareInputs:
                     rel_xsec_weight_for_class = rel_w_val * cls_bool * (proc_num_val == proc)
                     class_weights_for_val_ = class_weights_for_val_ + (rel_xsec_weight_for_class / np.sum(rel_xsec_weight_for_class))
 
-                # normalize the weights for this class to be one
-                class_weights_for_val = class_weights_for_val + (class_weights_for_val_ / np.sum(class_weights_for_val_))
+                # normalize the weights for this class to be class_scale
+                class_weights_for_val = class_weights_for_val + class_scale * (class_weights_for_val_ / np.sum(class_weights_for_val_))
 
             else:
                 cls_bool = (y_val[:, i] == 1)
                 rel_xsec_weight_for_class = rel_w_val * cls_bool
-                class_weights_for_val = class_weights_for_val + (rel_xsec_weight_for_class / np.sum(rel_xsec_weight_for_class))
+                class_weights_for_val = class_weights_for_val + class_scale * (rel_xsec_weight_for_class / np.sum(rel_xsec_weight_for_class))
 
         for i in range(y_val.shape[1]):
             print(f"(number of events: sum of class_weights_for_val) for class number {i+1} = ({sum(y_val[:, i])}: {sum(class_weights_for_val[y_val[:, i] == 1])})")
@@ -786,7 +860,10 @@ class PrepareInputs:
         # save str of input variables
         with open(f"{out_path}/input_vars.txt", 'w') as f:
             json.dump(vars_for_training, f)
-        
+
+        with open(f"{out_path}/training_info.txt", 'w') as f:
+            json.dump(self.training_info, f)
+
         np.save(f"{out_path}/X_train", X_train)
         np.save(f"{out_path}/X_val", X_val)
         
@@ -838,6 +915,7 @@ class PrepareInputs:
         fill_nan = self.fill_nan
         training_info = self.training_info
         inputs_path = self.outpath
+        # print(f"DEBUG: inputs_path = {inputs_path}")
         out_path = f"{inputs_path}/individual_samples/"
         os.makedirs(out_path, exist_ok=True)
         # get the variables required for training
