@@ -166,9 +166,9 @@ class PrepareInputs:
         
         dict_xsec_13TeV = {
             "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": 0.030649e3 * 0.00227 * 0.576 * 2,#0.033969e3 * 0.00227 * 0.576 * 2,  # cross sectio of GluGluToHH * BR(HToGG) * BR(HTobb) * 2 for two combination ### have to recheck if this is correct. 
-            "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": 0.068317e3 * 0.00227 * 0.576 * 2,
-            "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": 0.013422e3 * 0.00227 * 0.576 * 2,
-            "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": 0.090488e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": 0.068317e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": 0.013422e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": 0.090488e3 * 0.00227 * 0.576 * 2,
 
             # For singleH, XS(process) * BR(HtoGG)
             # Using mH = 125.4 unless specified otherwise
