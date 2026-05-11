@@ -50,9 +50,20 @@ class PrepareInputs:
         self._files_processed = 0
 
 
-        self.extra_vars_train = ["weight", "mass", "nonRes_dijet_mass", "nonResReg_dijet_mass", "nonRes_M_X", "nonResReg_M_X", "nonResReg_dijet_mass_DNNreg", "nonResReg_vbfpair_dijet_mass", "nonResReg_vbfpair_HHbbggCandidate_mass", "nonResReg_HHbbggCandidate_mass", "nonResReg_dijet_pt", "nonResReg_lead_bjet_pt", "nonResReg_sublead_bjet_pt", "pt"]
-        
-        self.extra_vars_out = ["lead_genPartFlav", "sublead_genPartFlav","n_electrons", "n_muons", "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet7_pt", "jet8_pt", "jet9_pt", "jet10_pt", "nBTight"] #for ttH category: njets already included as a training var
+        self.extra_vars_train = ["weight", "mass", "nonRes_dijet_mass", "nonResReg_dijet_mass", "nonResReg_dijet_mass_DNNreg", "nonResReg_vbfpair_dijet_mass", "nonResReg_vbfpair_HHbbggCandidate_mass", "nonResReg_vbfpair_M_X", "nonResReg_vbfpair_dijet_pt", "nonResReg_vbfpair_lead_bjet_pt", "nonResReg_vbfpair_sublead_bjet_pt", "pt", "nonResReg_vbfpair_lead_bjet_btagPNetB", "nonResReg_vbfpair_sublead_bjet_btagPNetB",  "nonResReg_vbfpair_lead_bjet_btagUParTAK4B", "nonResReg_vbfpair_sublead_bjet_btagUParTAK4B"]
+
+        self.extra_vars_out = ["lead_genPartFlav", "sublead_genPartFlav","n_electrons", "n_muons", "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet7_pt", "jet8_pt", "jet9_pt", "jet10_pt", "nBTight", "run", "event", "lumi"] #for ttH category: njets already included as a training var
+
+        fatjet_props = ["msoftdrop", "pt", "eta", "phi", "tau1", "tau2", "tau3", "subjet1_eta", "subjet1_phi", "subjet2_eta", "subjet2_phi", "particleNet_XbbVsQCD", "globalParT3_Xbb", "globalParT3_QCD", "mass_raw", "globalParT3_massCorrX2p"]
+        vars_boosted = [f"fatjet{i}_{prop}" for i in range(1, 5) for prop in fatjet_props]
+        vars_boosted += ["lead_eta", "phi", "n_fatjets"]
+
+        self.extra_vars_out = self.extra_vars_out + vars_boosted
+
+        vars_VBFHH_MVA = ["nonResReg_vbfpair_pholead_PtOverM", "nonResReg_vbfpair_phosublead_PtOverM", "lead_mvaID", "sublead_mvaID", "nonResReg_vbfpair_FirstJet_PtOverM", "nonResReg_vbfpair_SecondJet_PtOverM", "nonResReg_vbfpair_lead_bjet_btagPNetB", "nonResReg_vbfpair_sublead_bjet_btagPNetB", "nonResReg_vbfpair_DeltaR_jg_min", "nonResReg_vbfpair_CosThetaStar_CS", "nonResReg_vbfpair_CosThetaStar_gg", "nonResReg_vbfpair_CosThetaStar_jj", "nonResReg_vbfpair_VBF_first_jet_btagPNetQvG", "nonResReg_vbfpair_VBF_second_jet_btagPNetQvG","nonResReg_vbfpair_VBF_jet_eta_prod", "nonResReg_vbfpair_VBF_jet_eta_diff", "nonResReg_vbfpair_VBF_DeltaR_jb_min", "nonResReg_vbfpair_VBF_DeltaR_jg_min", "nonResReg_vbfpair_VBF_Cgg", "nonResReg_vbfpair_VBF_Cbb", "nonResReg_vbfpair_VBF_first_jet_PtOverM", "nonResReg_vbfpair_VBF_second_jet_PtOverM", "nonResReg_vbfpair_VBF_dijet_mass", "nonResReg_vbfpair_VBF_dijet_vbfpair_Score_jj", "nonResReg_vbfpair_HHbbggCandidate_pt"]
+        vars_VBFHH_MVA += ["nonResReg_vbfpair_dijet_mass"]
+
+        self.extra_vars_out = self.extra_vars_out + vars_VBFHH_MVA
 
         # prepare process numbers for proccesses in each class
         num_process_each_class = {
@@ -145,13 +156,17 @@ class PrepareInputs:
         # events["diphoton_PtOverM_ggjj"] = events.pt / events.nonResReg_HHbbggCandidate_mass
         # events["nonResReg_dijet_PtOverM_ggjj"] = events.nonResReg_dijet_pt / events.nonResReg_HHbbggCandidate_mass
 
-        events["nonResReg_lead_bjet_over_M_regressed"] = events.nonResReg_lead_bjet_pt / events.nonResReg_dijet_mass_DNNreg
-        events["nonResReg_sublead_bjet_over_M_regressed"] = events.nonResReg_sublead_bjet_pt / events.nonResReg_dijet_mass_DNNreg
+        # events["diphoton_PtOverM_X"] = events.pt / events.nonResReg_vbfpair_M_X
+        # events["nonResReg_dijet_PtOverM_X"] = events.nonResReg_dijet_pt / events.nonResReg_vbfpair_M_X
+
+        events["nonResReg_lead_bjet_over_M_regressed"] = events.nonResReg_vbfpair_lead_bjet_pt / events.nonResReg_vbfpair_dijet_mass
+        events["nonResReg_sublead_bjet_over_M_regressed"] = events.nonResReg_vbfpair_sublead_bjet_pt / events.nonResReg_vbfpair_dijet_mass
 
         # add deltaR between lead and sublead photon
         # events["deltaR_gg"] = self.deltaR(events.lead_eta, events.lead_phi, events.sublead_eta, events.sublead_phi)
 
         btagVariable = "btag"
+        # Use PNetB for NanoAODv12/v13 
         if era == "preEE":
             events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.047, int)
             events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.245, int)
@@ -196,28 +211,64 @@ class PrepareInputs:
             events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.6133, int)
             events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.7544, int)
             events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.9688, int)
+        # Use UParT for NanoAODv15
         elif era == "2024" or era == "2025":
-            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.0246, int)
-            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.1272, int)
-            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.4648, int)
-            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.6298, int)
-            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.9739, int)
-            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.0246, int)
-            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.1272, int)
-            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.4648, int)
-            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.6298, int)
-            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.9739, int)
-        else: # Accounts for Run 2 inclusively, copying the 2024 WPs for now
-            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.0246, int)
-            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.1272, int)
-            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.4648, int)
-            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.6298, int)
-            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagPNetB"] > 0.9739, int)
-            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.0246, int)
-            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.1272, int)
-            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.4648, int)
-            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.6298, int)
-            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagPNetB"] > 0.9739, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagUParTAK4B"] > 0.0246, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagUParTAK4B"] > 0.1272, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagUParTAK4B"] > 0.4648, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagUParTAK4B"] > 0.6298, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagUParTAK4B"] > 0.9739, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagUParTAK4B"] > 0.0246, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagUParTAK4B"] > 0.1272, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagUParTAK4B"] > 0.4648, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagUParTAK4B"] > 0.6298, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagUParTAK4B"] > 0.9739, int)
+        elif era == "2016preVFP":
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagUParTAK4B"] > 0.0387, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagUParTAK4B"] > 0.1847, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagUParTAK4B"] > 0.5467, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagUParTAK4B"] > 0.6777, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagUParTAK4B"] > 0.9218, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagUParTAK4B"] > 0.0387, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagUParTAK4B"] > 0.1847, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagUParTAK4B"] > 0.5467, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagUParTAK4B"] > 0.6777, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagUParTAK4B"] > 0.9218, int)
+        elif era == "2016postVFP":
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagUParTAK4B"] > 0.0400, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagUParTAK4B"] > 0.1898, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagUParTAK4B"] > 0.5538, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagUParTAK4B"] > 0.6872, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagUParTAK4B"] > 0.9353, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagUParTAK4B"] > 0.0400, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagUParTAK4B"] > 0.1898, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagUParTAK4B"] > 0.5538, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagUParTAK4B"] > 0.6872, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagUParTAK4B"] > 0.9353, int)
+        elif era == "2017":
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagUParTAK4B"] > 0.0331, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagUParTAK4B"] > 0.1776, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagUParTAK4B"] > 0.5755, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagUParTAK4B"] > 0.7274, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagUParTAK4B"] > 0.9666, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagUParTAK4B"] > 0.0331, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagUParTAK4B"] > 0.1776, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagUParTAK4B"] > 0.5755, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagUParTAK4B"] > 0.7274, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagUParTAK4B"] > 0.9666, int)
+        elif era == "2018":
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagUParTAK4B"] > 0.0308, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagUParTAK4B"] > 0.1610, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagUParTAK4B"] > 0.5405, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagUParTAK4B"] > 0.6992, int)
+            events["nonResReg_vbfpair_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_vbfpair_lead_bjet_btagUParTAK4B"] > 0.9655, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagUParTAK4B"] > 0.0308, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagUParTAK4B"] > 0.1610, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagUParTAK4B"] > 0.5405, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagUParTAK4B"] > 0.6992, int)
+            events["nonResReg_vbfpair_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events["nonResReg_vbfpair_sublead_bjet_btagUParTAK4B"] > 0.9655, int)
+        else:
+            raise ValueError(f"Era '{era}' not recognized for b-tagging WP assignment")
 
         if ("2016" in era) | ("VFP" in era):
             events["year"] = 0
@@ -235,6 +286,8 @@ class PrepareInputs:
             events["year"] = 4
         elif era == "2024":
             events["year"] = 5
+        elif era == "2025":
+            events["year"] = 6
 
         return events
 
@@ -275,9 +328,9 @@ class PrepareInputs:
         
         dict_xsec_13TeV = {
             "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": 0.030649e3 * 0.00227 * 0.576 * 2,#0.033969e3 * 0.00227 * 0.576 * 2,  # cross sectio of GluGluToHH * BR(HToGG) * BR(HTobb) * 2 for two combination ### have to recheck if this is correct. 
-            "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": 0.068317e3 * 0.00227 * 0.576 * 2,
-            "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": 0.013422e3 * 0.00227 * 0.576 * 2,
-            "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": 0.090488e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": 0.068317e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": 0.013422e3 * 0.00227 * 0.576 * 2,
+            "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": 0.090488e3 * 0.00227 * 0.576 * 2,
 
             "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_1p00": 0.132486e3 * 0.00227 * 0.576 * 2,
             "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p10": 0.016068e3 * 0.00227 * 0.576 * 2,
@@ -285,6 +338,17 @@ class PrepareInputs:
             "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_3p00": 2.617158e3 * 0.00227 * 0.576 * 2,
             "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_m2p00": 1.791638e3 * 0.00227 * 0.576 * 2,
             "GluGlutoHHto2B2G_kl_m20p00_kt_1p00_c2_2p24": 1.752648e3 * 0.00227 * 0.576 * 2, 
+
+            "VBFHH_CV_1_C2V_1_C3_1": 0.0017260e3 * 0.00227 * 0.576 * 2,
+            "VBFHH_CV_1_C2V_0_C3_1": 0.0270800e3 * 0.00227 * 0.576 * 2,
+            "VBFHH_CV_1p74_C2V_1p37_C3_14p4": 0.3777832e3 * 0.00227 * 0.576 * 2,
+            "VBFHH_CV_2p12_C2V_3p87_C3_m5p96": 0.6322811e3 * 0.00227 * 0.576 * 2,
+            "VBFHH_CV_m0p012_C2V_0p030_C3_10p2": 0.0000120e3 * 0.00227 * 0.576 * 2,
+            "VBFHH_CV_m0p758_C2V_1p44_C3_m19p3": 0.3340766e3 * 0.00227 * 0.576 * 2,
+            "VBFHH_CV_m0p962_C2V_0p959_C3_m1p43": 0.0009976e3 * 0.00227 * 0.576 * 2,
+            "VBFHH_CV_m1p21_C2V_1p94_C3_m0p94": 0.0033739e3 * 0.00227 * 0.576 * 2,
+            "VBFHH_CV_m1p60_C2V_2p72_C3_m1p36": 0.0105109e3 * 0.00227 * 0.576 * 2,
+            "VBFHH_CV_m1p83_C2V_3p57_C3_m3p39": 0.0149850e3 * 0.00227 * 0.576 * 2,
 
             # For singleH, XS(process) * BR(HtoGG)
             # Using mH = 125.4 unless specified otherwise
@@ -314,6 +378,17 @@ class PrepareInputs:
             "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p10": 0.017809e3 * 0.00227 * 0.576 * 2,
             "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_m2p00": 1.985733e3 * 0.00227 * 0.576 * 2,
             "GluGlutoHHto2B2G_kl_m20p00_kt_1p00_c2_2p24": 1.752648e3 * 1.108268907 * 0.00227 * 0.576 * 2, 
+
+            "VBFHH_CV_1_C2V_1_C3_1": 0.0019292e3 * 0.00227 * 0.576 * 2,
+            "VBFHH_CV_1_C2V_0_C3_1": 0.0296772e3 * 0.00227 * 0.576 * 2,
+            "VBFHH_CV_1p74_C2V_1p37_C3_14p4": 0.4002163e3 * 0.00227 * 0.576 * 2,
+            "VBFHH_CV_2p12_C2V_3p87_C3_m5p96": 0.6800842e3 * 0.00227 * 0.576 * 2,
+            "VBFHH_CV_m0p012_C2V_0p030_C3_10p2": 0.0000127e3 * 0.00227 * 0.576 * 2,
+            "VBFHH_CV_m0p758_C2V_1p44_C3_m19p3": 0.3593242e3 * 0.00227 * 0.576 * 2,
+            "VBFHH_CV_m0p962_C2V_0p959_C3_m1p43": 0.0011275e3 * 0.00227 * 0.576 * 2,
+            "VBFHH_CV_m1p21_C2V_1p94_C3_m0p94": 0.0037987e3 * 0.00227 * 0.576 * 2,
+            "VBFHH_CV_m1p60_C2V_2p72_C3_m1p36": 0.0117008e3 * 0.00227 * 0.576 * 2,
+            "VBFHH_CV_m1p83_C2V_3p57_C3_m3p39": 0.0168528e3 * 0.00227 * 0.576 * 2,
 
             # For singleH, XS(process) * BR(HtoGG)
             # Using mH = 125.38 unless specified otherwise
@@ -346,7 +421,8 @@ class PrepareInputs:
         "postEE": 26.67,  # Integrated luminosity for postEE in fb^-1
         "preBPix": 18.06,  # Integrated luminosity for preEE in fb^-1
         "postBPix": 9.89,  # Integrated luminosity for postEE in fb^-1
-        "2024": 108.82
+        "2024": 108.82,
+        "2025": 110.58,
         }
 
         lumi = luminosities[era]
@@ -356,13 +432,16 @@ class PrepareInputs:
         if era in ["2016preVFP", "2016postVFP", "2017", "2018"]:
             events["weight_tot"] = (events.weight) * dict_xsec_13TeV[sample_type] * lumi
         
-        elif era in ["preEE", "postEE", "preBPix", "postBPix", "2024"]:
+        elif era in ["preEE", "postEE", "preBPix", "postBPix", "2024", "2025"]:
             events["weight_tot"] = (events.weight) * dict_xsec_13p6TeV[sample_type] * lumi
         else:
             raise ValueError(f"Unknown era: {era}")
         
-        if (era == "2024") & (sample_type == "GGJets"):
+        if (era == "2024" or era == "2025") & (sample_type == "GGJets"):
             events["weight_tot"] = (events.weight_tot) * 1.5925
+
+        if (era == "2024" or era == "2025") & (sample_type == "DDQCDGJET"):
+            events["weight_tot"] = (events.weight_tot) * 1.21
 
         return events
 
@@ -568,7 +647,7 @@ class PrepareInputs:
     def preselection(self, events):
         
         mass_bool = ((events.mass > 100) & (events.mass < 180))
-        dijet_mass_bool = ((events.nonResReg_dijet_mass_DNNreg > 70) & (events.nonResReg_dijet_mass_DNNreg < 190))
+        dijet_mass_bool = ((events.nonResReg_vbfpair_dijet_mass > 70) & (events.nonResReg_vbfpair_dijet_mass < 190))
 
         lead_mvaID_bool = (events.lead_mvaID > -0.7)
         sublead_mvaID_bool = (events.sublead_mvaID > -0.7)
@@ -630,6 +709,8 @@ class PrepareInputs:
         ]
 
         for var in vars_for_training:
+            print(f"Plotting variable: {var}")
+
             plt.figure(figsize=(10, 9))
             sample_num = 0
             data_to_plot_dict = {}
@@ -702,15 +783,21 @@ class PrepareInputs:
         vars_for_training = vars_config["vars"] 
         # vars_for_log = vars_config["vars_for_log_transform"]
 
-        vars_to_load = vars_for_training + self.extra_vars_train
-
         # Dictionary to accumulate events by sample (across all eras)
         sample_events_dict = {sample: [] for sample in self.sample_to_class.keys()}
 
         stop_processing = False
 
         for era in self.training_info["samples_info"]["eras"]:
-            # for samples in self.sample_to_class.keys():                
+
+            vars_to_load = vars_for_training + self.extra_vars_train
+
+            # remove the UParTAK4B if NanoAODv12/v13
+            if any(x in era for x in ["preEE", "postEE", "preBPix", "postBPix"]):
+                vars_to_load.remove("nonResReg_vbfpair_lead_bjet_btagUParTAK4B")
+                vars_to_load.remove("nonResReg_vbfpair_sublead_bjet_btagUParTAK4B")
+    
+            # for samples in self.sample_to_class.keys(): 
             for samples in self.training_info["samples_info"][era].keys():                
                 if stop_processing or not self._can_process_more_input_files():
                     stop_processing = True
@@ -760,8 +847,8 @@ class PrepareInputs:
                 # plot_correlation_matrix
                 os.makedirs(f"{out_path}/correlation_matrix/", exist_ok=True)
                 corr_out_path = f"{out_path}/correlation_matrix/corr_mgg_mjj_{samples}_{era}.pdf"
-                self.corr_with_mgg_mjj(events, vars_for_training, corr_out_path)
-                self.plot_correlation_matrix(events, vars_for_training, f"{out_path}/correlation_matrix/corr_matrix_{samples}_{era}.pdf")
+                # self.corr_with_mgg_mjj(events, vars_for_training, corr_out_path)
+                # self.plot_correlation_matrix(events, vars_for_training, f"{out_path}/correlation_matrix/corr_matrix_{samples}_{era}.pdf")
 
                 print("INFO: Appending process samples to whole dataframe")
 
@@ -811,6 +898,23 @@ class PrepareInputs:
         self.plot_variables(comb_inputs, vars_for_training, plot_path)
         for cls in self.classes:
             print("\n", f"INFO: Number of events in {cls}: {sum(comb_inputs[cls])}")
+
+        print("\n=== Sanity check: per-sample feature missingness ===")
+        problematic = []
+        for sample in self.sample_to_class.keys():
+            sample_mask = comb_inputs["sample_type"] == sample
+            n = sample_mask.sum()
+            if n == 0:
+                print(f"  [WARN] {sample}: 0 events after preselection")
+                continue
+            for var in vars_for_training:
+                n_valid = ((comb_inputs.loc[sample_mask, var] > -998.0)).sum()
+                frac_missing = 1 - n_valid / n
+                if frac_missing > 0.99:   # >99% missing
+                    problematic.append((sample, var, frac_missing, n))
+                    print(f"  [LEAK?] {sample} / {var}: "
+                        f"{frac_missing*100:.1f}% missing ({n} events) — "
+                        f"will become constant -9 → label leakage risk")
 
         X = comb_inputs[vars_for_training]
         Y = comb_inputs[[cls for cls in self.classes]]
@@ -927,14 +1031,21 @@ class PrepareInputs:
         reported_x_features = False
 
         # vars_for_log = vars_config["vars_for_log_transform"]
-
-        vars_to_load = vars_for_training + self.extra_vars_train + self.extra_vars_out
+        vars_gen = ["gen_mHH_hardProc", "gen_pT_HH_hardProc", "gen_CosThetaStar_HH_hardProc"]
 
         samples_path = training_info["samples_info"]["samples_path"]
 
         stop_processing = False
 
         for era in training_info["samples_info"]["eras"]:
+
+            vars_to_load = vars_for_training + self.extra_vars_train + self.extra_vars_out
+
+            # remove the UParTAK4B if NanoAODv12/v13
+            if any(x in era for x in ["preEE", "postEE", "preBPix", "postBPix"]):
+                vars_to_load.remove("nonResReg_vbfpair_lead_bjet_btagUParTAK4B")
+                vars_to_load.remove("nonResReg_vbfpair_sublead_bjet_btagUParTAK4B")
+    
             for samples in training_info["samples_info"][era].keys():
                 if stop_processing or not self._can_process_more_input_files():
                     stop_processing = True
@@ -943,6 +1054,12 @@ class PrepareInputs:
                 parquet_path = training_info["samples_info"][era][samples]
                 if self.save_all_columns_sim_nominal:
                     events = ak.from_parquet(f"{samples_path}/{parquet_path}")
+                elif ("GluGlutoHHto2B2G_kl" in samples):
+                    vars_to_load = vars_to_load + vars_gen
+                    events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
+                elif ("EFTReweighted" in samples):
+                    vars_to_load = vars_to_load + vars_EFTReweighted + vars_gen
+                    events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
                 else:
                     events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
                 events = self._apply_input_caps(events)
@@ -1053,13 +1170,19 @@ class PrepareInputs:
 
         # vars_for_log = vars_config["vars_for_log_transform"]
 
-        vars_to_load = vars_for_training + self.extra_vars_train + self.extra_vars_out
-
         samples_path = training_info["samples_info"]["samples_path"]
 
         stop_processing = False
 
         for era in training_info["samples_info"]["eras"]:
+
+            vars_to_load = vars_for_training + self.extra_vars_train + self.extra_vars_out
+
+            # remove the UParTAK4B if NanoAODv12/v13
+            if any(x in era for x in ["preEE", "postEE", "preBPix", "postBPix"]):
+                vars_to_load.remove("nonResReg_vbfpair_lead_bjet_btagUParTAK4B")
+                vars_to_load.remove("nonResReg_vbfpair_sublead_bjet_btagUParTAK4B")
+    
             for samples in training_info["samples_info"][era].keys():
                 if stop_processing or not self._can_process_more_input_files():
                     stop_processing = True
@@ -1189,16 +1312,30 @@ class PrepareInputs:
 
         # vars_for_log = vars_config["vars_for_log_transform"]
 
-        vars_to_load = vars_for_training + self.extra_vars_train + self.extra_vars_out
-
         samples_path = training_info["samples_info"]["samples_path"]
         datas = training_info["samples_info"]["data"]
 
         stop_processing = False
 
         sample_to_era = {
-            "2016preVFP": "preVFP",
-            "2016postVFP": "postVFP",
+            "2016preVFP_EraBv1": "2016preVFP",
+            "2016preVFP_EraBv2": "2016preVFP",
+            "2016preVFP_EraC": "2016preVFP",
+            "2016preVFP_EraD": "2016preVFP",
+            "2016preVFP_EraE": "2016preVFP",
+            "2016preVFP_EraF": "2016preVFP",
+            "2016postVFP_EraF": "2016postVFP",
+            "2016postVFP_EraG": "2016postVFP",
+            "2016postVFP_EraH": "2016postVFP",
+            "2017_EraB": "2017",
+            "2017_EraC": "2017",
+            "2017_EraD": "2017",
+            "2017_EraE": "2017",
+            "2017_EraF": "2017",
+            "2018_EraA": "2018",
+            "2018_EraB": "2018",
+            "2018_EraC": "2018",
+            "2018_EraD": "2018",
             "2017": "2017",
             "2018": "2018",
             "2022_EraE": "postEE", 
@@ -1206,8 +1343,6 @@ class PrepareInputs:
             "2022_EraG": "postEE", 
             "2022_EraC": "preEE", 
             "2022_EraD": "preEE",
-            "2023_EraCv1to3": "preBPix", 
-            "2023_EraCv4": "preBPix",
             "2023_EraC": "preBPix",
             "2023_EraD": "postBPix",
             "2024_EraC_EG0": "2024",
@@ -1226,9 +1361,45 @@ class PrepareInputs:
             "2024_EraIv1_EG1": "2024",
             "2024_EraIv2_EG0": "2024",
             "2024_EraIv2_EG1": "2024",
+            "2025_EraCv1_EG0": "2025",
+            "2025_EraCv1_EG1": "2025",
+            "2025_EraCv1_EG2": "2025",
+            "2025_EraCv1_EG3": "2025",
+            "2025_EraCv2_EG0": "2025",
+            "2025_EraCv2_EG1": "2025",
+            "2025_EraCv2_EG2": "2025",
+            "2025_EraCv2_EG3": "2025",
+            "2025_EraDv1_EG0": "2025",
+            "2025_EraDv1_EG1": "2025",
+            "2025_EraDv1_EG2": "2025",
+            "2025_EraDv1_EG3": "2025",
+            "2025_EraEv1_EG0": "2025",
+            "2025_EraEv1_EG1": "2025",
+            "2025_EraEv1_EG2": "2025",
+            "2025_EraEv1_EG3": "2025",
+            "2025_EraFv1_EG0": "2025",
+            "2025_EraFv1_EG1": "2025",
+            "2025_EraFv1_EG2": "2025",
+            "2025_EraFv1_EG3": "2025",
+            "2025_EraFv2_EG0": "2025",
+            "2025_EraFv2_EG1": "2025",
+            "2025_EraFv2_EG2": "2025",
+            "2025_EraFv2_EG3": "2025",
+            "2025_EraGv1_EG0": "2025",
+            "2025_EraGv1_EG1": "2025",
+            "2025_EraGv1_EG2": "2025",
+            "2025_EraGv1_EG3": "2025",
         }
 
         for data in datas:
+
+            vars_to_load = vars_for_training + self.extra_vars_train + self.extra_vars_out
+
+            # remove the UParTAK4B if NanoAODv12/v13
+            if any(x in sample_to_era.get(data, "") for x in ["preEE", "postEE", "preBPix", "postBPix"]):
+                vars_to_load.remove("nonResReg_vbfpair_lead_bjet_btagUParTAK4B")
+                vars_to_load.remove("nonResReg_vbfpair_sublead_bjet_btagUParTAK4B")
+    
             if stop_processing or not self._can_process_more_input_files():
                 stop_processing = True
                 break
