@@ -26,7 +26,7 @@ import pyarrow.parquet as pq
 
 # Define which eras belong to which run
 RUN2_ERAS = ["2016preVFP", "2016postVFP", "2017", "2018"]
-RUN3_ERAS = ["preEE", "postEE", "preBPix", "postBPix", "2024"]
+RUN3_ERAS = ["preEE", "postEE", "preBPix", "postBPix", "2024", "2025"]
 
 
 def load_mhh_y_from_parquet(base_path, mhh_var_name):
@@ -605,7 +605,7 @@ def main():
     )
     parser.add_argument('--base_path', type=str, required=True,
                        help='Path to inputs (containing individual_samples and sample_to_class_mapping.json)')
-    parser.add_argument('--mhh_var_name', type=str, default="nonResReg_M_X",
+    parser.add_argument('--mhh_var_name', type=str, default="nonResReg_vbfpair_M_X",
                        help='Name of the mhh variable (e.g., nonResReg_M_X)')
     parser.add_argument('--mhh_bins', type=str, default="0,350,inf",
                        help='Comma-separated bin edges (e.g., "250,350,450,600")')

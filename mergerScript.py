@@ -38,8 +38,8 @@ def load_samples(base_path, samples, data=False, syst=""):
     all_columns = parquet_file.schema.names
     # weight_columns = [col for col in all_columns if 'weight' in col]
     weight_columns = ["weight_tot", "weight"]
-    dijet_mass_key = "nonResReg_dijet_mass_DNNreg"
-    HH_mass_key = "nonResReg_HHbbggCandidate_mass"
+    dijet_mass_key = "nonResReg_vbfpair_dijet_mass"
+    HH_mass_key = "nonResReg_vbfpair_M_X"
 
     #"nonResReg_lead_bjet_hFlav", "nonResReg_sublead_bjet_hFlav", "event", "run", "lumi"]#, "is_boosted", "y_proba"] 
     columns = [
@@ -185,9 +185,21 @@ def load_samples(base_path, samples, data=False, syst=""):
     for weight in weight_columns:
         samples_input.update({weight: []})
 
-    eras = ["2016preVFP", "2016postVFP", "2017", "2018", "preEE", "postEE", "preBPix", "postBPix", "2024"]
+    eras = [
+        # "2016preVFP", "2016postVFP", "2017", "2018", 
+        "preEE", "postEE", "preBPix", "postBPix", "2024", "2025"
+        ]
     if data:
-        eras = ["2016preVFP", "2016postVFP", "2017", "2018", "2022_EraC","2022_EraD","2022_EraE","2022_EraF","2022_EraG","2023_EraC","2023_EraD", "2024_EraC_EG0", "2024_EraC_EG1", "2024_EraD_EG0", "2024_EraD_EG1", "2024_EraE_EG0", "2024_EraE_EG1", "2024_EraF_EG0", "2024_EraF_EG1", "2024_EraG_EG0", "2024_EraG_EG1", "2024_EraH_EG0", "2024_EraH_EG1", "2024_EraIv1_EG0", "2024_EraIv1_EG1", "2024_EraIv2_EG0", "2024_EraIv2_EG1"]
+        # eras = ["2016preVFP", "2016postVFP", "2017", "2018", "2022_EraC","2022_EraD","2022_EraE","2022_EraF","2022_EraG","2023_EraC","2023_EraD", "2024_EraC_EG0", "2024_EraC_EG1", "2024_EraD_EG0", "2024_EraD_EG1", "2024_EraE_EG0", "2024_EraE_EG1", "2024_EraF_EG0", "2024_EraF_EG1", "2024_EraG_EG0", "2024_EraG_EG1", "2024_EraH_EG0", "2024_EraH_EG1", "2024_EraIv1_EG0", "2024_EraIv1_EG1", "2024_EraIv2_EG0", "2024_EraIv2_EG1"]
+        eras = [
+            # "2016preVFP_EraBv1", "2016preVFP_EraBv2", "2016preVFP_EraC", "2016preVFP_EraD", "2016preVFP_EraE", "2016preVFP_EraF", 
+            # "2016postVFP_EraF", "2016postVFP_EraG", "2016postVFP_EraH",
+            # "2017_EraB", "2017_EraC", "2017_EraD", "2017_EraE", "2017_EraF",
+            # "2018_EraA", "2018_EraB", "2018_EraC", "2018_EraD", 
+            "2022_EraC","2022_EraD","2022_EraE","2022_EraF","2022_EraG","2023_EraC","2023_EraD", "2024_EraC_EG0", "2024_EraC_EG1", "2024_EraD_EG0", "2024_EraD_EG1", "2024_EraE_EG0", "2024_EraE_EG1", "2024_EraF_EG0", "2024_EraF_EG1", "2024_EraG_EG0", "2024_EraG_EG1", "2024_EraH_EG0", "2024_EraH_EG1", "2024_EraIv1_EG0", "2024_EraIv1_EG1", "2024_EraIv2_EG0", "2024_EraIv2_EG1",
+            "2025_EraCv1_EG0", "2025_EraCv1_EG1", "2025_EraCv1_EG2", "2025_EraCv1_EG3", "2025_EraCv2_EG0", "2025_EraCv2_EG1", "2025_EraCv2_EG2", "2025_EraCv2_EG3", "2025_EraDv1_EG0", "2025_EraDv1_EG1", "2025_EraDv1_EG2", "2025_EraDv1_EG3", "2025_EraEv1_EG0", "2025_EraEv1_EG1", "2025_EraEv1_EG2", "2025_EraEv1_EG3", "2025_EraFv1_EG0", "2025_EraFv1_EG1", "2025_EraFv1_EG2", "2025_EraFv1_EG3", "2025_EraFv2_EG0", "2025_EraFv2_EG1", "2025_EraFv2_EG2", "2025_EraFv2_EG3", "2025_EraGv1_EG0", "2025_EraGv1_EG1", "2025_EraGv1_EG2", "2025_EraGv1_EG3",
+            ]
+
 
     for era in eras:
         print("###########")
@@ -198,10 +210,7 @@ def load_samples(base_path, samples, data=False, syst=""):
             if (sample in ["GGJets", "DDQCDGJET", "TTGG", "TT", "TTG_10_100", "TTG_100_200", "TTG_200"]) and (syst != ""):
                 continue
 
-            if (sample == "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00") & (era == "2016postVFP"):
-                continue
-
-            if (era == "2024") & (sample == "VHtoGG_M_125"):
+            if (era == "2024" or era == "2025") & (sample == "VHtoGG_M_125"):
                 VHsample = "WmHtoGG"
                 path_VH = os.path.join(base_path, "individual_samples"+"/", era, VHsample, syst)
                 y_path_VH = os.path.join(path_VH, 'y.npy')
@@ -272,6 +281,8 @@ def load_samples(base_path, samples, data=False, syst=""):
                 year = 2023
             elif "24" in era:
                 year = 2024
+            elif "25" in era:
+                year = 2025
             else:
                 raise ValueError(f"Unknown era: {era}")
             samples_input["year"].append(np.full(y.shape[0], year))
@@ -365,6 +376,8 @@ if __name__ == "__main__":
     merged_samples_data = load_samples(base_path, [""] ,data=True)
 
     merged_samples = pd.concat([merged_samples_MC, merged_samples_data], ignore_index=True)
+    # merged_samples["Dsig_vs_ttH"] = merged_samples["ggHH_score"] / (merged_samples["ggHH_score"] + merged_samples["ttH_score"])
+    # merged_samples["Dsig_vs_nonres"] = merged_samples["ggHH_score"] / (merged_samples["ggHH_score"] + merged_samples["nonRes_score"] + merged_samples["singleH_score"])
     merged_samples.to_parquet(f"{base_path}/merged_samples.parquet", engine='pyarrow')
 
     for syst in systs:

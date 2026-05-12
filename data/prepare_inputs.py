@@ -436,12 +436,6 @@ class PrepareInputs:
             events["weight_tot"] = (events.weight) * dict_xsec_13p6TeV[sample_type] * lumi
         else:
             raise ValueError(f"Unknown era: {era}")
-        
-        if (era == "2024" or era == "2025") & (sample_type == "GGJets"):
-            events["weight_tot"] = (events.weight_tot) * 1.5925
-
-        if (era == "2024" or era == "2025") & (sample_type == "DDQCDGJET"):
-            events["weight_tot"] = (events.weight_tot) * 1.21
 
         return events
 
