@@ -11,8 +11,28 @@ from tqdm.auto import tqdm
 import copy
 try:
     from mlp import MLP
+    from binary_classifier import (
+        BINARY_CLASSIFICATION_TYPE,
+        MULTICLASS_CLASSIFICATION_TYPE,
+        get_classification_type,
+        is_binary_classification,
+        load_class_names,
+        make_loss_function,
+        prepare_binary_arrays,
+        weighted_binary_accuracy,
+    )
 except ImportError:
     from .mlp import MLP
+    from .binary_classifier import (
+        BINARY_CLASSIFICATION_TYPE,
+        MULTICLASS_CLASSIFICATION_TYPE,
+        get_classification_type,
+        is_binary_classification,
+        load_class_names,
+        make_loss_function,
+        prepare_binary_arrays,
+        weighted_binary_accuracy,
+    )
 import torch.nn.functional as F
 import yaml
 
@@ -64,7 +84,7 @@ def make_progress_bar(data_loader, desc):
     return tqdm(data_loader, desc=desc, leave=False)
 
 
-def train_one_epoch(model, optimizer, data_loader, loss_fn, device):
+def train_one_epoch(model, optimizer, data_loader, loss_fn, device, classification_type=MULTICLASS_CLASSIFICATION_TYPE):
     model.train()
     batch_losses = []
     batch_accs = []
@@ -80,6 +100,8 @@ def train_one_epoch(model, optimizer, data_loader, loss_fn, device):
         optimizer.zero_grad()
         y_pred = model(X_batch)
         loss = loss_fn(y_pred, y_batch)
+        if classification_type == BINARY_CLASSIFICATION_TYPE:
+            loss = loss.squeeze(dim=1)
         weighted_loss = (loss * weights_batch).sum() / weights_batch.sum()
         weighted_loss.backward()
         optimizer.step()
@@ -87,8 +109,11 @@ def train_one_epoch(model, optimizer, data_loader, loss_fn, device):
         weighted_loss_no_abs = (loss * weights_batch_no).sum() / weights_batch_no.sum()
 
         # compute weighted accuracy
-        correct = (torch.argmax(y_pred, dim=1) == y_batch).float()
-        weighted_acc = (correct * weights_batch).sum() / weights_batch.sum()
+        if classification_type == BINARY_CLASSIFICATION_TYPE:
+            weighted_acc = weighted_binary_accuracy(y_pred, y_batch, weights_batch)
+        else:
+            correct = (torch.argmax(y_pred, dim=1) == y_batch).float()
+            weighted_acc = (correct * weights_batch).sum() / weights_batch.sum()
 
         batch_losses.append(weighted_loss.item())
         batch_accs.append(weighted_acc.item())
@@ -104,7 +129,7 @@ def train_one_epoch(model, optimizer, data_loader, loss_fn, device):
     return np.mean(batch_losses), np.mean(batch_accs), np.mean(batch_losses_no_abs)
 
 
-def evaluate(model, data_loader, loss_fn, device):
+def evaluate(model, data_loader, loss_fn, device, classification_type=MULTICLASS_CLASSIFICATION_TYPE):
     model.eval()
     val_losses = []
     val_accs = []
@@ -117,11 +142,16 @@ def evaluate(model, data_loader, loss_fn, device):
 
             y_pred = model(X_batch)
             loss = loss_fn(y_pred, y_batch)
+            if classification_type == BINARY_CLASSIFICATION_TYPE:
+                loss = loss.squeeze(dim=1)
             weighted_loss = (loss * weights_batch).sum() / weights_batch.sum()
 
             # compute weighted accuracy
-            correct = (torch.argmax(y_pred, dim=1) == y_batch).float()
-            weighted_acc = (correct * weights_batch).sum() / weights_batch.sum()
+            if classification_type == BINARY_CLASSIFICATION_TYPE:
+                weighted_acc = weighted_binary_accuracy(y_pred, y_batch, weights_batch)
+            else:
+                correct = (torch.argmax(y_pred, dim=1) == y_batch).float()
+                weighted_acc = (correct * weights_batch).sum() / weights_batch.sum()
 
             val_losses.append(weighted_loss.item())
             val_accs.append(weighted_acc.item())
@@ -171,6 +201,7 @@ if __name__ == "__main__":
 
     seed = training_config["random_seed"]
     weight_scheme = training_config["weight_scheme"]
+    classification_type = get_classification_type(training_config)
 
     # --- REPROD SETUP ---
     import random, numpy as np, torch
@@ -204,6 +235,20 @@ if __name__ == "__main__":
     X_val = np.load(f'{input_path}/X_val.npy')
     y_train = np.load(f'{input_path}/y_train.npy')
     y_val = np.load(f'{input_path}/y_val.npy')
+    binary_metadata = {}
+
+    if is_binary_classification(training_config):
+        class_names = load_class_names(input_path, training_config)
+        y_train, train_mask, binary_metadata = prepare_binary_arrays(y_train, class_names, training_config)
+        y_val, val_mask, _ = prepare_binary_arrays(y_val, class_names, training_config)
+
+        X_train = X_train[train_mask]
+        X_val = X_val[val_mask]
+        print(
+            "INFO: Binary classifier enabled. "
+            f"Signal classes: {binary_metadata['signal_classes']}; "
+            f"background classes: {binary_metadata['background_classes']}"
+        )
 
     # set weight scheme for training
     if weight_scheme == "weighted_abs":
@@ -222,16 +267,28 @@ if __name__ == "__main__":
 
     class_weights_for_train_no_aboslute = np.load(f'{input_path}/true_class_weights.npy')
     class_weights_for_val = np.load(f'{input_path}/class_weights_for_val.npy')
+    if classification_type == BINARY_CLASSIFICATION_TYPE:
+        class_weights_for_training = class_weights_for_training[train_mask]
+        class_weights_for_train_no_aboslute = class_weights_for_train_no_aboslute[train_mask]
+        class_weights_for_val = class_weights_for_val[val_mask]
 
-    # Convert targets to class indices (if one-hot encoded)
-    y_train = np.argmax(y_train, axis=1)
-    y_val = np.argmax(y_val, axis=1)
+    if classification_type == BINARY_CLASSIFICATION_TYPE:
+        y_train = y_train.astype(np.float32)
+        y_val = y_val.astype(np.float32)
+    else:
+        # Convert targets to class indices (if one-hot encoded)
+        y_train = np.argmax(y_train, axis=1)
+        y_val = np.argmax(y_val, axis=1)
 
     # Convert data to tensors
     X_train = torch.tensor(X_train, dtype=torch.float32)
     X_val = torch.tensor(X_val, dtype=torch.float32)
-    y_train = torch.tensor(y_train, dtype=torch.long)
-    y_val = torch.tensor(y_val, dtype=torch.long)
+    if classification_type == BINARY_CLASSIFICATION_TYPE:
+        y_train = torch.tensor(y_train, dtype=torch.float32)
+        y_val = torch.tensor(y_val, dtype=torch.float32)
+    else:
+        y_train = torch.tensor(y_train, dtype=torch.long)
+        y_val = torch.tensor(y_val, dtype=torch.long)
     class_weights_for_training = torch.tensor(class_weights_for_training, dtype=torch.float32)
     class_weights_for_train_no_aboslute = torch.tensor(class_weights_for_train_no_aboslute, dtype=torch.float32)
     class_weights_for_val = torch.tensor(class_weights_for_val, dtype=torch.float32)
@@ -246,6 +303,12 @@ if __name__ == "__main__":
         best_params = json.load(f)
 
     print("Parameters: ", best_params, '\n')
+    if classification_type == BINARY_CLASSIFICATION_TYPE:
+        best_params = {
+            **best_params,
+            "classification_type": classification_type,
+            **binary_metadata,
+        }
 
     # Save the parameters in the training folder
     with open(f"{path_to_checkpoint}/params.json", 'w') as f:
@@ -260,7 +323,10 @@ if __name__ == "__main__":
     best_weight_decay = best_params['weight_decay']
     best_dropout_prob = best_params['dropout_prob']
     input_size = X_train.shape[1]
-    output_size = len(np.unique(y_train))  # Number of classes
+    if classification_type == BINARY_CLASSIFICATION_TYPE:
+        output_size = 1
+    else:
+        output_size = len(np.unique(y_train))  # Number of classes
 
     # Create datasets
     train_dataset = CustomDataset(X_train, y_train, class_weights_for_training, class_weights_for_train_no_aboslute)
@@ -274,7 +340,7 @@ if __name__ == "__main__":
 
     # Define model, loss function, optimizer, and scheduler
     best_model = MLP(input_size, best_num_layers, best_num_nodes, output_size, best_act_fn, best_dropout_prob).to(device)
-    loss_fn = nn.CrossEntropyLoss(reduction='none')
+    loss_fn = make_loss_function(classification_type)
     best_optimizer = optim.Adam(best_model.parameters(), lr=best_lr, weight_decay=best_weight_decay)
     best_scheduler = ReduceLROnPlateau(best_optimizer, mode='min', factor=0.5, patience=15, min_lr=1e-6)
 
@@ -298,13 +364,20 @@ if __name__ == "__main__":
     # Training loop
     for epoch in range(n_epochs):
         # Training
-        train_loss, train_acc, train_loss_no_absolute = train_one_epoch(best_model, best_optimizer, train_loader, loss_fn, device)
+        train_loss, train_acc, train_loss_no_absolute = train_one_epoch(
+            best_model,
+            best_optimizer,
+            train_loader,
+            loss_fn,
+            device,
+            classification_type,
+        )
         train_loss_hist.append(train_loss)
         train_acc_hist.append(train_acc)
         train_loss_hist_no_absolute_weights.append(train_loss_no_absolute)
 
         # Validation
-        val_loss, val_acc = evaluate(best_model, val_loader, loss_fn, device)
+        val_loss, val_acc = evaluate(best_model, val_loader, loss_fn, device, classification_type)
         val_loss_hist.append(val_loss)
         val_acc_hist.append(val_acc)
 
@@ -345,7 +418,10 @@ if __name__ == "__main__":
         X_batch = X_train[i:i + batch_size].to(device)
         with torch.no_grad():
             y_batch = best_model(X_batch)
-            y_batch = F.softmax(y_batch, dim=1)
+            if classification_type == BINARY_CLASSIFICATION_TYPE:
+                y_batch = torch.sigmoid(y_batch)
+            else:
+                y_batch = F.softmax(y_batch, dim=1)
             y_pred_train_probs.append(y_batch.cpu().numpy())
     y_pred_train_probs = np.concatenate(y_pred_train_probs, axis=0)
 
@@ -354,7 +430,10 @@ if __name__ == "__main__":
         X_batch = X_val[i:i + batch_size].to(device)
         with torch.no_grad():
             y_batch = best_model(X_batch)
-            y_batch = F.softmax(y_batch, dim=1)
+            if classification_type == BINARY_CLASSIFICATION_TYPE:
+                y_batch = torch.sigmoid(y_batch)
+            else:
+                y_batch = F.softmax(y_batch, dim=1)
             y_pred_val_probs.append(y_batch.cpu().numpy())
     y_pred_val_probs = np.concatenate(y_pred_val_probs, axis=0)
 

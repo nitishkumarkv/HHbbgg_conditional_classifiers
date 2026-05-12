@@ -11,7 +11,7 @@ merge_multiclass.ipynb
 .vscode/settings.json
 pyproject.toml
 
-config/*
+# config/*
 out*/
 Version_20250524_MVAID_forPreApp/
 condor/
@@ -31,3 +31,5 @@ Version_20260317_16-24_kl_year_vbfpair_partial_nobjetpT_nodeltaRgg_nodijetpTmggj
 Version_20260317_16-24_kl_year_vbfpair_partial_nobjetpT_nodeltaRgg_nodijetpTmggjj_condor_test/
 Version_20260320_16-24_kl_year_vbfpair_partial_nobjetpT_nodeltaRgg/
 Version_20260320_16-24_kl_year_vbfpair_partial_nobjetpT_nodijetpTmggjj/
+Version_20260323_16-24_kl_year_vbfpair_partial_DisCo_nobjetpT_nodeltaRgg_nodijetpTmggjj/
+Version_20260511_22-25_binary_mHH350toinf/

@@ -26,6 +26,17 @@ import os
 import yaml
 
 from mlp import MLP
+from binary_classifier import (
+    BINARY_CLASSIFICATION_TYPE,
+    MULTICLASS_CLASSIFICATION_TYPE,
+    get_classification_type,
+    is_binary_classification,
+    load_class_names,
+    make_loss_function,
+    prepare_binary_arrays,
+)
+
+classification_type = MULTICLASS_CLASSIFICATION_TYPE
 
 
 # Optuna Optimierungsfunktion
@@ -41,12 +52,15 @@ def objective(trial):
 
     # create model
     input_size = X_train.shape[1]
-    output_size = y_train.shape[1]
+    if classification_type == BINARY_CLASSIFICATION_TYPE:
+        output_size = 1
+    else:
+        output_size = y_train.shape[1]
     model = MLP(input_size, num_layers, num_nodes, output_size, act_fn, dropout_prob)
     model.to(device)
 
     # Loss function, optimizer und scheduler
-    loss_fn = nn.CrossEntropyLoss(reduction='none')
+    loss_fn = make_loss_function(classification_type)
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=15, min_lr=1e-6)
 
@@ -69,6 +83,8 @@ def objective(trial):
             weights_batch = class_weights_for_training[start:end]
             y_pred = model(X_batch)
             loss = loss_fn(y_pred, y_batch)
+            if classification_type == BINARY_CLASSIFICATION_TYPE:
+                loss = loss.squeeze(dim=1)
             weighted_loss = (loss * weights_batch).sum() / weights_batch.sum()
             optimizer.zero_grad()
             weighted_loss.backward()
@@ -78,6 +94,8 @@ def objective(trial):
         with torch.no_grad():
             y_pred = model(X_val)
             val_loss = loss_fn(y_pred, y_val)
+            if classification_type == BINARY_CLASSIFICATION_TYPE:
+                val_loss = val_loss.squeeze(dim=1)
             weighted_val_loss = (val_loss * class_weights_for_val).sum() / class_weights_for_val.sum()
 
         scheduler.step(weighted_val_loss)
@@ -97,6 +115,9 @@ def objective(trial):
 
 
 def perform_random_search(input_path, ntrial = 1):
+    global classification_type
+    training_config = globals().get("training_config", {})
+    classification_type = get_classification_type(training_config)
 
     path_for_plots = f'random_search_{input_path.split("/")[-2]}'
     os.makedirs(path_for_plots, exist_ok=True)
@@ -106,12 +127,26 @@ def perform_random_search(input_path, ntrial = 1):
     ##X_test = np.load(f'{input_path}/X_test.npy')
     y_train = np.load(f'{input_path}/y_train.npy')
     y_val = np.load(f'{input_path}/y_val.npy')
+    if is_binary_classification(training_config):
+        class_names = load_class_names(input_path, training_config)
+        y_train, train_mask, binary_metadata = prepare_binary_arrays(y_train, class_names, training_config)
+        y_val, val_mask, _ = prepare_binary_arrays(y_val, class_names, training_config)
+        X_train = X_train[train_mask]
+        X_val = X_val[val_mask]
+        print(
+            "INFO: Binary random search enabled. "
+            f"Signal classes: {binary_metadata['signal_classes']}; "
+            f"background classes: {binary_metadata['background_classes']}"
+        )
     #y_test = np.load(f'{input_path}/y_test.npy')
     rel_w_train = np.load(f'{input_path}/rel_w_train.npy')
     rel_w_val = np.load(f'{input_path}/rel_w_val.npy')
     #rel_w_test = np.load(f'{input_path}/rel_w_test.npy')
     class_weights_for_training = np.load(f'{input_path}/class_weights_for_training.npy')
     class_weights_for_val = np.load(f'{input_path}/class_weights_for_val.npy')
+    if classification_type == BINARY_CLASSIFICATION_TYPE:
+        class_weights_for_training = class_weights_for_training[train_mask]
+        class_weights_for_val = class_weights_for_val[val_mask]
     #class_weights_for_test = np.load(f'{input_path}/class_weights_for_test.npy')
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -215,6 +250,7 @@ if __name__ == "__main__":
 
     n_trials = training_config["num_random_search"]
     weight_scheme = training_config["weight_scheme"]
+    classification_type = get_classification_type(training_config)
 
     input_path= args.input_path
     path_for_plots = f'{input_path}/random_search_1/'
@@ -226,6 +262,17 @@ if __name__ == "__main__":
     ##X_test = np.load(f'{input_path}/X_test.npy')
     y_train = np.load(f'{input_path}/y_train.npy')
     y_val = np.load(f'{input_path}/y_val.npy')
+    if is_binary_classification(training_config):
+        class_names = load_class_names(input_path, training_config)
+        y_train, train_mask, binary_metadata = prepare_binary_arrays(y_train, class_names, training_config)
+        y_val, val_mask, _ = prepare_binary_arrays(y_val, class_names, training_config)
+        X_train = X_train[train_mask]
+        X_val = X_val[val_mask]
+        print(
+            "INFO: Binary random search enabled. "
+            f"Signal classes: {binary_metadata['signal_classes']}; "
+            f"background classes: {binary_metadata['background_classes']}"
+        )
     #y_test = np.load(f'{input_path}/y_test.npy')
     rel_w_train = np.load(f'{input_path}/rel_w_train.npy')
     rel_w_val = np.load(f'{input_path}/rel_w_val.npy')
@@ -247,6 +294,9 @@ if __name__ == "__main__":
         pass
 
     class_weights_for_val = np.load(f'{input_path}/class_weights_for_val.npy')
+    if classification_type == BINARY_CLASSIFICATION_TYPE:
+        class_weights_for_training = class_weights_for_training[train_mask]
+        class_weights_for_val = class_weights_for_val[val_mask]
     #class_weights_for_test = np.load(f'{input_path}/class_weights_for_test.npy')
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -337,4 +387,3 @@ if __name__ == "__main__":
 
     with open(f"{path_for_plots}/best_params.json", 'w') as f:
         json.dump(best_params, f)
-

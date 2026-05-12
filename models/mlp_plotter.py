@@ -40,6 +40,290 @@ def load_checkpoint(file_path):
     return start_epoch, train_loss_hist, train_loss_hist_no_aboslute, val_loss_hist, train_acc_hist, val_acc_hist, lr_hist, best_weights, best_loss
 
 
+def load_json(path):
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def get_binary_keep_mask(y_one_hot, class_names, signal_classes, background_classes):
+    signal_indices = [class_names.index(class_name) for class_name in signal_classes]
+    background_indices = [class_names.index(class_name) for class_name in background_classes]
+    signal_mask = np.any(y_one_hot[:, signal_indices] == 1, axis=1)
+    background_mask = np.any(y_one_hot[:, background_indices] == 1, axis=1)
+    return signal_mask | background_mask
+
+
+def weighted_efficiency(y_true, y_score, weights, cut):
+    selected = y_score >= cut
+    sig = y_true == 1
+    bkg = y_true == 0
+    sig_den = np.sum(weights[sig])
+    bkg_den = np.sum(weights[bkg])
+    sig_eff = np.sum(weights[sig & selected]) / sig_den if sig_den > 0 else 0.0
+    bkg_eff = np.sum(weights[bkg & selected]) / bkg_den if bkg_den > 0 else 0.0
+    purity_den = np.sum(weights[selected])
+    purity = np.sum(weights[sig & selected]) / purity_den if purity_den > 0 else 0.0
+    return sig_eff, bkg_eff, purity
+
+
+def make_nonnegative_weights(weights, name):
+    weights = np.asarray(weights, dtype=float)
+    if np.any(weights < 0):
+        print(
+            f"WARNING: {name} contains negative weights. "
+            "Using absolute weights for binary performance plots because ROC, "
+            "efficiencies, and density uncertainties require non-negative weights."
+        )
+        weights = np.abs(weights)
+    return weights
+
+
+def save_binary_roc(y_true, y_score, weights, path_for_plots, prefix, label):
+    fpr, tpr, thresholds = roc_curve(y_true, y_score, sample_weight=weights)
+    order = np.argsort(fpr)
+    fpr = fpr[order]
+    tpr = tpr[order]
+    thresholds = thresholds[order]
+    roc_auc = auc(fpr, tpr)
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.plot(fpr, tpr, label=f"{label} (AUC = {roc_auc:0.4f})")
+    ax.plot([0, 1], [0, 1], "k--")
+    ax.set_xlim([0.0, 1.0])
+    ax.set_ylim([0.0, 1.05])
+    ax.set_xlabel("FPR", fontsize=12)
+    ax.set_ylabel("TPR", fontsize=12)
+    ax.legend(loc="lower right", fontsize=10)
+    ax.grid(True)
+    fig.tight_layout()
+    outpath = f"{path_for_plots}/{prefix}_roc_curve.png"
+    fig.savefig(outpath)
+    print(f"INFO: >>> {outpath}")
+
+    ax.set_xlim([0.0001, 1.0])
+    ax.set_xscale("log")
+    ax.legend(loc="upper left", fontsize=10)
+    outpath = f"{path_for_plots}/{prefix}_roc_curve_logx.png"
+    fig.savefig(outpath)
+    print(f"INFO: >>> {outpath}")
+    plt.close(fig)
+
+    outpath = f"{path_for_plots}/{prefix}_roc_curve.json"
+    with open(outpath, "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "fpr": [float(x) for x in fpr],
+                "tpr": [float(x) for x in tpr],
+                "thresholds": [float(x) for x in thresholds],
+                "auc": float(roc_auc),
+            },
+            f,
+            indent=2,
+        )
+    print(f"INFO: >>> {outpath}")
+    return roc_auc
+
+
+def save_binary_score_plot(
+    y_train,
+    y_pred_train,
+    weights_train,
+    y_val,
+    y_pred_val,
+    weights_val,
+    path_for_plots,
+):
+    fig, ax = plt.subplots(figsize=(8, 6))
+    max_y = 0.0
+    bins = 25
+    labels = [(0, "nonres background", "royalblue"), (1, "signal", "darkorange")]
+
+    for target, label, color in labels:
+        mask = y_train == target
+        hist_raw, bin_edges = np.histogram(y_pred_train[mask], bins=bins, weights=weights_train[mask], range=(0, 1))
+        hist_sq_raw, _ = np.histogram(y_pred_train[mask], bins=bin_edges, weights=weights_train[mask] ** 2, range=(0, 1))
+        bin_widths = np.diff(bin_edges)
+        total_weight = np.sum(hist_raw)
+        if total_weight > 0:
+            hist_density = hist_raw / (total_weight * bin_widths)
+            uncertainty_density = np.sqrt(hist_sq_raw) / (total_weight * bin_widths)
+            bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+            max_y = max(max_y, np.max(hist_density + uncertainty_density))
+            ax.step(bin_centers, hist_density, where="mid", label=f"Train {label}", color=color, linewidth=2)
+            ax.fill_between(
+                bin_centers,
+                hist_density - uncertainty_density,
+                hist_density + uncertainty_density,
+                step="mid",
+                color=color,
+                alpha=0.25,
+            )
+
+        mask = y_val == target
+        hist_raw, bin_edges = np.histogram(y_pred_val[mask], bins=bins, weights=weights_val[mask], range=(0, 1))
+        hist_sq_raw, _ = np.histogram(y_pred_val[mask], bins=bin_edges, weights=weights_val[mask] ** 2, range=(0, 1))
+        bin_widths = np.diff(bin_edges)
+        total_weight = np.sum(hist_raw)
+        if total_weight > 0:
+            hist_density = hist_raw / (total_weight * bin_widths)
+            uncertainty_density = np.sqrt(hist_sq_raw) / (total_weight * bin_widths)
+            bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+            max_y = max(max_y, np.max(hist_density + uncertainty_density))
+            ax.errorbar(
+                bin_centers,
+                hist_density,
+                yerr=uncertainty_density,
+                fmt="o",
+                label=f"Valid {label}",
+                color=color,
+                markersize=5,
+                capsize=2,
+                elinewidth=1,
+            )
+
+    ax.set_xlabel("signal score")
+    ax.set_ylabel("a.u.")
+    ax.set_yscale("log")
+    ax.set_ylim(bottom=1e-3, top=max_y * 100 if max_y > 0 else 1.0)
+    ax.set_xlim(left=0, right=1)
+    ax.legend(ncol=2, fontsize=10)
+    fig.tight_layout()
+    outpath = f"{path_for_plots}/binary_signal_score.png"
+    fig.savefig(outpath)
+    print(f"INFO: >>> {outpath}")
+    plt.close(fig)
+
+
+def save_binary_threshold_table(y_true, y_score, weights, path_for_plots):
+    rows = []
+    for cut in np.linspace(0.0, 1.0, 21):
+        sig_eff, bkg_eff, purity = weighted_efficiency(y_true, y_score, weights, cut)
+        rows.append(
+            {
+                "score_cut": float(cut),
+                "signal_efficiency": float(sig_eff),
+                "background_efficiency": float(bkg_eff),
+                "background_rejection": float(1.0 / bkg_eff) if bkg_eff > 0 else float("inf"),
+                "purity": float(purity),
+            }
+        )
+
+    outpath = f"{path_for_plots}/binary_threshold_table.json"
+    with open(outpath, "w", encoding="utf-8") as f:
+        json.dump(rows, f, indent=2)
+    print(f"INFO: >>> {outpath}")
+
+    outpath = f"{path_for_plots}/binary_threshold_table.csv"
+    with open(outpath, "w", encoding="utf-8") as f:
+        f.write("score_cut,signal_efficiency,background_efficiency,background_rejection,purity\n")
+        for row in rows:
+            f.write(
+                f"{row['score_cut']:.4f},"
+                f"{row['signal_efficiency']:.8g},"
+                f"{row['background_efficiency']:.8g},"
+                f"{row['background_rejection']:.8g},"
+                f"{row['purity']:.8g}\n"
+            )
+    print(f"INFO: >>> {outpath}")
+
+
+def save_binary_confusion_matrix(y_true, y_score, weights, path_for_plots, cut=0.5):
+    y_pred = (y_score >= cut).astype(int)
+    cm = np.zeros((2, 2), dtype=float)
+    for true_label in [0, 1]:
+        for pred_label in [0, 1]:
+            cm[true_label, pred_label] = np.sum(weights[(y_true == true_label) & (y_pred == pred_label)])
+
+    print(f"cm: {cm}")
+
+    row_sums = cm.sum(axis=1, keepdims=True)
+    print(f"row_sums: {row_sums}")
+    row_sums[row_sums == 0] = 1.0
+    cm_norm = cm / row_sums
+    print(f"cm_norm: {cm_norm}")
+
+    fig, ax = plt.subplots(figsize=(6, 5))
+    im = ax.imshow(cm_norm, interpolation="nearest", cmap=plt.cm.Blues, vmin=0.0, vmax=1.0)
+    ax.set_xlabel("Predicted label", fontsize=12)
+    ax.set_ylabel("True label", fontsize=12)
+    labels = ["nonres bkg", "signal"]
+    ax.set_xticks(range(2))
+    ax.set_yticks(range(2))
+    ax.set_xticklabels(labels, rotation=30, ha="right")
+    ax.set_yticklabels(labels)
+    ax.set_title(f"score cut = {cut:g}")
+    for i in range(2):
+        for j in range(2):
+            ax.text(
+                j,
+                i,
+                f"{cm_norm[i, j]:.2f}",
+                ha="center",
+                va="center",
+                color="white" if cm_norm[i, j] > 0.5 else "black",
+                fontsize=11,
+            )
+    plt.colorbar(im, ax=ax)
+    fig.tight_layout()
+    outpath = f"{path_for_plots}/binary_confusion_matrix_cut_{str(cut).replace('.', 'p')}.png"
+    fig.savefig(outpath, dpi=150)
+    print(f"INFO: >>> {outpath}")
+    plt.close(fig)
+
+
+def plot_binary_results(inputs_for_MLP, input_path, path_for_plots, params):
+    y_pred_val = np.load(f"{input_path}/y_pred_val.npy").reshape(-1)
+    y_val = np.load(f"{input_path}/y_val.npy").reshape(-1).astype(int)
+    y_pred_train = np.load(f"{input_path}/y_pred_train.npy").reshape(-1)
+    y_train = np.load(f"{input_path}/y_train.npy").reshape(-1).astype(int)
+
+    training_info = load_json(f"{inputs_for_MLP}/training_info.txt")
+    class_names = training_info["classes"]
+    signal_classes = params.get("signal_classes", ["is_GluGluToHH_sig"])
+    background_classes = params.get("background_classes", ["is_non_resonant_bkg"])
+
+    parent_y_train = np.load(f"{inputs_for_MLP}/y_train.npy")
+    parent_y_val = np.load(f"{inputs_for_MLP}/y_val.npy")
+    train_mask = get_binary_keep_mask(parent_y_train, class_names, signal_classes, background_classes)
+    val_mask = get_binary_keep_mask(parent_y_val, class_names, signal_classes, background_classes)
+
+    weights_train = np.load(f"{inputs_for_MLP}/class_weights_for_training_abs.npy")[train_mask]
+    weights_val = np.load(f"{inputs_for_MLP}/class_weights_for_val.npy")[val_mask]
+    weights_train = make_nonnegative_weights(weights_train, "training weights")
+    weights_val = make_nonnegative_weights(weights_val, "validation weights")
+
+    if len(weights_train) != len(y_train) or len(weights_val) != len(y_val):
+        raise ValueError(
+            "Binary labels and reconstructed weights have inconsistent lengths. "
+            f"train: y={len(y_train)}, weights={len(weights_train)}; "
+            f"val: y={len(y_val)}, weights={len(weights_val)}"
+        )
+
+    print("INFO: Binary plotting mode enabled")
+    print(f"INFO: Signal classes: {signal_classes}")
+    print(f"INFO: Background classes: {background_classes}")
+
+    val_auc = save_binary_roc(y_val, y_pred_val, weights_val, path_for_plots, "binary_validation", "Validation")
+    train_auc = save_binary_roc(y_train, y_pred_train, weights_train, path_for_plots, "binary_train", "Train")
+    save_binary_score_plot(y_train, y_pred_train, weights_train, y_val, y_pred_val, weights_val, path_for_plots)
+    save_binary_threshold_table(y_val, y_pred_val, weights_val, path_for_plots)
+    save_binary_confusion_matrix(y_val, y_pred_val, weights_val, path_for_plots, cut=0.5)
+
+    summary = {
+        "classification_type": "binary",
+        "validation_auc": float(val_auc),
+        "train_auc": float(train_auc),
+        "n_train": int(len(y_train)),
+        "n_val": int(len(y_val)),
+        "weighted_train_signal_fraction": float(np.sum(weights_train[y_train == 1]) / np.sum(weights_train)),
+        "weighted_val_signal_fraction": float(np.sum(weights_val[y_val == 1]) / np.sum(weights_val)),
+    }
+    outpath = f"{path_for_plots}/binary_summary.json"
+    with open(outpath, "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2)
+    print(f"INFO: >>> {outpath}")
+
+
 if __name__ == "__main__":
 
     import argparse
@@ -116,6 +400,12 @@ if __name__ == "__main__":
     y_pred_train = np.load(f"{input_path}/y_pred_train.npy")
     y_train = np.load(f'{inputs_for_MLP}/y_train.npy')
     rel_w_train = np.load(f'{inputs_for_MLP}/true_class_weights.npy')
+
+    params_path = f"{input_path}/params.json"
+    params = load_json(params_path) if os.path.exists(params_path) else {}
+    if params.get("classification_type") == "binary" or y_pred_val_.shape[1] == 1:
+        plot_binary_results(inputs_for_MLP, input_path, path_for_plots, params)
+        raise SystemExit(0)
 
     import numpy as np
     import matplotlib.pyplot as plt

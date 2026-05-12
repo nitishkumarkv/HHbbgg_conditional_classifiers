@@ -5,6 +5,7 @@ import json
 import torch.nn as nn
 import torch.nn.functional as F
 import yaml
+from binary_classifier import BINARY_CLASSIFICATION_TYPE, MULTICLASS_CLASSIFICATION_TYPE
 
 
 def get_prediction(model_dict_path, model_path, X):
@@ -24,7 +25,7 @@ def get_prediction(model_dict_path, model_path, X):
     input_size = X.shape[1]
     output_size = 4
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = X.device if isinstance(X, torch.Tensor) else torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     model = MLP(input_size, best_num_layers, best_num_nodes, output_size, best_act_fn, best_dropout_prob).to(device)
     model.to(device)
@@ -63,9 +64,11 @@ def get_prediction_binary(model_dict_path, model_path, X):
     input_size = X.shape[1]
     output_size = 1
 
+    device = X.device if isinstance(X, torch.Tensor) else torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
     model = MLP(input_size, best_num_layers, best_num_nodes, output_size, best_act_fn, best_dropout_prob).to(device)
     model.to(device)
-    model_state = torch.load(model_path)
+    model_state = torch.load(model_path, weights_only=False, map_location=torch.device(device))
     model.load_state_dict(model_state['model_state_dict'])
 
     model.eval()
@@ -83,12 +86,26 @@ def get_prediction_binary(model_dict_path, model_path, X):
 
     return y
 
-def get_prediction_parquet(model_dict_path, model_path, X_path):
+def get_prediction_for_classification_type(model_dict_path, model_path, X, classification_type=None):
+    if classification_type is None:
+        if isinstance(model_dict_path, str):
+            with open(model_dict_path, 'r') as f:
+                best_params = json.load(f)
+        else:
+            best_params = model_dict_path
+        classification_type = best_params.get("classification_type", MULTICLASS_CLASSIFICATION_TYPE)
+
+    if classification_type == BINARY_CLASSIFICATION_TYPE:
+        return get_prediction_binary(model_dict_path, model_path, X)
+
+    return get_prediction(model_dict_path, model_path, X)
+
+def get_prediction_parquet(model_dict_path, model_path, X_path, classification_type=None):
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     X = torch.tensor(np.load(X_path), dtype=torch.float32).to(device)
     print(f"Getting prediction for {X_path}")
-    pred = get_prediction(model_dict_path, model_path, X)
+    pred = get_prediction_for_classification_type(model_dict_path, model_path, X, classification_type)
     print(np.sum(pred, axis=1))
 
     print(f"Saving prediction for {X_path} \n")
@@ -106,11 +123,20 @@ if __name__ == "__main__":
     parser.add_argument('--config_path', type=str, help='Path to the configuration files')
     parser.add_argument('--get_pred_nominal', action='store_true', help='Get predictions for nominal samples')
     parser.add_argument('--get_pred_sys', action='store_true', help='Get predictions for systematics samples')
+    parser.add_argument(
+        '--classification_type',
+        choices=[MULTICLASS_CLASSIFICATION_TYPE, BINARY_CLASSIFICATION_TYPE],
+        default=None,
+        help='Override classification type for prediction. Defaults to params.json, then multiclass.',
+    )
     args = parser.parse_args()
 
     model_folder = args.model_folder
     model_dict_path = f"{model_folder}/params.json"
     model_path = f"{model_folder}/mlp.pth"
+    with open(model_dict_path, 'r') as f:
+        model_params = json.load(f)
+    classification_type = args.classification_type or model_params.get("classification_type", MULTICLASS_CLASSIFICATION_TYPE)
 
     # load the configuration yaml files
     training_config_path = f"{args.config_path}/training_config.yaml"
@@ -134,7 +160,7 @@ if __name__ == "__main__":
 
                 print(f"Getting prediction for {sample} in {era} era")
                 #pred = get_prediction(model_dict_path, model_path, X)
-                pred = get_prediction(model_dict_path, model_path, X)
+                pred = get_prediction_for_classification_type(model_params, model_path, X, classification_type)
                 print(np.sum(pred, axis=1))
                 # save the prediction
                 print(f"Saving prediction for {sample} in {era} era \n")
@@ -148,7 +174,7 @@ if __name__ == "__main__":
 
             print(f"Getting prediction for {data_sample}")
             #pred = get_prediction(model_dict_path, model_path, X)
-            pred = get_prediction(model_dict_path, model_path, X)
+            pred = get_prediction_for_classification_type(model_params, model_path, X, classification_type)
             print(np.sum(pred, axis=1))
             # save the prediction
             print(f"Saving prediction for {data_sample} \n")
@@ -170,7 +196,7 @@ if __name__ == "__main__":
 
                     print(f"Getting prediction for {sample} in {era} era")
                     #pred = get_prediction(model_dict_path, model_path, X)
-                    pred = get_prediction(model_dict_path, model_path, X)
+                    pred = get_prediction_for_classification_type(model_params, model_path, X, classification_type)
                     print(np.sum(pred, axis=1))
                     # save the prediction
                     print(f"Saving prediction for {sample} in {era} era for {sys} \n")

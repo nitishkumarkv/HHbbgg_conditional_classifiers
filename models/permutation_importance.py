@@ -13,6 +13,11 @@ from mlp import MLP
 import pickle
 import json
 import os
+from binary_classifier import (
+    BINARY_CLASSIFICATION_TYPE,
+    get_binary_class_groups,
+    make_binary_labels_from_one_hot,
+)
 
 if not hasattr(pa.lib, "PyExtensionType") and hasattr(pa.lib, "ExtensionType"):
     pa.lib.PyExtensionType = pa.lib.ExtensionType
@@ -40,12 +45,15 @@ class ModelEstimatorWrapper:
         else:
             best_params = self.param_dict_path
 
+        self.classification_type = best_params.get('classification_type')
         best_num_layers = best_params['num_layers']
         best_num_nodes = best_params['num_nodes']
         best_act_fn_name = best_params['act_fn_name']
         best_act_fn = getattr(nn, best_act_fn_name)
         best_dropout_prob = best_params['dropout_prob']
         output_size = best_params.get('output_size', 4)  # Adjust as per your problem
+        if self.classification_type == BINARY_CLASSIFICATION_TYPE:
+            output_size = 1
 
         # Define the model
         self.model = MLP(
@@ -68,7 +76,10 @@ class ModelEstimatorWrapper:
         X_tensor = torch.from_numpy(X).float().to(self.device)
         with torch.no_grad():
             outputs = self.model(X_tensor)
-            _, predicted = torch.max(outputs, 1)
+            if self.classification_type == BINARY_CLASSIFICATION_TYPE:
+                predicted = (torch.sigmoid(outputs).squeeze(dim=1) >= 0.5).long()
+            else:
+                _, predicted = torch.max(outputs, 1)
         return predicted.cpu().numpy()
 
     def predict_proba(self, X):
@@ -77,7 +88,11 @@ class ModelEstimatorWrapper:
         X_tensor = torch.from_numpy(X).float().to(self.device)
         with torch.no_grad():
             outputs = self.model(X_tensor)
-            probabilities = torch.softmax(outputs, dim=1)
+            if self.classification_type == BINARY_CLASSIFICATION_TYPE:
+                signal_probability = torch.sigmoid(outputs).squeeze(dim=1)
+                probabilities = torch.stack([1.0 - signal_probability, signal_probability], dim=1)
+            else:
+                probabilities = torch.softmax(outputs, dim=1)
         return probabilities.cpu().numpy()
 
 # Define your scoring functions
@@ -86,7 +101,39 @@ def weighted_accuracy(y_true, y_pred, sample_weight):
 
 def weighted_log_loss(y_true, y_pred_proba, sample_weight):
     # Return negative log loss to align with scikit-learn's maximization
-    return -log_loss(y_true, y_pred_proba, sample_weight=sample_weight)
+    return -log_loss(y_true, y_pred_proba, sample_weight=sample_weight, labels=list(range(y_pred_proba.shape[1])))
+
+
+def make_nonnegative_weights(weights, name):
+    weights = np.asarray(weights, dtype=float)
+    if np.any(weights < 0):
+        print(
+            f"WARNING: {name} contains negative weights. "
+            "Using absolute weights for permutation importance because log loss "
+            "requires non-negative sample weights."
+        )
+        weights = np.abs(weights)
+    return weights
+
+
+def load_binary_labels_and_mask(input_path, params, y_val):
+    with open(f'{input_path}/training_info.txt', 'r', encoding="utf-8") as f:
+        training_info = json.load(f)
+
+    class_names = training_info["classes"]
+    signal_classes, background_classes = get_binary_class_groups(class_names, {
+        "binary_classifier": {
+            "signal_classes": params.get("signal_classes"),
+            "background_classes": params.get("background_classes"),
+        }
+    })
+    y_binary, keep_mask = make_binary_labels_from_one_hot(
+        y_val,
+        class_names,
+        signal_classes,
+        background_classes,
+    )
+    return y_binary.reshape(-1).astype(int), keep_mask
 
 def plot_permutation_importance_log_loss(importances, stds, feature_names):
     # Sort importances and features
@@ -152,6 +199,19 @@ if __name__ == "__main__":
     model_path = f'{training_folder}/mlp.pth'
     path_to_importance_plots = f'{training_folder}/permutation_importances_plots/'
     os.makedirs(path_to_importance_plots, exist_ok=True)
+    with open(param_dict_path, 'r', encoding="utf-8") as f:
+        params = json.load(f)
+
+    if params.get("classification_type") == BINARY_CLASSIFICATION_TYPE:
+        y_val, keep_mask = load_binary_labels_and_mask(input_path, params, y_val)
+        X_val = X_val[keep_mask]
+        class_weights_for_val = class_weights_for_val[keep_mask]
+        print("INFO: Binary permutation importance mode enabled")
+        print(f"INFO: X_val shape after binary class selection: {X_val.shape}")
+    else:
+        y_val = np.argmax(y_val, axis=1) if y_val.ndim == 2 else y_val
+
+    class_weights_for_val = make_nonnegative_weights(class_weights_for_val, "validation weights")
 
     # Instantiate your model wrapper
     model_wrapper = ModelEstimatorWrapper(param_dict_path, model_path)
