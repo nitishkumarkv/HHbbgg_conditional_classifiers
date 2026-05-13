@@ -686,6 +686,13 @@ class OptunaCategorizer:
         run_best_params_list = []  # Store best parameters for each run.
         run_sig_peak_list = []  # Store signal in peak for each run.
         run_bkg_side_list = []  # Store background in sidebands for each run.
+
+
+        # set random seed to be set to the sampler for the `n_runs` loop
+        import random
+        random.seed(42)
+        run_seed = [random.randint(0, 1_000_000) for _ in range(self.n_runs)]
+
         for run in range(self.n_runs):
 
             # Begin with all events.
@@ -750,8 +757,8 @@ class OptunaCategorizer:
 
                 # Create the sampler with your custom gamma:
                 sampler = optuna.samplers.TPESampler(
-                    gamma= self.gamma_fn()
-                )
+                    gamma=self.gamma_fn(),
+                    seed=run_seed[run])
                 study = optuna.create_study(direction="maximize", sampler=sampler)
 
                 study.optimize(objective, n_trials=self.n_trials_optuna, show_progress_bar=False)

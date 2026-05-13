@@ -376,6 +376,12 @@ class OptunaCategorizer:
     total_signal_weight = self.weights_all[self.labels_all == 1].sum()
     print(f"Total signal weight (all events): {total_signal_weight}")
 
+
+    # set random seed to be set to the sampler for the `n_runs` loop
+    import random
+    random.seed(42)
+    run_seed = [random.randint(0, 1_000_000) for _ in range(self.n_runs)]
+
     for run in range(self.n_runs):
       print(f"--- Run {run} ---")
 
@@ -480,7 +486,9 @@ class OptunaCategorizer:
           )
           return float(z)
 
-        sampler = optuna.samplers.TPESampler(gamma=self.gamma_fn())
+        sampler = optuna.samplers.TPESampler(
+          gamma=self.gamma_fn(),
+          seed=run_seed[run])
         study = optuna.create_study(direction="maximize", sampler=sampler)
         study.optimize(
           objective, n_trials=self.n_trials_optuna, show_progress_bar=False
