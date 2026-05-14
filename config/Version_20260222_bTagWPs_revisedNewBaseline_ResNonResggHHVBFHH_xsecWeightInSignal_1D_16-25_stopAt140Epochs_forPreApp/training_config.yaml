@@ -258,8 +258,8 @@ samples_info:
           - "v3_central/Run3_2022/data/Data_EraE_NOTAG_merged.parquet"
           - "v3_central/Run3_2022/data/Data_EraF_NOTAG_merged.parquet"
           - "v3_central/Run3_2022/data/Data_EraG_NOTAG_merged.parquet"
-        "2023preBPix": "v3_central/Run3_2023/data/Data_EraD_NOTAG_merged.parquet"
-        "2023postBPix": "v3_central/Run3_2023/data/Data_EraC_NOTAG_merged.parquet"
+        "2023preBPix": "v3_central/Run3_2023/data/Data_EraC_NOTAG_merged.parquet"
+        "2023postBPix": "v3_central/Run3_2023/data/Data_EraD_NOTAG_merged.parquet"
         "2024":
           - "v6/Run3_2024/data/DataCEG0_2024_NOTAG_merged.parquet"
           - "v6/Run3_2024/data/DataCEG1_2024_NOTAG_merged.parquet"
