@@ -123,8 +123,8 @@ class PrepareInputs:
             del record_batch
             #print(f"  [MEM] after ak.from_arrow:      {self._mem_mb():.0f} MB")
 
-            # Temporary fix for v4p5 version of Run 2 & 2022+2023
-            if ("201" in era) or ("EE" in era) or ("BPix" in era):
+            # Temporary fix for v3 version of 2022+2023
+            if ("EE" in era) or ("BPix" in era):
                 batch = ak.Array({
                     (name.replace("nonResReg", "nonResReg_vbfpair", 1)
                      if name.startswith("nonResReg")
@@ -276,7 +276,51 @@ class PrepareInputs:
 
         # add b-tagging working points
         btagVariable = "btag"
-        if era == "preEE":
+        if era == "2016preVFP":
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.0387, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.1847, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.5467, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.6777, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.9218, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.0387, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.1847, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.5467, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.6777, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.9218, int)
+        elif era == "2016postVFP":
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.0400, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.1898, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.5538, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.6872, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.9353, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.0400, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.1898, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.5538, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.6872, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.9353, int)
+        elif era == "2017":
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.0331, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.1776, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.5755, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.7274, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.9666, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.0331, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.1776, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.5755, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.7274, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.9666, int)
+        elif era == "2018":
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.0308, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.1610, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.5405, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.6992, int)
+            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.9655, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.0308, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.1610, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.5405, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.6992, int)
+            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.9655, int)
+        elif "preEE" in era:
             events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.047, int)
             events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.245, int)
             events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.6734, int)
@@ -287,7 +331,7 @@ class PrepareInputs:
             events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.6734, int)
             events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.7862, int)
             events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.961, int)
-        elif era == "postEE":
+        elif "postEE" in era:
             events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.0499, int)
             events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.2605, int)
             events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.6915, int)
@@ -298,7 +342,7 @@ class PrepareInputs:
             events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.6915, int)
             events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.8033, int)
             events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.9664, int)
-        elif era == "preBPix":
+        elif "preBPix" in era:
             events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.0358, int)
             events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.1917, int)
             events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.6172, int)
@@ -309,7 +353,7 @@ class PrepareInputs:
             events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.6172, int)
             events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.7515, int)
             events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagPNetB"] > 0.9659, int)
-        elif era == "postBPix":
+        elif "postBPix" in era:
             events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.0359, int)
             events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.1919, int)
             events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagPNetB"] > 0.6133, int)
@@ -331,17 +375,8 @@ class PrepareInputs:
             events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.4648, int)
             events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.6298, int)
             events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.9739, int)
-        else: # Accounts for Run 2 inclusively, copying the 2024 WPs for now
-            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.0246, int)
-            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.1272, int)
-            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.4648, int)
-            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.6298, int)
-            events[f"{self.var_prefix}_lead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events[f"{self.var_prefix}_lead_bjet_btagUParTAK4B"] > 0.9739, int)
-            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_L"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.0246, int)
-            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_M"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.1272, int)
-            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_T"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.4648, int)
-            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.6298, int)
-            events[f"{self.var_prefix}_sublead_bjet_"+btagVariable+"_WP_XXT"] = ak.values_astype(events[f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"] > 0.9739, int)
+        else:
+            raise ValueError(f"Unknown era '{era}': no b-tagging working points defined for this era.")
 
         return events
 
@@ -349,42 +384,41 @@ class PrepareInputs:
     def get_relative_xsec_weight(self, events, sample_type, era):
 
         dict_xsec = {
-            # Accounting for the template fit factor which is not included in the parquet weight in 2024 and 2025
-            "GGJets": 86.96e3 if ("201" in era) else (88.75e3 * 1.59) if (era=="2024" or era=="2025") else 88.75e3,
+            "GGJets": 86.96e3 if ("201" in era) else 88.75e3,
             "GJetPt20To40": 242.5e3,
             "GJetPt40": 919.1e3,
-            "TTGG": 0.01696e3 if ("201" in era) else 0.02391e3,  # cross sectio of TTGG 0.01696, copilot: 0.502
-            "ttHtoGG_M_125": 0.0011e3 if ("201" in era) else (0.5700e3 * 0.00227),  # cross sectio of ttH * BR(HToGG)
-            "BBHto2G_M_125": 0.4385e3 * 0.00227,  # cross sectio of BBH * BR(HToGG)
-            "GluGluHToGG_M_125": 0.1103e3 if ("201" in era) else (52.23e3 * 0.00227),  # cross sectio of GluGluHToGG * BR(HToGG)
+            "TTGG": 0.01696e3 if ("201" in era) else 0.02391e3,
+            "ttHtoGG_M_125": 0.0011e3 if ("201" in era) else (0.5700e3 * 0.00227),
+            "BBHto2G_M_125": 0.4385e3 * 0.00227,
+            "GluGluHToGG_M_125": 0.1103e3 if ("201" in era) else (52.23e3 * 0.00227),
             "VBFHToGG_M_125": 0.00855e3 if ("201" in era) else (4.078e3 * 0.00227),
             "VHtoGG_M_125": 0.00508e3 if ("201" in era) else (2.4009e3 * 0.00227),
             "WpHtoGG_M_125": 0.880114e3 * 0.00227,
             "WmHtoGG_M_125": 0.562032e3 * 0.00227,
             "ZHtoGG_M_125": 0.9361e3 * 0.00227,
-            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": 8.1e-02 if ("201" in era) else (0.034e3 * 0.00227 * 0.582 * 2), #0.02964e3 * 0.00227 * 0.582 * 2,  # cross sectio of GluGluToHH * BR(HToGG) * BR(HToGG) * 2 for two combination
-            # Needs to be fixed according to recommendations: https://twiki.cern.ch/twiki/bin/view/LHCPhysics/LHCHWGHH?redirectedfrom=LHCPhysics.LHCHXSWGHH#HHjj_VBF
-            "VBFHH_CV_1p000_C2V_1p000_C3_1p000": 0.00173e3 * 0.00227 * 0.582 * 2,  # cross sectio of VBFToHH * BR(HToGG) * BR(HTobb) * 2 for two combination
+            # xs(HH) * BR(HToGG) * BR(HToGG) * 2 from https://gitlab.cern.ch/hh/recommendations/-/blob/master/CrossSections.md
+            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": (0.030922e3 * 0.00227 * 0.576 * 2) if ("201" in era) else (0.034170e3 * 0.00227 * 0.576 * 2),
+            "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": (0.068321e3 * 0.00227 * 0.576 * 2) if ("201" in era) else (0.075766e3 * 0.00227 * 0.576 * 2),
+            "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": (0.013405e3 * 0.00227 * 0.576 * 2) if ("201" in era) else (0.014814e3 * 0.00227 * 0.576 * 2),
+            "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": (0.088012e3 * 0.00227 * 0.576 * 2) if ("201" in era) else (0.097259e3 * 0.00227 * 0.576 * 2),
+            "VBFHH_CV_1p000_C2V_1p000_C3_1p000": (0.0017260e3 * 0.00227 * 0.576 * 2) if ("201" in era) else (0.0019292e3 * 0.00227 * 0.576 * 2),
             "DDQCDGJET": 1.0,
-            "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": 0.09965e3 * 0.00227 * 0.582 * 2,
-            "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": 0.07575e3 * 0.00227 * 0.582 * 2,
-            "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": 0.01477e3 * 0.00227 * 0.582 * 2,
             "TTG_10_100": 4.334e3,
             "TTG_100_200": 0.44e3,
             "TTG_200": 0.12e3,
             "TT": 730e3,
         }
-        luminosities = {
-        "2016preVFP": 19.5,  # Integrated luminosity for preEE in fb^-1
-        "2016postVFP": 16.8,  # Integrated luminosity for preEE in fb^-1
-        "2017": 42.07,  # Integrated luminosity for preEE in fb^-1
-        "2018": 59.56, # Integrated luminosity in fb^-1
-        "preEE": 7.98, # Integrated luminosity in fb^-1
-        "postEE": 26.67,  # Integrated luminosity in fb^-1
-        "preBPix": 17.794,  # Integrated luminosity in fb^-1
-        "postBPix": 9.451,  # Integrated luminosity in fb^-1
-        "2024": 108.95,  # Integrated luminosity in fb^-1
-        "2025": 110.73  # Integrated luminosity in fb^-1
+        luminosities = { # Integrated luminosity in fb^-1
+        "2016preVFP": 19.5,
+        "2016postVFP": 16.8,
+        "2017": 42.07,
+        "2018": 59.56,
+        "2022preEE": 7.99,
+        "2022postEE": 26.68,
+        "2023preBPix": 17.96,
+        "2023postBPix": 9.68,
+        "2024": 109.95,
+        "2025": 110.84
         }
 
         lumi = luminosities[era]
@@ -724,8 +758,8 @@ class PrepareInputs:
 
             vars_to_load = vars_for_training + self.extra_vars
 
-            # Temporary fix for v4p5 version of Run 2
-            if ("201" in era) or ("EE" in era) or ("BPix" in era):
+            # Temporary fix for v3 version of 2022+2023
+            if ("EE" in era) or ("BPix" in era):
                 vars_to_load = [var.replace(f"{self.var_prefix}_", "") if "VBF" in var else var for var in vars_to_load]
                 vars_to_load = [var.replace(f"{self.var_prefix}_", "nonResReg_") for var in vars_to_load]
 
@@ -917,8 +951,8 @@ class PrepareInputs:
 
             vars_to_load = vars_for_training + self.extra_vars + self.vars_for_boosted + ["lead_genPartFlav", "sublead_genPartFlav", "weight_tot"]
 
-            # Temporary fix for v4p5 version of Run 2 & 2022+2023
-            if ("201" in era) or ("EE" in era) or ("BPix" in era):
+            # Temporary fix for v3 version of 2022+2023
+            if ("EE" in era) or ("BPix" in era):
                 vars_to_load = [var.replace(f"{self.var_prefix}_", "") if "VBF" in var else var for var in vars_to_load]
                 vars_to_load = [var.replace(f"{self.var_prefix}_", "nonResReg_") for var in vars_to_load]
 
@@ -1052,8 +1086,8 @@ class PrepareInputs:
 
                 vars_to_load = vars_for_training + self.extra_vars + self.vars_for_boosted + ["lead_genPartFlav", "sublead_genPartFlav", "weight_tot"]
 
-                # Temporary fix for v4p5 version of Run 2 & 2022+2023
-                if ("201" in era) or ("EE" in era) or ("BPix" in era):
+                # Temporary fix for v3 version of 2022+2023
+                if ("EE" in era) or ("BPix" in era):
                     vars_to_load = [var.replace(f"{self.var_prefix}_", "") if "VBF" in var else var for var in vars_to_load]
                     vars_to_load = [var.replace(f"{self.var_prefix}_", "nonResReg_") for var in vars_to_load]
 
@@ -1186,15 +1220,10 @@ class PrepareInputs:
                          "2016postVFP": "2016postVFP",
                          "2017": "2017",
                          "2018": "2018",
-                         "2022_EraE": "postEE",
-                         "2022_EraF": "postEE",
-                         "2022_EraG": "postEE",
-                         "2022_EraC": "preEE",
-                         "2022_EraD": "preEE",
-                         "2023_EraCv1to3": "preBPix",
-                         "2023_EraCv4": "preBPix",
-                         "2023_EraC": "preBPix",
-                         "2023_EraD": "postBPix",
+                         "2022preEE": "2022preEE",
+                         "2022postEE": "2022postEE",
+                         "2023preBPix": "2023preBPix",
+                         "2023postBPix": "2023postBPix",
                          "2024": "2024",
                          "2025": "2025"}
 
@@ -1209,8 +1238,8 @@ class PrepareInputs:
 
             vars_to_load = vars_for_training + self.extra_vars + self.vars_for_boosted
 
-            # Temporary fix for v4p5 version of Run 2 & 2022+2023
-            if ("201" in data) or ("2022" in data) or ("2023" in data):
+            # Temporary fix for v3 version of 2022+2023
+            if ("2022" in data) or ("2023" in data):
                 vars_to_load = [var.replace(f"{self.var_prefix}_", "") if "VBF" in var else var for var in vars_to_load]
                 vars_to_load = [var.replace(f"{self.var_prefix}_", "nonResReg_") for var in vars_to_load]
 

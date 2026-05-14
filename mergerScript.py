@@ -41,7 +41,8 @@ def load_samples(base_path, samples, classes, var_prefix, eras, no_syst_samples,
             path = (os.path.join(base_path, "individual_samples_data", era, sample)
                     if data else
                     os.path.join(base_path, "individual_samples", era, sample, syst))
-            candidate = os.path.join(path, "events.parquet")
+            #candidate = os.path.join(path, "events.parquet")
+            candidate = os.path.join(path, "events_boostedCat.parquet")
             if os.path.exists(candidate):
                 example_file = candidate
                 break
@@ -57,8 +58,8 @@ def load_samples(base_path, samples, classes, var_prefix, eras, no_syst_samples,
     dijet_mass_key = f"{var_prefix}_dijet_mass_DNNreg"
     score_keys = [f"{cls}_score" for cls in classes]
 
-    #selected_columns = ["lumi", "event", "run", "mass", dijet_mass_key, "is_boosted", "y_proba"]
-    selected_columns = ["lumi", "event", "run", "mass", dijet_mass_key]
+    #selected_columns = ["lumi", "event", "run", "mass", dijet_mass_key]
+    selected_columns = ["lumi", "event", "run", "mass", dijet_mass_key, "is_boosted", "y_proba"]
     columns_to_load = selected_columns + weight_columns  # weight_columns always included
 
     sample_dfs = {}  # (era, sample) -> DataFrame
@@ -83,7 +84,8 @@ def load_samples(base_path, samples, classes, var_prefix, eras, no_syst_samples,
                 print(f"Missing y for {path}. Skipping.")
                 continue
 
-            events = ak.from_parquet(os.path.join(path, 'events.parquet'),
+            #events = ak.from_parquet(os.path.join(path, 'events.parquet'),
+            events = ak.from_parquet(os.path.join(path, 'events_boostedCat.parquet'),
                                      columns=None if save_all_columns else columns_to_load)
             y = np.load(y_path)
 
@@ -107,6 +109,8 @@ def load_samples(base_path, samples, classes, var_prefix, eras, no_syst_samples,
                 year = 2023
             elif "2024" in era:
                 year = 2024
+            elif "2025" in era:
+                year = 2025
             else:
                 raise ValueError(f"Unknown era: {era}")
 

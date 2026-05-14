@@ -33,19 +33,31 @@ def plot_score_shape_diff_kl(folder):
     }
 
     for sample in kl_sample_list:
-        preEE = ak.from_parquet(f"{folder}/preEE/{sample}/events.parquet", columns=["weight_tot", "mass", "nonResReg_dijet_mass_DNNreg", "lead_mvaID", "sublead_mvaID"])
-        postEE = ak.from_parquet(f"{folder}/postEE/{sample}/events.parquet", columns=["weight_tot", "mass", "nonResReg_dijet_mass_DNNreg", "lead_mvaID", "sublead_mvaID"])
-        preBPix = ak.from_parquet(f"{folder}/preBPix/{sample}/events.parquet", columns=["weight_tot", "mass", "nonResReg_dijet_mass_DNNreg", "lead_mvaID", "sublead_mvaID"])
-        postBPix = ak.from_parquet(f"{folder}/postBPix/{sample}/events.parquet", columns=["weight_tot", "mass", "nonResReg_dijet_mass_DNNreg", "lead_mvaID", "sublead_mvaID"])
-        
-        events = ak.concatenate([preEE, postEE, preBPix, postBPix], axis=0)
+        era_2016preVFP = ak.from_parquet(f"{folder}/2016preVFP/{sample}/events.parquet", columns=["weight_tot", "mass", "nonResReg_dijet_mass_DNNreg", "lead_mvaID", "sublead_mvaID"])
+        era_2016postVFP = ak.from_parquet(f"{folder}/2016postVFP/{sample}/events.parquet", columns=["weight_tot", "mass", "nonResReg_dijet_mass_DNNreg", "lead_mvaID", "sublead_mvaID"])
+        era_2017 = ak.from_parquet(f"{folder}/2017/{sample}/events.parquet", columns=["weight_tot", "mass", "nonResReg_dijet_mass_DNNreg", "lead_mvaID", "sublead_mvaID"])
+        era_2018 = ak.from_parquet(f"{folder}/2018/{sample}/events.parquet", columns=["weight_tot", "mass", "nonResReg_dijet_mass_DNNreg", "lead_mvaID", "sublead_mvaID"])
+        era_2022preEE = ak.from_parquet(f"{folder}/2022preEE/{sample}/events.parquet", columns=["weight_tot", "mass", "nonResReg_dijet_mass_DNNreg", "lead_mvaID", "sublead_mvaID"])
+        era_2022postEE = ak.from_parquet(f"{folder}/2022postEE/{sample}/events.parquet", columns=["weight_tot", "mass", "nonResReg_dijet_mass_DNNreg", "lead_mvaID", "sublead_mvaID"])
+        era_2023preBPix = ak.from_parquet(f"{folder}/2023preBPix/{sample}/events.parquet", columns=["weight_tot", "mass", "nonResReg_dijet_mass_DNNreg", "lead_mvaID", "sublead_mvaID"])
+        era_2023postBPix = ak.from_parquet(f"{folder}/2023postBPix/{sample}/events.parquet", columns=["weight_tot", "mass", "nonResReg_dijet_mass_DNNreg", "lead_mvaID", "sublead_mvaID"])
+        era_2024 = ak.from_parquet(f"{folder}/2024/{sample}/events.parquet", columns=["weight_tot", "mass", "nonResReg_dijet_mass_DNNreg", "lead_mvaID", "sublead_mvaID"])
+        era_2025 = ak.from_parquet(f"{folder}/2025/{sample}/events.parquet", columns=["weight_tot", "mass", "nonResReg_dijet_mass_DNNreg", "lead_mvaID", "sublead_mvaID"])
 
-        score_preEE = np.load(f"{folder}/preEE/{sample}/y.npy")
-        score_postEE = np.load(f"{folder}/postEE/{sample}/y.npy")
-        score_preBPix = np.load(f"{folder}/preBPix/{sample}/y.npy")
-        score_postBPix = np.load(f"{folder}/postBPix/{sample}/y.npy")
-        
-        score = np.concatenate([score_preEE, score_postEE, score_preBPix, score_postBPix], axis=0)
+        events = ak.concatenate([era_2016preVFP, era_2016postVFP, era_2017, era_2018, era_2022preEE, era_2022postEE, era_2023preBPix, era_2023postBPix, era_2024, era_2025], axis=0)
+
+        score_2016preVFP = np.load(f"{folder}/2016preVFP/{sample}/y.npy")
+        score_2016postVFP = np.load(f"{folder}/2016postVFP/{sample}/y.npy")
+        score_2017 = np.load(f"{folder}/2017/{sample}/y.npy")
+        score_2018 = np.load(f"{folder}/2018/{sample}/y.npy")
+        score_2022preEE = np.load(f"{folder}/2022preEE/{sample}/y.npy")
+        score_2022postEE = np.load(f"{folder}/2022postEE/{sample}/y.npy")
+        score_2023preBPix = np.load(f"{folder}/2023preBPix/{sample}/y.npy")
+        score_2023postBPix = np.load(f"{folder}/2023postBPix/{sample}/y.npy")
+        score_2024 = np.load(f"{folder}/2024/{sample}/y.npy")
+        score_2025 = np.load(f"{folder}/2025/{sample}/y.npy")
+
+        score = np.concatenate([score_2016preVFP, score_2016postVFP, score_2017, score_2018, score_2022preEE, score_2022postEE, score_2023preBPix, score_2023postBPix, score_2024, score_2025], axis=0)
 
         # apply preselection
         events, score = preselection(events, score)

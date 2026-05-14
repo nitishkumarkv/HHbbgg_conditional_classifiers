@@ -243,7 +243,7 @@ class OptunaCategorizer:
       )
     }
     #eras = ["2024"]
-    eras = ["2016preVFP", "2016postVFP", "2017", "2018", "preEE", "postEE", "preBPix", "postBPix", "2024"]
+    eras = ["2016preVFP", "2016postVFP", "2017", "2018", "2022preEE", "2022postEE", "2023preBPix", "2023postBPix", "2024", "2025"]
     self.dijet_mass_key = "nonResReg_vbfpair_dijet_mass_DNNreg"
 
     for era in eras:

@@ -313,17 +313,17 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
             fig, axs = plt.subplots(2, 1, gridspec_kw={'height_ratios': [3, 1], 'hspace': 0.05}, figsize=(10, 10), sharex=True )
             ax, ax_ratio = axs
 
-        luminosities = {
-        "2016preVFP": 19.5,  # Integrated luminosity for preEE in fb^-1
-        "2016postVFP": 16.8,  # Integrated luminosity for preEE in fb^-1
-        "2017": 42.07,  # Integrated luminosity for preEE in fb^-1
-        "2018": 59.56,  # Integrated luminosity for preEE in fb^-1
-        "preEE": 7.98,  # Integrated luminosity for preEE in fb^-1
-        "postEE": 26.67,  # Integrated luminosity for postEE in fb^-1
-        "preBPix": 17.794,  # Integrated luminosity for preEE in fb^-1
-        "postBPix": 9.451,  # Integrated luminosity for postEE in fb^-1
-        "2024": 109.08,  # Integrated luminosity in fb^-1
-        "2025": 115.65  # Integrated luminosity in fb^-1
+        luminosities = { # Integrated luminosity in fb^-1
+        "2016preVFP": 19.5,
+        "2016postVFP": 16.8,
+        "2017": 42.07,
+        "2018": 59.56,
+        "2022preEE": 7.99,
+        "2022postEE": 26.68,
+        "2023preBPix": 17.96,
+        "2023postBPix": 9.68,
+        "2024": 109.95,
+        "2025": 110.84
         }
 
         lumi = 0
@@ -471,7 +471,7 @@ if __name__ == "__main__":
 
     #sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "TTGG", "GGJets", "DDQCDGJET", "TTG_100_200", "TTG_200"]
     #sim_samples = ["VBFHToGG_M_125", "WmHtoGG_M_125", "WpHtoGG_M_125", "ZHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "VBFHH_CV_1p000_C2V_1p000_C3_1p000", "TTGG", "GGJets", "DDQCDGJET"]
-    sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "VBFHH_CV_1p000_C2V_1p000_C3_1p000", "TTGG", "GGJets", "DDQCDGJET"]
+    sim_samples = ["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "GluGluHToGG_M_125", "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", "VBFHH_CV_1p000_C2V_1p000_C3_1p000", "TTGG", "GGJets", "DDQCDGJET"]
     variables_ = ["mass", f"{var_prefix}_dijet_mass_DNNreg", "pt", f"{var_prefix}_HHbbggCandidate_mass", f"{var_prefix}_dijet_pt", f"{var_prefix}_lead_bjet_pt", f"{var_prefix}_sublead_bjet_pt"] # ["Res_mjj_regressed", "Res_dijet_mass", "nonRes_mjj_regressed", "mass", "nonRes_dijet_mass", "minMVAID", "maxMVAID", "n_jets", "sublead_eta", "lead_eta", "sublead_pt", "lead_pt", "pt", "eta", "lead_mvaID", "sublead_mvaID", f"{var_prefix}_dijet_mass_DNNreg", f"{var_prefix}_HHbbggCandidate_mass", f"{var_prefix}_dijet_pt", f"{var_prefix}_lead_bjet_eta", f"{var_prefix}_sublead_bjet_eta", f"{var_prefix}_lead_bjet_pt", f"{var_prefix}_sublead_bjet_pt"]
     extra_vars = [] # ["mass", "nonRes_dijet_mass", "Res_dijet_mass", "weight", "pt", "nonRes_dijet_pt", "Res_dijet_pt", "Res_lead_bjet_pt", "Res_sublead_bjet_pt", "Res_lead_bjet_ptPNetCorr", "Res_sublead_bjet_ptPNetCorr", "nonRes_HHbbggCandidate_mass", "Res_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_mjj_regressed", "Res_mjj_regressed", "nonRes_lead_bjet_ptPNetCorr", "nonRes_sublead_bjet_ptPNetCorr", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "jet1_mass", "jet2_mass", "jet3_mass", "jet4_mass", "jet5_mass", "jet6_mass", "Res_lead_bjet_jet_idx", "Res_sublead_bjet_jet_idx", "jet1_index", "jet2_index", "jet3_index", "jet4_index", "jet5_index", "jet6_index", "jet1_pt", "jet2_pt", "jet3_pt", "jet4_pt", "jet5_pt", "jet6_pt", "jet1_eta", "jet2_eta", "jet3_eta", "jet4_eta", "jet5_eta", "jet6_eta", "jet1_phi", "jet2_phi", "jet3_phi", "jet4_phi", "jet5_phi", "jet6_phi"]
 
