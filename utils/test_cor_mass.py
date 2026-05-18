@@ -40,8 +40,8 @@ if __name__ == "__main__":
     # Load scores
     y = []
     rel_w = []
-    for s in sample:
-        for era in eras:
+    for era in eras:
+        for s in sample:
             y.append(np.load(f"{path}/individual_samples/{era}/{s}/y.npy"))
             rel_w.append(np.load(f"{path}/individual_samples/{era}/{s}/rel_w.npy"))
     y = np.concatenate(y)
