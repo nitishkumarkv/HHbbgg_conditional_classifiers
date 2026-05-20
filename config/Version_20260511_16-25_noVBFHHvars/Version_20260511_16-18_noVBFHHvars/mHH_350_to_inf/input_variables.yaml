@@ -1,0 +1,58 @@
+mlp:
+    vars:
+    - eta
+    - lead_phi
+    - lead_mvaID
+    - nonResReg_vbfpair_pholead_PtOverM
+    - sublead_eta
+    - sublead_phi
+    - sublead_mvaID
+    - nonResReg_vbfpair_phosublead_PtOverM
+    - nonResReg_vbfpair_lead_bjet_eta
+    - nonResReg_vbfpair_lead_bjet_phi
+    - nonResReg_vbfpair_lead_bjet_btag_WP_L
+    - nonResReg_vbfpair_lead_bjet_btag_WP_M
+    - nonResReg_vbfpair_lead_bjet_btag_WP_T
+    - nonResReg_vbfpair_lead_bjet_btag_WP_XT
+    - nonResReg_vbfpair_lead_bjet_btag_WP_XXT
+    - nonResReg_vbfpair_sublead_bjet_eta
+    - nonResReg_vbfpair_sublead_bjet_phi
+    - nonResReg_vbfpair_sublead_bjet_btag_WP_L
+    - nonResReg_vbfpair_sublead_bjet_btag_WP_M
+    - nonResReg_vbfpair_sublead_bjet_btag_WP_T
+    - nonResReg_vbfpair_sublead_bjet_btag_WP_XT
+    - nonResReg_vbfpair_sublead_bjet_btag_WP_XXT
+    - nonResReg_vbfpair_DeltaR_jg_min
+    - nonResReg_vbfpair_CosThetaStar_CS
+    - nonResReg_vbfpair_CosThetaStar_gg
+    - nonResReg_vbfpair_CosThetaStar_jj
+    - puppiMET_phi
+    - puppiMET_pt
+    - n_leptons
+    - n_jets
+    - nonResReg_chi_t0
+    - nonResReg_chi_t1
+    - nonResReg_DeltaPhi_j1MET
+    - nonResReg_DeltaPhi_j2MET
+    # - nonResReg_vbfpair_VBF_first_jet_eta
+    # - nonResReg_vbfpair_VBF_first_jet_phi
+    # - nonResReg_vbfpair_VBF_second_jet_eta
+    # - nonResReg_vbfpair_VBF_second_jet_phi
+    # - nonResReg_vbfpair_VBF_first_jet_PtOverM
+    # - nonResReg_vbfpair_VBF_second_jet_PtOverM
+    # - nonResReg_vbfpair_VBF_jet_eta_prod
+    # - nonResReg_vbfpair_VBF_jet_eta_sum
+    # - nonResReg_vbfpair_VBF_DeltaR_j1b1
+    # - nonResReg_vbfpair_VBF_DeltaR_j1b2
+    # - nonResReg_vbfpair_VBF_DeltaR_j2b1
+    # - nonResReg_vbfpair_VBF_DeltaR_j2b2
+    # - nonResReg_vbfpair_VBF_DeltaR_jb_min
+    # - nonResReg_vbfpair_VBF_DeltaR_jg_min
+    # - nonResReg_vbfpair_VBF_dijet_mass
+    - nonResReg_vbfpair_HHbbggCandidate_eta
+    
+    # variables added at preparation level which are not available in HiggsDNA output
+    # - diphoton_PtOverM_ggjj
+    # - nonResReg_dijet_PtOverM_ggjj  #nonResReg_vbfpair_dijet_PtOverM_ggjj 
+    # - deltaR_gg
+    # - year
