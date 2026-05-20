@@ -13,10 +13,8 @@ pyproject.toml
 
 config/*
 out*/
-Version_20250524_MVAID_forPreApp/
 condor/
 norm_weights_disco_*.png
-Version_20260127_16-24_kl_year_vbfpair_partial_nobjetpT/
 HHbbgg_classifier_backup_torch2.0.0cuda.yaml
 HHbbgg_classifier_backup_torch2.9.1cu130.yaml
 HHbbgg_classifier.yaml
@@ -27,7 +25,4 @@ save_checkpoint_sculpting_plots.sh
 weight_distribution.png
 .cats/Version_20250524_MVAID_forPreApp_80MjjLow_noIsBoosted.json
 .cats/Version_20250524_MVAID_forPreApp_80MjjLow.json
-Version_20260317_16-24_kl_year_vbfpair_partial_nobjetpT_nodeltaRgg_nodijetpTmggjj/
-Version_20260317_16-24_kl_year_vbfpair_partial_nobjetpT_nodeltaRgg_nodijetpTmggjj_condor_test/
-Version_20260320_16-24_kl_year_vbfpair_partial_nobjetpT_nodeltaRgg/
-Version_20260320_16-24_kl_year_vbfpair_partial_nobjetpT_nodijetpTmggjj/
+/Version_*/
