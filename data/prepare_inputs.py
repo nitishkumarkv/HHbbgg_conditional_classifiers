@@ -43,6 +43,7 @@ class PrepareInputs:
             self.random_seed = self.training_info["random_seed"]
             self.weight_scheme_process = self.training_info["weight_scheme_process"]
             self.class_weight_scale = {class_name: float(self.training_info.get("class_weight_scale", {}).get(class_name, 1.0)) for class_name in self.classes}
+            self.sample_weight_scale = {sample_name: float(self.training_info.get("sample_weight_scale", {}).get(sample_name, 1.0)) for sample_name in self.sample_to_class.keys()}
             self.write_chunk = self.training_info["write_chunk"]
         self.fill_nan = -9
         self.max_input_files = max_input_files
@@ -65,20 +66,25 @@ class PrepareInputs:
 
         self.extra_vars_out = self.extra_vars_out + vars_VBFHH_MVA
 
-        # prepare process numbers for proccesses in each class
-        num_process_each_class = {
-            class_: 0 for class_ in self.classes
+        # Each configured sample type is one process. Use globally unique process
+        # numbers so sample-level diagnostics and weights are never class-ambiguous.
+        process_numbers = {
+            sample: proc_num
+            for proc_num, sample in enumerate(self.sample_to_class.keys())
         }
+        samples_in_class = {class_: [] for class_ in self.classes}
+        for sample, class_ in self.sample_to_class.items():
+            samples_in_class[class_].append(process_numbers[sample])
 
-        process_numbers = {}
-
-        for sample in self.sample_to_class.keys():
-            class_ = self.sample_to_class[sample]
-            process_numbers[sample] = num_process_each_class[class_]
-            num_process_each_class[class_] += 1
-
-        self.num_process_each_class = num_process_each_class
+        self.samples_in_class = samples_in_class
+        self.num_process_each_class = {
+            class_: len(samples_in_class[class_])
+            for class_ in self.classes
+        }
         self.process_numbers = process_numbers
+        self.sample_weight_scale_by_process = np.ones(len(process_numbers), dtype=np.float32)
+        for sample, proc_num in process_numbers.items():
+            self.sample_weight_scale_by_process[proc_num] = self.sample_weight_scale[sample]
 
         self.class_idx_to_name = {i: class_ for i, class_ in enumerate(self.classes)}
 
@@ -156,7 +162,7 @@ class PrepareInputs:
         # events["diphoton_PtOverM_ggjj"] = events.pt / events.nonResReg_HHbbggCandidate_mass
         # events["nonResReg_dijet_PtOverM_ggjj"] = events.nonResReg_dijet_pt / events.nonResReg_HHbbggCandidate_mass
 
-        # events["diphoton_PtOverM_X"] = events.pt / events.nonResReg_vbfpair_M_X
+        events["diphoton_PtOverM_X"] = events.pt / events.nonResReg_vbfpair_M_X
         # events["nonResReg_dijet_PtOverM_X"] = events.nonResReg_dijet_pt / events.nonResReg_vbfpair_M_X
 
         events["nonResReg_lead_bjet_over_M_regressed"] = events.nonResReg_vbfpair_lead_bjet_pt / events.nonResReg_vbfpair_dijet_mass
@@ -449,6 +455,7 @@ class PrepareInputs:
 
             class_name = self.class_idx_to_name[i]
             class_scale = self.class_weight_scale.get(class_name, 1.0)
+            sample_weight_scale_by_process = self.sample_weight_scale_by_process
 
             if self.weight_scheme_process[class_name] == "equal_weight":
                 cls_bool = (y_train[:, i] == 1)
@@ -457,15 +464,16 @@ class PrepareInputs:
                 class_weights_for_training_abs_ = ak.zeros_like(rel_w_train)
                 class_weights_only_positive_ = ak.zeros_like(rel_w_train)
 
-                for proc in range(self.num_process_each_class[self.class_idx_to_name[i]]):
+                for proc in self.samples_in_class[class_name]:
+                    sample_scale = sample_weight_scale_by_process[proc]
                     rel_xsec_weight_for_class = rel_w_train * cls_bool * (proc_num_train == proc)
-                    true_class_weights_ = true_class_weights_ + (rel_xsec_weight_for_class / np.sum(rel_xsec_weight_for_class))
+                    true_class_weights_ = true_class_weights_ + sample_scale * (rel_xsec_weight_for_class / np.sum(rel_xsec_weight_for_class))
 
                     abs_rel_xsec_weight_for_class = abs(rel_w_train) * cls_bool * (proc_num_train == proc)
-                    class_weights_for_training_abs_ = class_weights_for_training_abs_ + (abs_rel_xsec_weight_for_class / np.sum(abs_rel_xsec_weight_for_class))
+                    class_weights_for_training_abs_ = class_weights_for_training_abs_ + sample_scale * (abs_rel_xsec_weight_for_class / np.sum(abs_rel_xsec_weight_for_class))
 
                     only_positive_rel_xsec_weight_for_class = rel_w_train * cls_bool * (rel_w_train > 0) * (proc_num_train == proc)
-                    class_weights_only_positive_ = class_weights_only_positive_ + (only_positive_rel_xsec_weight_for_class / np.sum(only_positive_rel_xsec_weight_for_class))
+                    class_weights_only_positive_ = class_weights_only_positive_ + sample_scale * (only_positive_rel_xsec_weight_for_class / np.sum(only_positive_rel_xsec_weight_for_class))
 
                 # normalize the weights for this class to be class_scale
                 true_class_weights = true_class_weights + class_scale * (true_class_weights_ / np.sum(true_class_weights_))
@@ -476,12 +484,24 @@ class PrepareInputs:
                 cls_bool = (y_train[:, i] == 1)
 
                 rel_xsec_weight_for_class = rel_w_train * cls_bool
+                for proc in self.samples_in_class[class_name]:
+                    sample_scale = sample_weight_scale_by_process[proc]
+                    if sample_scale != 1.0:
+                        rel_xsec_weight_for_class[proc_num_train == proc] *= sample_scale
                 true_class_weights = true_class_weights + class_scale * (rel_xsec_weight_for_class / np.sum(rel_xsec_weight_for_class))
 
                 abs_rel_xsec_weight_for_class = abs(rel_w_train) * cls_bool
+                for proc in self.samples_in_class[class_name]:
+                    sample_scale = sample_weight_scale_by_process[proc]
+                    if sample_scale != 1.0:
+                        abs_rel_xsec_weight_for_class[proc_num_train == proc] *= sample_scale
                 class_weights_for_training_abs = class_weights_for_training_abs + class_scale * (abs_rel_xsec_weight_for_class / np.sum(abs_rel_xsec_weight_for_class))
 
                 only_positive_rel_xsec_weight_for_class = rel_w_train * cls_bool * (rel_w_train > 0)
+                for proc in self.samples_in_class[class_name]:
+                    sample_scale = sample_weight_scale_by_process[proc]
+                    if sample_scale != 1.0:
+                        only_positive_rel_xsec_weight_for_class[proc_num_train == proc] *= sample_scale
                 class_weights_only_positive = class_weights_only_positive + class_scale * (only_positive_rel_xsec_weight_for_class / np.sum(only_positive_rel_xsec_weight_for_class))
 
         for i in range(y_train.shape[1]):
@@ -491,7 +511,7 @@ class PrepareInputs:
 
             if self.weight_scheme_process[self.class_idx_to_name[i]] == "equal_weight":
                 print("\n")
-                for proc in range(self.num_process_each_class[self.class_idx_to_name[i]]):
+                for proc in self.samples_in_class[self.class_idx_to_name[i]]:
                     print(f"(number of events: sum of class_weights_for_training_abs) for class number {i+1} and process number {proc} = ({sum(y_train[:, i] * (proc_num_train == proc))}: {sum(class_weights_for_training_abs * (y_train[:, i] == 1) * (proc_num_train == proc))})")
                     print(f"(number of events: sum of class_weights_only_positive) for class number {i+1} and process number {proc} = ({sum(y_train[:, i] * (proc_num_train == proc))}: {sum(class_weights_only_positive * (y_train[:, i] == 1) * (proc_num_train == proc))})")
                     print(f"(number of events: sum of true_class_weights) for class number {i+1} and process number {proc} = ({sum(y_train[:, i] * (proc_num_train == proc))}: {sum(true_class_weights * (y_train[:, i] == 1) * (proc_num_train == proc))})")
@@ -506,14 +526,16 @@ class PrepareInputs:
         for i in range(y_val.shape[1]):
             class_name = self.class_idx_to_name[i]
             class_scale = self.class_weight_scale.get(class_name, 1.0)
+            sample_weight_scale_by_process = self.sample_weight_scale_by_process
             
             if self.weight_scheme_process[class_name] == "equal_weight":
                 cls_bool = (y_val[:, i] == 1)
                 class_weights_for_val_ = ak.zeros_like(rel_w_val)
 
-                for proc in range(self.num_process_each_class[self.class_idx_to_name[i]]):
+                for proc in self.samples_in_class[class_name]:
+                    sample_scale = sample_weight_scale_by_process[proc]
                     rel_xsec_weight_for_class = rel_w_val * cls_bool * (proc_num_val == proc)
-                    class_weights_for_val_ = class_weights_for_val_ + (rel_xsec_weight_for_class / np.sum(rel_xsec_weight_for_class))
+                    class_weights_for_val_ = class_weights_for_val_ + sample_scale * (rel_xsec_weight_for_class / np.sum(rel_xsec_weight_for_class))
 
                 # normalize the weights for this class to be class_scale
                 class_weights_for_val = class_weights_for_val + class_scale * (class_weights_for_val_ / np.sum(class_weights_for_val_))
@@ -521,6 +543,10 @@ class PrepareInputs:
             else:
                 cls_bool = (y_val[:, i] == 1)
                 rel_xsec_weight_for_class = rel_w_val * cls_bool
+                for proc in self.samples_in_class[class_name]:
+                    sample_scale = sample_weight_scale_by_process[proc]
+                    if sample_scale != 1.0:
+                        rel_xsec_weight_for_class[proc_num_val == proc] *= sample_scale
                 class_weights_for_val = class_weights_for_val + class_scale * (rel_xsec_weight_for_class / np.sum(rel_xsec_weight_for_class))
 
         for i in range(y_val.shape[1]):
@@ -528,7 +554,7 @@ class PrepareInputs:
 
             if self.weight_scheme_process[self.class_idx_to_name[i]] == "equal_weight":
                 print("\n")
-                for proc in range(self.num_process_each_class[self.class_idx_to_name[i]]):
+                for proc in self.samples_in_class[self.class_idx_to_name[i]]:
                     print(f"(number of events: sum of class_weights_for_val) for class number {i+1} and process number {proc} = ({sum(y_val[:, i] * (proc_num_val == proc))}: {sum(class_weights_for_val * (y_val[:, i] == 1) * (proc_num_val == proc))})")
                 print("\n")
 
@@ -832,7 +858,7 @@ class PrepareInputs:
                 # comb_inputs.append(events)
                 events["sample_type"] = samples
 
-                # add process number which is specific for each class
+                # add globally unique process number
                 events["process_number"] = self.process_numbers[samples]
 
                 # # store events for plot of correlation combining all eras)
@@ -976,7 +1002,7 @@ class PrepareInputs:
         np.save(f"{out_path}/class_weights_only_positive", class_weights_only_positive)
         np.save(f"{out_path}/class_weights_for_val", class_weights_for_val)
         
-        # save process numbers (which MC sample each event belongs to within its class)
+        # save globally unique process numbers
         np.save(f"{out_path}/proc_num_train", proc_num_train)
         np.save(f"{out_path}/proc_num_val", proc_num_val)
         
@@ -987,7 +1013,7 @@ class PrepareInputs:
             np.save(f"{out_path}/class_weights_for_test", class_weights_for_test)
             np.save(f"{out_path}/proc_num_test", proc_num_test)
 
-        # save process number mapping (sample name -> process number within class)
+        # save process number mapping (sample name -> globally unique process number)
         with open(f"{out_path}/process_numbers_mapping.json", 'w') as f:
             # Convert to int for JSON serialization
             mapping = {sample: int(proc_num) for sample, proc_num in self.process_numbers.items()}
