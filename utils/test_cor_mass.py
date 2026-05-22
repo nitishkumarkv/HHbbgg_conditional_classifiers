@@ -6,14 +6,15 @@ import argparse
 import json
 import os
 import yaml
-import numpy as np
-import matplotlib.pyplot as plt
 import mplhep as hep
 
 if not hasattr(pa.lib, "PyExtensionType") and hasattr(pa.lib, "ExtensionType"):
     pa.lib.PyExtensionType = pa.lib.ExtensionType
 
 plt.style.use(hep.style.CMS)  # Apply mlhep CMS style
+
+
+SIGNAL_INDEX = 2 # 3 nominal
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Check for correlation between mass and ggFHH score')
@@ -85,7 +86,7 @@ if __name__ == "__main__":
     # Di-photon mass plot
     fig, ax = plt.subplots()
     for cut in [0, 0.6, 0.9, 0.95]:
-        mask = y[:, 3] > cut
+        mask = y[:, SIGNAL_INDEX] > cut
         plot_with_errorbars(
             data=np.array(events.mass)[mask],
             weights=rel_w[mask],
@@ -106,7 +107,7 @@ if __name__ == "__main__":
     # Dijet mass plot
     fig, ax = plt.subplots()
     for cut in [0, 0.6, 0.9, 0.95]:
-        mask = y[:, 3] > cut
+        mask = y[:, SIGNAL_INDEX] > cut
         plot_with_errorbars(
             data=np.array(events.nonResReg_dijet_mass_DNNreg)[mask],
             weights=rel_w[mask],
