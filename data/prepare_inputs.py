@@ -1191,6 +1191,7 @@ class PrepareInputs:
                         continue
                 
                     parquet_path = (training_info["samples_info"][era][samples]).replace("nominal", sys)
+                    print(f"DEBUG: Checking existence of {samples} for {era} for {sys} at path: {samples_path}/{parquet_path}")
                     if not os.path.exists(f"{samples_path}/{parquet_path}"):
                         print(f"WARNING: {samples} for {era} for {sys} does not exist. Skipping.: {samples_path}/{parquet_path}")
                         continue
