@@ -348,9 +348,9 @@ if __name__ == "__main__":
             "GluGluHToGG_M_125",
             "VBFHToGG_M_125",
             "VHtoGG_M_125",
-            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00",
-            "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00",
-            "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00",
+            # "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00",
+            # "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00",
+            # "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00",
             "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00",
     ]
 

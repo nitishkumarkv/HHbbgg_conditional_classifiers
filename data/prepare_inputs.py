@@ -65,6 +65,9 @@ class PrepareInputs:
 
         self.extra_vars_out = self.extra_vars_out + vars_VBFHH_MVA
 
+        self.extra_vars_syst_2024 = ["weight_ElectronVetoSFDown", "weight_ElectronVetoSFUp", "weight_LoosePhoIDSFDown", "weight_LoosePhoIDSFUp", "weight_PileupDown", "weight_PileupUp", "weight_PreselSFDown", "weight_PreselSFUp", "weight_TriggerSFDown", "weight_TriggerSFUp", "weight_btagSFbc_2024Down", "weight_btagSFbc_2024Up", "weight_btagSFbc_correlatedDown", "weight_btagSFbc_correlatedUp", "weight_btagSFlight_2024Down", "weight_btagSFlight_2024Up", "weight_btagSFlight_correlatedDown", "weight_btagSFlight_correlatedUp", "weight_central", "weight_nominal"]
+        self.extra_vars_syst_v3 = ["weight_bTagSF_sys_hfUp", "weight_ElectronVetoSFDown", "weight_bTagSF_sys_hfstats1Down", "weight_bTagSF_sys_lfUp", "weight_TriggerSFUp", "weight_bTagSF_sys_lfstats1Down", "weight_bTagSF_sys_cferr2Down", "weight_bTagSF_sys_lfstats1Up", "weight_bTagSF_sys_lfstats2Down", "weight_TriggerSFDown", "weight_bTagSF_sys_hfstats2Up", "weight_ElectronVetoSFUp", "weight_PreselSFDown", "weight_PileupUp", "weight_bTagSF_sys_hfstats1Up", "weight_bTagSF_sys_jesDown", "weight_bTagSF_sys_lfDown", "weight_bTagSF_sys_cferr1Up", "weight_PileupDown", "weight_bTagSF_sys_lfstats2Up", "weight_bTagSF_sys_hfstats2Down", "weight_bTagSF_sys_hfDown", "weight_bTagSF_sys_cferr2Up", "weight_PreselSFUp", "weight_bTagSF_sys_cferr1Down", "weight_bTagSF_sys_jesUp"]
+
         # prepare process numbers for proccesses in each class
         num_process_each_class = {
             class_: 0 for class_ in self.classes
@@ -156,14 +159,14 @@ class PrepareInputs:
         # events["diphoton_PtOverM_ggjj"] = events.pt / events.nonResReg_HHbbggCandidate_mass
         # events["nonResReg_dijet_PtOverM_ggjj"] = events.nonResReg_dijet_pt / events.nonResReg_HHbbggCandidate_mass
 
-        # events["diphoton_PtOverM_X"] = events.pt / events.nonResReg_vbfpair_M_X
-        # events["nonResReg_dijet_PtOverM_X"] = events.nonResReg_dijet_pt / events.nonResReg_vbfpair_M_X
+        events["diphoton_PtOverM_X"] = events.pt / events.nonResReg_vbfpair_M_X
+        events["nonResReg_vbfpair_dijet_PtOverM_X"] = events.nonResReg_vbfpair_dijet_pt / events.nonResReg_vbfpair_M_X
 
-        events["nonResReg_lead_bjet_over_M_regressed"] = events.nonResReg_vbfpair_lead_bjet_pt / events.nonResReg_vbfpair_dijet_mass
+        # events["nonResReg_lead_bjet_over_M_regressed"] = events.nonResReg_vbfpair_lead_bjet_pt / events.nonResReg_vbfpair_dijet_mass
         events["nonResReg_sublead_bjet_over_M_regressed"] = events.nonResReg_vbfpair_sublead_bjet_pt / events.nonResReg_vbfpair_dijet_mass
 
         # add deltaR between lead and sublead photon
-        # events["deltaR_gg"] = self.deltaR(events.lead_eta, events.lead_phi, events.sublead_eta, events.sublead_phi)
+        events["deltaR_gg"] = self.deltaR(events.lead_eta, events.lead_phi, events.sublead_eta, events.sublead_phi)
 
         btagVariable = "btag"
         # Use PNetB for NanoAODv12/v13 
@@ -1033,17 +1036,24 @@ class PrepareInputs:
 
         for era in training_info["samples_info"]["eras"]:
 
-            vars_to_load = vars_for_training + self.extra_vars_train + self.extra_vars_out
-
-            # remove the UParTAK4B if NanoAODv12/v13
-            if any(x in era for x in ["preEE", "postEE", "preBPix", "postBPix"]):
-                vars_to_load.remove("nonResReg_vbfpair_lead_bjet_btagUParTAK4B")
-                vars_to_load.remove("nonResReg_vbfpair_sublead_bjet_btagUParTAK4B")
-    
             for samples in training_info["samples_info"][era].keys():
                 if stop_processing or not self._can_process_more_input_files():
                     stop_processing = True
                     break
+                
+                vars_to_load = vars_for_training + self.extra_vars_train + self.extra_vars_out
+
+                # remove the UParTAK4B if NanoAODv12/v13
+                if any(x in era for x in ["preEE", "postEE", "preBPix", "postBPix"]):
+                    vars_to_load.remove("nonResReg_vbfpair_lead_bjet_btagUParTAK4B")
+                    vars_to_load.remove("nonResReg_vbfpair_sublead_bjet_btagUParTAK4B")
+                    if samples not in ["GGJets", "DDQCDGJET", "TTGG"]:
+                        vars_to_load = vars_to_load + self.extra_vars_syst_v3
+
+                if era == "2024" and samples not in ["GGJets", "DDQCDGJET", "TTGG"]:
+                    vars_to_load = vars_to_load + self.extra_vars_syst_2024
+                
+                print(f"DEBUG: vars_to_load = {vars_to_load}")
                 
                 parquet_path = training_info["samples_info"][era][samples]
                 if self.save_all_columns_sim_nominal:
@@ -1163,6 +1173,7 @@ class PrepareInputs:
         reported_x_features = False
 
         # vars_for_log = vars_config["vars_for_log_transform"]
+        vars_gen = ["gen_mHH_hardProc", "gen_pT_HH_hardProc", "gen_CosThetaStar_HH_hardProc"]
 
         samples_path = training_info["samples_info"]["samples_path"]
 
@@ -1196,6 +1207,12 @@ class PrepareInputs:
                         continue
                     if self.save_all_columns_sim_systematics:
                         events = ak.from_parquet(f"{samples_path}/{parquet_path}")
+                    elif ("GluGlutoHHto2B2G_kl" in samples):
+                        vars_to_load = vars_to_load + vars_gen
+                        events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
+                    elif ("EFTReweighted" in samples):
+                        vars_to_load = vars_to_load + vars_EFTReweighted + vars_gen
+                        events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
                     else:
                         events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
                     events = self._apply_input_caps(events)
