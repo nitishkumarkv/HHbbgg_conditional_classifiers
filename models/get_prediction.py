@@ -111,9 +111,6 @@ if __name__ == "__main__":
     model_folder = args.model_folder
     model_dict_path = f"{model_folder}/params.json"
     model_path = f"{model_folder}/mlp.pth"
-    
-    print(f"DEBUG: samples path: {args.samples_path}")
-    print(f"DEBUG: Model folder: {model_folder}")
 
     # load the configuration yaml files
     training_config_path = f"{args.config_path}/training_config.yaml"

@@ -162,7 +162,6 @@ if __name__ == "__main__":
     parser.add_argument('--input_path', type=str, help='Path to the input files')
     parser.add_argument('--training_config_path', type=str, default=10, help='Training configuration path')
     parser.add_argument('--n_epochs', type=int, default=None, help='Override the number of training epochs')
-    parser.add_argument('--checkpoint', type=str, default=None, help='Path to checkpoint used for prediction, e.g. after_random_search_best1/mlp_300.pth')
     #parser.add_argument('', type=str, help='Path to the best parameters')
     args = parser.parse_args()
 
@@ -296,63 +295,47 @@ if __name__ == "__main__":
     val_acc_hist = []
     lr_hist = []
 
-    # Load model for prediction
-    if args.checkpoint is not None:
-        print(f"INFO: Loading checkpoint for prediction: {args.checkpoint}")
-        checkpoint = torch.load(args.checkpoint, map_location=device)
+    # Training loop
+    for epoch in range(n_epochs):
+        # Training
+        train_loss, train_acc, train_loss_no_absolute = train_one_epoch(best_model, best_optimizer, train_loader, loss_fn, device)
+        train_loss_hist.append(train_loss)
+        train_acc_hist.append(train_acc)
+        train_loss_hist_no_absolute_weights.append(train_loss_no_absolute)
 
-        # This doesn't load the exact model state saved at epoch x
-        best_model.load_state_dict(checkpoint["best_weights"])
+        # Validation
+        val_loss, val_acc = evaluate(best_model, val_loader, loss_fn, device)
+        val_loss_hist.append(val_loss)
+        val_acc_hist.append(val_acc)
 
-        print(f"INFO: Loaded model from epoch {checkpoint['epoch']} for prediction")
+        # Scheduler step
+        best_scheduler.step(val_loss)
+        current_lr = best_optimizer.param_groups[0]['lr']
+        lr_hist.append(current_lr)
+        print(f"Epoch {epoch}: Current learning rate = {current_lr}")
 
-    else:
-        # Training loop
-        for epoch in range(n_epochs):
-            # Training
-            train_loss, train_acc, train_loss_no_absolute = train_one_epoch(best_model, best_optimizer, train_loader, loss_fn, device)
-            train_loss_hist.append(train_loss)
-            train_acc_hist.append(train_acc)
-            train_loss_hist_no_absolute_weights.append(train_loss_no_absolute)
+        # Early stopping
+        if val_loss < best_loss:
+            best_loss = val_loss
+            best_weights = copy.deepcopy(best_model.state_dict())
+            counter = 0
+        else:
+            counter += 1
+            print(f"Counter: {counter}")
+        if counter >= patience:
+            print(f"Early stopping at epoch {epoch}")
+            break
 
-            # Validation
-            val_loss, val_acc = evaluate(best_model, val_loader, loss_fn, device)
-            val_loss_hist.append(val_loss)
-            val_acc_hist.append(val_acc)
+        print(f"Epoch {epoch} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
+        print(f"Epoch {epoch} - Train Acc: {train_acc:.4f}, Val Acc: {val_acc:.4f}", '\n')
+        print(f"Epoch {epoch} - Train Loss no abs: {train_loss_no_absolute:.4f}", '\n')
 
-            # Scheduler step
-            best_scheduler.step(val_loss)
-            current_lr = best_optimizer.param_groups[0]['lr']
-            lr_hist.append(current_lr)
-            print(f"Epoch {epoch}: Current learning rate = {current_lr}")
+    save_checkpoint(epoch, best_model, best_optimizer, best_scheduler, 
+                train_loss_hist, train_loss_hist_no_absolute_weights, val_loss_hist, train_acc_hist, val_acc_hist, 
+                best_weights, best_loss, f"{path_to_checkpoint}/mlp.pth")
 
-            # Early stopping
-            if val_loss < best_loss:
-                best_loss = val_loss
-                best_weights = copy.deepcopy(best_model.state_dict())
-                counter = 0
-            else:
-                counter += 1
-                print(f"Counter: {counter}")
-            if counter >= patience:
-                print(f"Early stopping at epoch {epoch}")
-                break
-
-            if epoch % 20 == 0:
-                save_checkpoint(epoch, best_model, best_optimizer, best_scheduler, 
-                            train_loss_hist, train_loss_hist_no_absolute_weights, val_loss_hist, train_acc_hist, val_acc_hist, 
-                            best_weights, best_loss, f"{path_to_checkpoint}/mlp_{epoch}.pth")
-
-            print(f"Epoch {epoch} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
-            print(f"Epoch {epoch} - Train Acc: {train_acc:.4f}, Val Acc: {val_acc:.4f}", '\n')
-            print(f"Epoch {epoch} - Train Loss no abs: {train_loss_no_absolute:.4f}", '\n')
-
-        save_checkpoint(epoch, best_model, best_optimizer, best_scheduler, 
-                    train_loss_hist, train_loss_hist_no_absolute_weights, val_loss_hist, train_acc_hist, val_acc_hist, 
-                    best_weights, best_loss, f"{path_to_checkpoint}/mlp.pth")
-
-        # Default behavior: use best model found during this training
-        best_model.load_state_dict(best_weights)
+    # Load the best state of the model
+    best_model.load_state_dict(best_weights)
 
     # Save predictions (optional)
     best_model.eval()

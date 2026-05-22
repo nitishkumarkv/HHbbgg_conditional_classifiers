@@ -139,19 +139,13 @@ if __name__ == "__main__":
         has_process_number = False
 
     # Class names
-    # class_names = ["non_resonant_bkg", "ttH", "other_single_H", "GluGluToHH", "VBFToHH_sig"]
-    # json_class_to_model_class = {
-    #     "is_non_resonant_bkg": "non_resonant_bkg",
-    #     "is_ttH_bkg": "ttH",
-    #     "is_single_H_bkg": "other_single_H",
-    #     "is_GluGluToHH_sig": "GluGluToHH",
-    #     "is_VBFToHH_sig": "VBFToHH_sig"
-    # }
-    class_names = ["non_res_other_singleH_bkg", "ttH", "GluGluToHH"]
+    class_names = ["non_resonant_bkg", "ttH", "other_single_H", "GluGluToHH", "VBFToHH_sig"]
     json_class_to_model_class = {
-        "is_non_resonant_bkg": "non_res_other_singleH_bkg",
+        "is_non_resonant_bkg": "non_resonant_bkg",
         "is_ttH_bkg": "ttH",
-        "is_GluGluToHH_sig": "GluGluToHH"
+        "is_single_H_bkg": "other_single_H",
+        "is_GluGluToHH_sig": "GluGluToHH",
+        "is_VBFToHH_sig": "VBFToHH_sig"
     }
 
     #n_classes = len(class_names)

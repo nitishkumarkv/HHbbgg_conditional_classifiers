@@ -498,12 +498,10 @@ if __name__ == "__main__":
 
         # Decide whether downstream work is requested (training/prediction/plots/etc.)
         needs_downstream = (
-            # args.prepare_inputs_pred_sim or args.prepare_inputs_pred_data or args.prepare_inputs_pred_sys
-            # or 
-            # args.perform_training or args.train_best_model or args.plot_training_results
-            # or 
-            # args.get_permutation_importance or args.get_predictions or args.get_predictions_sys
-            # or args.test_mass_sculpting or args.get_data_mc_plots or args.get_score_shape_diff_kl
+            args.prepare_inputs_pred_sim or args.prepare_inputs_pred_data or args.prepare_inputs_pred_sys
+            or args.perform_training or args.train_best_model or args.plot_training_results
+            or args.get_permutation_importance or args.get_predictions or args.get_predictions_sys
+            or args.test_mass_sculpting or args.get_data_mc_plots or args.get_score_shape_diff_kl
         )
 
         # Phase 1: if downstream work is requested but the user did not explicitly ask for

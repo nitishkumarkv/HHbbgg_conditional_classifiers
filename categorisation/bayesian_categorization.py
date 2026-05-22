@@ -1,5 +1,6 @@
 
 import awkward as ak
+import pyarrow as pa
 import numpy as np
 import matplotlib.pyplot as plt
 import os
@@ -12,13 +13,10 @@ import pandas as pd
 import json
 import mplhep
 from matplotlib.backends.backend_pdf import PdfPages
-from scipy.optimize import curve_fit
 
-def exp_decay(x, m, t, b):
-    return m * np.exp(-t * x) + b
+if not hasattr(pa.lib, "PyExtensionType") and hasattr(pa.lib, "ExtensionType"):
+    pa.lib.PyExtensionType = pa.lib.ExtensionType
 
-def exp_decay_integral(x, m, t, b):
-    return (-m/t) * np.exp(-t * x) + b*x
 
 class OptunaCategorizer:
     def __init__(self,
@@ -36,8 +34,7 @@ class OptunaCategorizer:
                 gamma_strategy="linear",
                 SR_strategy="sequential",
                 mHH_cats=[],
-                cat_signals=[],
-                fit_nonres_sb=False
+                cat_signals=[]
                 ):
 
         self.base_path = base_path
@@ -72,10 +69,6 @@ class OptunaCategorizer:
             self.signal_samples = ["GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00"]
 
         self.apply_preselection = True
-
-        self.fit_nonres_sb = fit_nonres_sb
-
-        self.sf = 1
     
     def gamma_fn(self):
         def gamma_linear(n):
@@ -138,7 +131,7 @@ class OptunaCategorizer:
             "weights", "labels", "sample"
         )}
 
-        eras = ("2016postVFP", "2016preVFP", "2017", "2018", "preEE", "postEE", "preBPix", "postBPix", "2024")
+        eras = ("preEE", "postEE", "preBPix", "postBPix", "2024")
         dijet_mass_key = "nonResReg_dijet_mass_DNNreg"
         mHH_key = "nonResReg_HHbbggCandidate_mass"
 
@@ -268,11 +261,6 @@ class OptunaCategorizer:
 
         # Assemble DataFrame
         df = pd.DataFrame(data)
-
-        i = 0
-        while i < 4:
-            df[f"score_{i}"] = scores[:,i]
-            i+=1
         df["score"] = scores.to_list()          # store per-event score vectors
         df["arg_max_score"] = argmax
 
@@ -284,131 +272,6 @@ class OptunaCategorizer:
         print(f"Sig weight 120-130 GeV: {df.loc[(df['labels'] == 1) & in_peak, 'weights'].sum():.3g}")
 
         return df
-
-    def load_data(self):
-        eras = [
-            "2016preVFP",
-            "2016postFVP",
-            "2017",
-            "2018",
-            "2022_EraE",
-            "2022_EraF",
-            "2022_EraG",
-            "2022_EraC",
-            "2022_EraD",
-            "2023_EraC",
-            "2023_EraD",
-            "2024_EraC_EG0",
-            "2024_EraC_EG1",
-            "2024_EraD_EG0",
-            "2024_EraD_EG1",
-            "2024_EraE_EG0",
-            "2024_EraE_EG1",
-            "2024_EraF_EG0",
-            "2024_EraF_EG1",
-            "2024_EraG_EG0",
-            "2024_EraG_EG1",
-            "2024_EraH_EG0",
-            "2024_EraH_EG1",
-            "2024_EraIv1_EG0",
-            "2024_EraIv1_EG1",
-            "2024_EraIv2_EG0",
-            "2024_EraIv2_EG1"
-        ]
-        dijet_mass_key = "nonResReg_dijet_mass_DNNreg"
-        mHH_key = "nonResReg_HHbbggCandidate_mass"
-
-        columns = [mHH_key, dijet_mass_key, "mass", "lead_mvaID", "sublead_mvaID"]
-
-        df = pd.DataFrame()
-
-        for era in eras:
-            samp_dir = os.path.join(
-                self.base_path, "individual_samples_data", era
-            )
-            y_file   = os.path.join(samp_dir, "y.npy")
-            evt_file = os.path.join(samp_dir, "events.parquet")
-
-            # Skip if either file is missing
-            if not (os.path.exists(y_file) and os.path.exists(evt_file)):
-                print(f"[load_samples] WARNING: missing files for {samp_dir}, skipping.")
-                continue
-
-            df_era = pd.read_parquet(evt_file, columns=columns)
-            y = np.load(y_file)
-
-            if self.apply_preselection:
-                df_era, y = self.preselection(df_era, y)
-
-            # df_era["score"] = y.tolist()
-            i = 0
-            while i < 4:
-                df_era[f"score_{i}"] = y[:,i]
-                i+=1
-
-            df_era["weights"] = 1
-            df_era["labels"] = -1
-            df_era["sample"] = "Data"
-
-            df = pd.concat([df, df_era])
-
-        return df
-
-        # for era in eras:
-        #     samp_dir = os.path.join(
-        #         self.base_path, "individual_samples_data", era
-        #     )
-        #     y_file   = os.path.join(samp_dir, "y.npy")
-        #     evt_file = os.path.join(samp_dir, "events.parquet")
-
-        #     # Skip if either file is missing
-        #     if not (os.path.exists(y_file) and os.path.exists(evt_file)):
-        #         print(f"[load_samples] WARNING: missing files for {samp_dir}, skipping.")
-        #         continue
-
-        #     try:
-        #         y = np.load(y_file)
-        #         events = ak.from_parquet(
-        #             evt_file,
-        #             columns=[
-        #                 "mass", dijet_mass_key, mHH_key,
-        #                 "lead_genPartFlav", "sublead_genPartFlav",
-        #                 "weight_tot",
-        #                 "lead_mvaID", "sublead_mvaID",
-        #             ],
-        #         )
-        #         if self.apply_preselection:
-        #             events, y = self.preselection(events, y)
-        #     except Exception as exc:
-        #         print(f"[load_samples] ERROR while reading {samp_dir}: {exc}")
-        #         continue
-
-        #     if len(y) == 0:  # Nothing survived the cuts
-        #         continue
-
-        #     data["score"].append(y)
-        #     data["mass"].append(np.asarray(events["mass"]))
-        #     data["dijet_mass"].append(np.asarray(events[dijet_mass_key]))
-        #     data["HHbbggCandidate_mass"].append(np.asarray(events[mHH_key]))
-        #     data["weights"].append(np.repeat(1, len(y)))
-        #     data["labels"].append(-1)
-        #     data["sample"].append(np.repeat("Data", len(y)))
-
-        # if not data["score"]:
-        #     raise RuntimeError("[load_samples] No events found in any input sample.")
-
-        # # Concatenate each list into one array
-        # # for key in data:
-        # #     data[key] = np.concatenate(data[key], axis=0)
-
-        # # scores = data.pop("score")          # shape (N, n_scores)
-
-        # # Assemble DataFrame
-        # df = pd.DataFrame(data)
-        # # df["score"] = scores.to_list()          # store per-event score vectors
-
-        # return df
-
 
     def plot_stacked_histogram(self, sim_folder, data_folder, sim_samples, variables, out_path, bins=40, mass_window=(120, 130), signal_scale=100, include_2023=True, mask=True):
         """
@@ -791,7 +654,6 @@ class OptunaCategorizer:
         best_sig_values,
         sig_peak_list,
         bkg_side_list,
-        bkg_side_SF_list,
         best_cut_params_list,
         save_path
     ):
@@ -814,9 +676,9 @@ class OptunaCategorizer:
 
         # Create the figure and subplots with a shared x-axis
         fig, axs = plt.subplots(
-            5, 1, 
-            figsize=(10, 15), 
-            gridspec_kw={'height_ratios': [1, 1, 1, 1, 1], 'hspace': 0}
+            4, 1, 
+            figsize=(10, 12), 
+            gridspec_kw={'height_ratios': [1, 1, 1, 1], 'hspace': 0}
         )
 
         # -- 1) Plot Asymptotic Significance
@@ -880,124 +742,24 @@ class OptunaCategorizer:
                 ha="center"
             )
 
-        # -- 5) Plot Background in sidebands from SF (log scale)
-        axs[4].plot(cat_indices, bkg_side_SF_list, ".b", markersize=8)
-        axs[4].set_yscale("log")
-        axs[4].set_ylabel("Bkg in sidebands from SF", fontsize=10)
-        axs[4].set_xlabel("Category Index", fontsize=10)
-        axs[4].grid(True)
-        # annot the background values
-        for i in range(n_cats):
-            axs[4].annotate(
-                f"{bkg_side_SF_list[i]:.5f}",
-                xy=(i, bkg_side_SF_list[i]),
-                xytext=(i, bkg_side_SF_list[i] + (bkg_side_SF_list[i] * 0.5)),
-                fontsize=8,
-                arrowprops=dict(color="black", arrowstyle="->"),
-                ha="center"
-            )
-
         # Adjust spacing
         plt.tight_layout()
         # Save the figure
         plt.savefig(f"{save_path}category_summary_new.png")
         plt.close(fig)
 
-    def sr_from_sidebands_exponential(self, df, left_sb=[100, 120], right_sb=[130, 180], samples=["TTGG", "GGJets", "TTG_100_200", "TTG_200"]):
-        df_sb = df[df['sample'].isin(samples)]
-        df_sb = df_sb.loc[((df["mass"] > left_sb[0]) & (df["mass"] < left_sb[1])) | ((df["mass"] > right_sb[0]) & (df["mass"] < right_sb[1]))]
-
-        counts, edges = np.histogram(df_sb["mass"].values, bins=np.linspace(100, 180, num=81), weights=df_sb["weights"].values)
-        counts = np.concatenate((counts[:20], counts[30:]))
-
-        bin_center = np.linspace(100.5, 179.5, num=80)
-        bin_center = np.concatenate((bin_center[:20], bin_center[30:]))
-
-        #Fit nonresonant bkgs with exponential decay
-        params, pcov = curve_fit(exp_decay, bin_center, counts, p0=[10, 0.01, 1], maxfev=5000)
-        m, t, b = params
-
-        #Estimate nonresonant bkgs in SR with integral of exponential decay
-        nonres_sr = exp_decay_integral(right_sb[0], m, t, b) - exp_decay_integral(left_sb[1], m, t, b)
-        return nonres_sr
-
-    def _sr_from_sidebands_linear(self, mass, weights, left_sb, sr, right_sb):
-        """Return (b_sr, var_b_sr) using a linear (average) interpolation from SB densities."""
-        m = mass
-        w = weights
-
-        L = (m >= left_sb[0]) & (m < left_sb[1])
-        R = (m >= right_sb[0]) & (m < right_sb[1])
-
-        sumw_L = w[L].sum()
-        sumw2_L = (w[L] ** 2).sum()
-        sumw_R = w[R].sum()
-        sumw2_R = (w[R] ** 2).sum()
-
-        width_L = max(1e-9, left_sb[1] - left_sb[0])
-        width_R = max(1e-9, right_sb[1] - right_sb[0])
-        width_SR = max(1e-9, sr[1] - sr[0])
-
-        dens_L = sumw_L / width_L if width_L > 0 else 0.0
-        var_dens_L = sumw2_L / (width_L ** 2) if width_L > 0 else 0.0
-
-        dens_R = sumw_R / width_R if width_R > 0 else 0.0
-        var_dens_R = sumw2_R / (width_R ** 2) if width_R > 0 else 0.0
-
-        have_L = sumw_L > 0.0
-        have_R = sumw_R > 0.0
-
-        if have_L and have_R:
-            dens = 0.5 * (dens_L + dens_R)
-            var_dens = 0.25 * (var_dens_L + var_dens_R)  # assume independence
-        elif have_L:
-            dens = dens_L
-            var_dens = var_dens_L
-        elif have_R:
-            dens = dens_R
-            var_dens = var_dens_R
-        else:
-            return 0.0, 0.0
-
-        b_sr = dens * width_SR
-        var_b_sr = var_dens * (width_SR ** 2)
-        return float(b_sr), float(var_b_sr)
-
 
     def asymptotic_significance(self, df):
 
         # s should be the samples in self.signal_samples
-        s = df.loc[(df["mass"] >= 120) & (df["mass"] <= 130)]
-        s = s[s['sample'].isin(self.signal_samples)].weights.sum()
-        if self.fit_nonres_sb:
-            b_nonres_sr = self.sr_from_sidebands_exponential(df)
-
-            b_res = df[df['sample'].isin(["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125"])]
-            b_res = b_res.loc[(b_res["mass"] >= 120) & (df["mass"] <= 130)]["weights"].sum()
-
-            b = b_res + b_nonres_sr*self.sf
-
-        else:
-            b = df.loc[(df["mass"] >= 120) & (df["mass"] <= 130)]
-            b = b[b['sample'].isin(self.bkg_samples)].weights.sum()
-
+        s = df[df['sample'].isin(self.signal_samples)].weights.sum()
+        b = df[df['sample'].isin(self.bkg_samples)].weights.sum()
+        
+        print(f"Signal: {s}, Background: {b}")
         z = np.sqrt(2 * ((s + b + 1e-10) * np.log(1 + (s / (b + 1e-10))) - s))
         #z = np.sqrt(2 * (((s + b + 1e-10) * np.log(1 + s / (b + 1e-10))) - s))
         print(f"Signal: {s}, Background: {b}, Significance: {z}")
         return z
-    def derive_SF(self, df, cut_ggFHH):
-        # df_sb = df.loc[(df["mass"] < 120) | (df["mass"] > 130)]
-        df_sb = df.loc[df[f"score_{self.signal_class}"] > cut_ggFHH]
-
-        mc_nonres = df_sb[df_sb['sample'].isin(["TTGG", "GGJets", "TTG_100_200", "TTG_200"])]["weights"].sum()
-        mc_res = df_sb[df_sb['sample'].isin(["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125"])]["weights"].sum()
-        data = df_sb.loc[df_sb["sample"] == "Data"]["weights"].sum()
-
-        if mc_nonres == 0:
-            raise ValueError("Nonres MC is zero, scale factor is infinite.")
-
-        return (data-mc_res)/mc_nonres
-        
 
     #############################################
     # Sequential categorization using Optuna
@@ -1035,7 +797,6 @@ class OptunaCategorizer:
         run_best_params_list = []  # Store best parameters for each run.
         run_sig_peak_list = []  # Store signal in peak for each run.
         run_bkg_side_list = []  # Store background in sidebands for each run.
-        run_bkg_side_SF_list = []  # Store background in sidebands from SF for each run.
         for run in range(self.n_runs):
 
             # Begin with all events.
@@ -1056,7 +817,6 @@ class OptunaCategorizer:
             best_sig_values = []       # Best significance values per category.
             sig_peak_list = []         # Weighted signal in peak region for each category.
             bkg_side_list = []         # Weighted background in sideband for each category.
-            bkg_side_SF_list = []     # Weighted background from SF in sideband for each category.
             mask_list = []           # Mask for selected events in each category.
             for cat in range(1, self.n_categories + 1):
                 print(f"\n--- Optimizing Category {cat} ---")
@@ -1084,35 +844,18 @@ class OptunaCategorizer:
 
                     # Enforce sideband requirement: background outside 120-130 GeV must have at least 10 (weighted).
                     side_mask = (((dipho_mass[mask] < 120) | (dipho_mass[mask] > 130)) & (labels[mask] == 0))
-
-                    if self.fit_nonres_sb:
-                        nonres_mask = samples_remaining[mask][side_mask]["sample"].isin(["TTGG", "GGJets", "TTG_100_200", "TTG_200"])
-                        res_mask = samples_remaining[mask][side_mask]["sample"].isin(["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125"])
-
-                        bkg_nonres_side = weights[mask][side_mask][nonres_mask].sum()
-                        bkg_res_side = weights[mask][side_mask][res_mask].sum()
-                        bkg_side = bkg_res_side + bkg_nonres_side*self.sf
-
-                        if bkg_side < self.side_band_threshold:
-                            return -1.0
-                    
-                    else:
-                        bkg_side_val = weights[mask][side_mask].sum()
-                        if bkg_side_val < self.side_band_threshold:
-                            return -1.0
+                    bkg_side_val = weights[mask][side_mask].sum()
+                    if bkg_side_val < self.side_band_threshold:
+                        return -1.0
 
                     # Select events in the diphoton mass window (120 < m_γγ < 130).
                     mass_mask = (dipho_mass[mask] > 120) & (dipho_mass[mask] < 130)
                     if np.sum(mass_mask) == 0:
                         return -1.0
 
-                    # selected_samples = samples[mask][mass_mask]
-                    # selected_weights = weights[mask][mass_mask]
-
-                    selected_samples = samples[mask]
-                    selected_weights = weights[mask]
-                    selected_dihpo_mass = dipho_mass[mask]
-                    df_temp = pd.DataFrame({"sample": selected_samples, "weights": selected_weights, "mass": selected_dihpo_mass})
+                    selected_samples = samples[mask][mass_mask]
+                    selected_weights = weights[mask][mass_mask]
+                    df_temp = pd.DataFrame({"sample": selected_samples, "weights": selected_weights})
                     sig_val = self.asymptotic_significance(df_temp)
                     return sig_val
 
@@ -1131,8 +874,8 @@ class OptunaCategorizer:
                 print(f"Category {cat}: Best parameters: {best_params} with significance {best_target:.4f}")
 
                 # Save optimization history and parallel coordinates plots.
-                # self.plot_optuna_history(study, cat_path, category=f"run_{run}_cat_{cat}")
-                # self.plot_parallel_coordinates(study, cat_path, category=f"run_{run}_cat_{cat}")
+                self.plot_optuna_history(study, cat_path, category=f"run_{run}_cat_{cat}")
+                self.plot_parallel_coordinates(study, cat_path, category=f"run_{run}_cat_{cat}")
 
                 # Use best parameters to select events for this category.
                 mask = scores[:, self.signal_class] > best_params["th_signal"]
@@ -1150,16 +893,8 @@ class OptunaCategorizer:
                                         (sel_df["diphoton_mass"] < 130)]["weights"].sum()
                 bkg_in_side = sel_df[(sel_df["labels"] == 0) &
                                      (((sel_df["diphoton_mass"] < 120) | (sel_df["diphoton_mass"] > 130)))]["weights"].sum()
-
-                b_nonres = sel_df[sel_df['sample'].isin(["TTGG", "GGJets", "TTG_100_200", "TTG_200"])]
-                b_nonres = self.sf*b_nonres[((b_nonres["diphoton_mass"] < 120) | (b_nonres["diphoton_mass"] > 130))]["weights"].sum()
-
-                b_res = sel_df[sel_df['sample'].isin(["VBFHToGG_M_125", "VHtoGG_M_125", "ttHtoGG_M_125", "BBHto2G_M_125", "GluGluHToGG_M_125"])]
-                b_res = b_res[((b_res["diphoton_mass"] < 120) | (b_res["diphoton_mass"] > 130))]["weights"].sum()
-
                 sig_peak_list.append(signal_in_peak)
                 bkg_side_list.append(bkg_in_side)
-                bkg_side_SF_list.append(b_nonres+b_res)
 
                 # Update dynamic search ranges.
                 prev_signal_cut = best_params["th_signal"]
@@ -1175,7 +910,6 @@ class OptunaCategorizer:
             self.plot_category_summary_with_thresholds(best_sig_values,
                 sig_peak_list,
                 bkg_side_list,
-                bkg_side_SF_list,
                 best_cut_params_list,
                 f"{cat_path}/run_{run}_")
 
@@ -1183,7 +917,6 @@ class OptunaCategorizer:
             run_best_params_list.append(best_cut_params_list)
             run_sig_peak_list.append(sig_peak_list)
             run_bkg_side_list.append(bkg_side_list)
-            run_bkg_side_SF_list.append(bkg_side_SF_list)
 
             run_sum_Z_quad = [np.sqrt(np.sum(np.array(sig)**2)) for sig in run_significance_list]
 
@@ -1194,7 +927,6 @@ class OptunaCategorizer:
             best_cut_params_list = run_best_params_list[max_index]
             sig_peak_list = run_sig_peak_list[max_index]
             bkg_side_list = run_bkg_side_list[max_index]
-            bkg_side_SF_list = run_bkg_side_SF_list[max_index]
 
 
 
@@ -1204,7 +936,6 @@ class OptunaCategorizer:
         self.plot_category_summary_with_thresholds(best_sig_values,
         sig_peak_list,
         bkg_side_list,
-        bkg_side_SF_list,
         best_cut_params_list,
         cat_path)
 
@@ -1911,11 +1642,6 @@ class OptunaCategorizer:
         # load the samples
         samples_input = self.load_samples()
 
-        if self.fit_nonres_sb:
-            data_samples = self.load_data()
-            self.sf = self.derive_SF(pd.concat([samples_input, data_samples]), 0.9)
-            print("scale factor: ", self.sf)
-
         if self.SR_strategy == "sequential":
             best_params, best_sig_values, max_index = self.optmize_SR_sequential(samples_input)
         elif self.SR_strategy == "simultaneous":
@@ -1975,11 +1701,6 @@ class OptunaCategorizer:
         print("Categorization with mHH categories: ", self.mHH_cats)
         # load the samples
         samples_input = self.load_samples()
-
-        if self.fit_nonres_sb:
-            data_samples = self.load_data()
-            self.sf = self.derive_SF(pd.concat([samples_input, data_samples]), 0.9)
-            print("scale factor: ", self.sf)
 
         mHH_cat_dict = {}
         for i in range(0, len(self.mHH_cats) + 1):
@@ -2149,7 +1870,6 @@ if __name__ == "__main__":
     parser.add_argument("--cat1_signals", type=str, nargs="+", default=[], help="kl values to use as signals in mHH category 1")
     parser.add_argument("--cat2_signals", type=str, nargs="+", default=[], help="kl values to use as signals in mHH category 1")
     parser.add_argument("--cat3_signals", type=str, nargs="+", default=[], help="kl values to use as signals in mHH category 1")
-    parser.add_argument("--fit_nonres_sb", action="store_true", help="Get nonres bkg yield from fit to sideband for significance.")
 
     args = parser.parse_args()
 
@@ -2187,8 +1907,7 @@ if __name__ == "__main__":
                                     n_runs=args.n_runs,
                                     SR_strategy=args.SR_strategy,
                                     mHH_cats=args.mHH_cats,
-                                    cat_signals = cat_signals,
-                                    fit_nonres_sb = args.fit_nonres_sb)
+                                    cat_signals = cat_signals)
 
     if len(args.mHH_cats) > 0:
         categoriser.run_categorisation_mHH()

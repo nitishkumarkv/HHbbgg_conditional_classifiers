@@ -45,23 +45,18 @@ class ModelEstimatorWrapper:
         best_act_fn_name = best_params['act_fn_name']
         best_act_fn = getattr(nn, best_act_fn_name)
         best_dropout_prob = best_params['dropout_prob']
-        # output_size = best_params.get('output_size', 4)  # Adjust as per your problem
-        output_size = best_params.get('output_size', 3)  # Adjust as per your problem
+        output_size = best_params.get('output_size', 4)  # Adjust as per your problem
 
         # Define the model
         self.model = MLP(
             input_size, best_num_layers, best_num_nodes, output_size,
             best_act_fn, best_dropout_prob
         ).to(device)
-        
-        print("\n model loaded")
 
         # Load the model state
         model_state = torch.load(self.model_path, map_location=device, weights_only=False)
         self.model.load_state_dict(model_state['model_state_dict'])
         self.model.eval()
-        
-        print("\n model evaled")
     
     def fit(self, X, y):
         # Dummy fit method to satisfy scikit-learn's requirement
@@ -129,29 +124,18 @@ if __name__ == "__main__":
     args = parser.parse_args()
     input_path= args.input_path
 
-    # load data
-    print("INFO: Loading inputs")
-    X_train = np.load(f'{input_path}/X_train.npy')
-    y_train = np.load(f'{input_path}/y_train.npy')
-    rel_w_train = np.load(f'{input_path}/rel_w_train.npy')
+    # # load data
+    # print("INFO: Loading inputs")
+    # X_train = np.load(f'{input_path}/X_train.npy')
+    # y_train = np.load(f'{input_path}/y_train.npy')
+    # rel_w_train = np.load(f'{input_path}/rel_w_train.npy')
+
+    # class_weights_for_train_no_aboslute = np.load(f'{input_path}/true_class_weights.npy')
 
     X_val = np.load(f'{input_path}/X_val.npy')
     y_val = np.load(f'{input_path}/y_val.npy')
     rel_w_val = np.load(f'{input_path}/rel_w_val.npy')
     class_weights_for_val = np.load(f'{input_path}/class_weights_for_val.npy')
-
-    class_weights_for_train = None
-    class_weights_for_train_path = f'{input_path}/class_weights_for_training_abs.npy'
-    if os.path.exists(class_weights_for_train_path):
-        class_weights_for_train = np.load(class_weights_for_train_path)
-    else:
-        # Fallback to relative weights if train class-weights file is not available.
-        print("fallback to rel_w_train.npy")
-        class_weights_for_train = rel_w_train
-
-    X_train_val = np.concatenate([X_train, X_val], axis=0)
-    y_train_val = np.concatenate([y_train, y_val], axis=0)
-    class_weights_for_train_val = np.concatenate([class_weights_for_train, class_weights_for_val], axis=0)
     print(y_val)
 
     # load list of input features
@@ -172,201 +156,97 @@ if __name__ == "__main__":
     # Instantiate your model wrapper
     model_wrapper = ModelEstimatorWrapper(param_dict_path, model_path)
 
-    # if not os.path.exists(f'{path_to_importance_plots}/permutation_importances.pkl'):
+    if not os.path.exists(f'{path_to_importance_plots}/permutation_importances.pkl'):
 
-    #     # Compute permutation importance for weighted log loss
-    #     print("Computing permutation importance using weighted log loss...")
-    #     result_log_loss = permutation_importance(
-    #         model_wrapper, X_val, y_val, n_repeats=5,
-    #         scoring=lambda estimator, X, y: weighted_log_loss(y, estimator.predict_proba(X), class_weights_for_val),
-    #         random_state=42
-    #     )
-
-    #     importances_log_loss = result_log_loss.importances_mean
-    #     std_log_loss = result_log_loss.importances_std
-
-    #     df_importances = pd.DataFrame({
-    #         'Feature': input_vars,
-    #         #'Accuracy_importance': importances_accuracy,
-    #         #'Accuracy_std': std_accuracy,
-    #         'log_loss_importance': importances_log_loss,
-    #         'log_loss_std': std_log_loss
-    #     })
-
-    #     # Sort by accuracy importance
-    #     df_importances.sort_values(by='log_loss_importance', ascending=True, inplace=True)
-
-    #     # save the importances to a pickle file
-    #     df_importances.to_pickle(f'{path_to_importance_plots}/permutation_importances.pkl')
-
-    # else:
-    #     print("INFO: Loading permutation importances from pickle file")
-    #     df_importances = pd.read_pickle(f'{path_to_importance_plots}/permutation_importances.pkl')
-
-    # print("\nPermutation Importances:")
-    # print(df_importances)
-
-    # # Plot the feature importances for weighted log loss
-    # plt.figure(figsize=(10, 20))
-    # plt.barh(df_importances['Feature'], df_importances['log_loss_importance'], xerr=df_importances['log_loss_std'])
-    # #plt.gca().invert_yaxis()
-    # plt.yticks(fontsize=10)
-    # plt.xlabel('Permutation importance')
-    # plt.tight_layout()
-    # plt.savefig(f'{path_to_importance_plots}/permutation_importance_log_loss.png', dpi=300)
-    # plt.clf()
-
-
-    # df_sorted = df_importances.sort_values('log_loss_importance', ascending=False)
-    # x = np.arange(len(df_sorted))
-    # plt.figure(figsize=(max(20, len(df_sorted) * 0.35), 8))  # Dynamically scale width
-    # plt.bar(x, df_sorted['log_loss_importance'], yerr=df_sorted['log_loss_std'], align='center')
-    # plt.xticks(x, df_sorted['Feature'], rotation=45, ha='right', fontsize=10)
-    # plt.ylabel('Permutation importance')
-    # plt.tight_layout()
-    # plt.savefig(f'{path_to_importance_plots}/permutation_importance_log_loss_vertical_cleaned.png', dpi=300)
-
-
-    # if not os.path.exists(f'{path_to_importance_plots}/permutation_importances_train_val.pkl'):
-    #     print("Computing permutation importance using weighted log loss on train+val...")
-    #     result_log_loss_train_val = permutation_importance(
-    #         model_wrapper, X_train_val, y_train_val, n_repeats=5,
-    #         scoring=lambda estimator, X, y: weighted_log_loss(
-    #             y, estimator.predict_proba(X), class_weights_for_train_val
-    #         ),
-    #         random_state=42
-    #     )
-
-    #     df_importances_train_val = pd.DataFrame({
-    #         'Feature': input_vars,
-    #         'log_loss_importance': result_log_loss_train_val.importances_mean,
-    #         'log_loss_std': result_log_loss_train_val.importances_std
-    #     })
-    #     df_importances_train_val.sort_values(by='log_loss_importance', ascending=True, inplace=True)
-    #     df_importances_train_val.to_pickle(
-    #         f'{path_to_importance_plots}/permutation_importances_train_val.pkl'
-    #     )
-    # else:
-    #     print("INFO: Loading train+val permutation importances from pickle file")
-    #     df_importances_train_val = pd.read_pickle(
-    #         f'{path_to_importance_plots}/permutation_importances_train_val.pkl'
-    #     )
-
-    # print("\nPermutation Importances (train+val):")
-    # print(df_importances_train_val)
-
-    # plt.figure(figsize=(10, 20))
-    # plt.barh(
-    #     df_importances_train_val['Feature'],
-    #     df_importances_train_val['log_loss_importance'],
-    #     xerr=df_importances_train_val['log_loss_std']
-    # )
-    # plt.yticks(fontsize=10)
-    # plt.xlabel('Permutation importance')
-    # plt.tight_layout()
-    # plt.savefig(f'{path_to_importance_plots}/permutation_importance_log_loss_train_val.png', dpi=300)
-    # plt.clf()
-
-    # df_sorted_train_val = df_importances_train_val.sort_values('log_loss_importance', ascending=False)
-    # x = np.arange(len(df_sorted_train_val))
-    # plt.figure(figsize=(max(20, len(df_sorted_train_val) * 0.35), 8))
-    # plt.bar(
-    #     x,
-    #     df_sorted_train_val['log_loss_importance'],
-    #     yerr=df_sorted_train_val['log_loss_std'],
-    #     align='center'
-    # )
-    # plt.xticks(x, df_sorted_train_val['Feature'], rotation=45, ha='right', fontsize=10)
-    # plt.ylabel('Permutation importance')
-    # plt.tight_layout()
-    # plt.savefig(
-    #     f'{path_to_importance_plots}/permutation_importance_log_loss_vertical_cleaned_train_val.png',
-    #     dpi=600
-    # )
-
-
-    # for specific classes
-    # class_names = ["nonRes class", "ttH class", "other single H class", "ggFHH class",] # "VBFHH class"]
-    # class_labels = [f'{class_names[i]}' for i in range(4)]  # or use your own names
-    class_names = ["nonRes singleH class", "ttH class", "ggFHH class"]
-    class_labels = [f'{class_names[i]}' for i in range(3)]  # or use your own names
-
-    for class_idx, class_name in enumerate(class_labels):
-        print(f"\n>> Computing permutation importance for class {class_name}...")
-
-        result_class = permutation_importance(
+        # Compute permutation importance for weighted log loss
+        print("Computing permutation importance using weighted log loss...")
+        result_log_loss = permutation_importance(
             model_wrapper, X_val, y_val, n_repeats=5,
-            scoring=lambda estimator, X, y: class_specific_log_loss(
-                y, estimator.predict_proba(X), class_weights_for_val, class_idx),
+            scoring=lambda estimator, X, y: weighted_log_loss(y, estimator.predict_proba(X), class_weights_for_val),
             random_state=42
         )
 
-        importances_class = result_class.importances_mean
-        std_class = result_class.importances_std
+        importances_log_loss = result_log_loss.importances_mean
+        std_log_loss = result_log_loss.importances_std
 
-        df_class = pd.DataFrame({
+        df_importances = pd.DataFrame({
             'Feature': input_vars,
-            f'{class_name}_importance': importances_class,
-            f'{class_name}_std': std_class
-        }).sort_values(by=f'{class_name}_importance', ascending=True)
+            #'Accuracy_importance': importances_accuracy,
+            #'Accuracy_std': std_accuracy,
+            'log_loss_importance': importances_log_loss,
+            'log_loss_std': std_log_loss
+        })
 
-        # Save per-class pickle
-        df_class.to_pickle(f'{path_to_importance_plots}/permutation_importances_{class_name}.pkl')
+        # Sort by accuracy importance
+        df_importances.sort_values(by='log_loss_importance', ascending=True, inplace=True)
 
-        # Sort and plot class-specific importance
-        df_class_sorted = df_class.sort_values(by=f'{class_name}_importance', ascending=False)
-        x = np.arange(len(df_class_sorted))
-        plt.figure(figsize=(max(20, len(df_class_sorted) * 0.35), 8))  # Dynamically scale width
-        plt.bar(x, df_class_sorted[f'{class_name}_importance'], 
-                yerr=df_class_sorted[f'{class_name}_std'], align='center')
+        # save the importances to a pickle file
+        df_importances.to_pickle(f'{path_to_importance_plots}/permutation_importances.pkl')
 
-        plt.xticks(x, df_class_sorted['Feature'], rotation=45, ha='right', fontsize=10)
-        plt.ylabel('Permutation importance')
-        plt.title(f'Permutation importance for {class_name}')
-        plt.tight_layout()
-        plt.savefig(f'{path_to_importance_plots}/permutation_importance_{class_name}_vertical_cleaned.png', dpi=300)
-        plt.clf()
-    
-    # # for specific classes
-    # class_names = ["nonRes class", "ttH class", "other single H class", "ggFHH class",] # "VBFHH class"]
-    # class_labels = [f'{class_names[i]}' for i in range(4)]  # or use your own names
+    else:
+        print("INFO: Loading permutation importances from pickle file")
+        df_importances = pd.read_pickle(f'{path_to_importance_plots}/permutation_importances.pkl')
 
-    # for class_idx, class_name in enumerate(class_labels):
-    #     print(f"\n>> Computing permutation importance for class {class_name}...")
+    print("\nPermutation Importances:")
+    print(df_importances)
 
-    #     result_class = permutation_importance(
-    #         model_wrapper, X_train_val, y_train_val, n_repeats=5,
-    #         scoring=lambda estimator, X, y: class_specific_log_loss(
-    #             y, estimator.predict_proba(X), class_weights_for_train_val, class_idx),
-    #         random_state=42
-    #     )
+    # Plot the feature importances for weighted log loss
+    plt.figure(figsize=(10, 20))
+    plt.barh(df_importances['Feature'], df_importances['log_loss_importance'], xerr=df_importances['log_loss_std'])
+    #plt.gca().invert_yaxis()
+    plt.yticks(fontsize=10)
+    plt.xlabel('Permutation importance')
+    plt.tight_layout()
+    plt.savefig(f'{path_to_importance_plots}/permutation_importance_log_loss.png', dpi=300)
+    plt.clf()
 
-    #     print("result class done.")
 
-    #     importances_class = result_class.importances_mean
-    #     std_class = result_class.importances_std
+    df_sorted = df_importances.sort_values('log_loss_importance', ascending=False)
+    x = np.arange(len(df_sorted))
+    plt.figure(figsize=(max(20, len(df_sorted) * 0.35), 8))  # Dynamically scale width
+    plt.bar(x, df_sorted['log_loss_importance'], yerr=df_sorted['log_loss_std'], align='center')
+    plt.xticks(x, df_sorted['Feature'], rotation=45, ha='right', fontsize=10)
+    plt.ylabel('Permutation importance')
+    plt.tight_layout()
+    plt.savefig(f'{path_to_importance_plots}/permutation_importance_log_loss_vertical_cleaned.png', dpi=300)
 
-    #     df_class = pd.DataFrame({
-    #         'Feature': input_vars,
-    #         f'{class_name}_importance': importances_class,
-    #         f'{class_name}_std': std_class
-    #     }).sort_values(by=f'{class_name}_importance', ascending=True)
 
-    #     print("df_class:", df_class)
+    # for specific classes
+    class_names = ["nonRes class", "ttH class", "other single H class", "ggFHH class", "VBFHH class"]
+    class_labels = [f'{class_names[i]}' for i in range(4)]  # or use your own names
 
-    #     # Save per-class pickle
-    #     df_class.to_pickle(f'{path_to_importance_plots}/permutation_importances_{class_name}.pkl')
-
-    #     # Sort and plot class-specific importance
-    #     df_class_sorted = df_class.sort_values(by=f'{class_name}_importance', ascending=False)
-    #     x = np.arange(len(df_class_sorted))
-    #     plt.figure(figsize=(max(20, len(df_class_sorted) * 0.35), 8))  # Dynamically scale width
-    #     plt.bar(x, df_class_sorted[f'{class_name}_importance'], 
-    #             yerr=df_class_sorted[f'{class_name}_std'], align='center')
-
-    #     plt.xticks(x, df_class_sorted['Feature'], rotation=45, ha='right', fontsize=10)
-    #     plt.ylabel('Permutation importance')
-    #     plt.title(f'Permutation importance for {class_name}')
-    #     plt.tight_layout()
-    #     plt.savefig(f'{path_to_importance_plots}/permutation_importance_{class_name}_vertical_cleaned.png', dpi=300)
-    #     plt.clf()
+#    for class_idx, class_name in enumerate(class_labels):
+#        print(f"\n>> Computing permutation importance for class {class_name}...")
+#
+#        result_class = permutation_importance(
+#            model_wrapper, X_val, y_val, n_repeats=5,
+#            scoring=lambda estimator, X, y: class_specific_log_loss(
+#                y, estimator.predict_proba(X), class_weights_for_val, class_idx),
+#            random_state=42
+#        )
+#
+#        importances_class = result_class.importances_mean
+#        std_class = result_class.importances_std
+#
+#        df_class = pd.DataFrame({
+#            'Feature': input_vars,
+#            f'{class_name}_importance': importances_class,
+#            f'{class_name}_std': std_class
+#        }).sort_values(by=f'{class_name}_importance', ascending=True)
+#
+#        # Save per-class pickle
+#        df_class.to_pickle(f'{path_to_importance_plots}/permutation_importances_{class_name}.pkl')
+#
+#        # Sort and plot class-specific importance
+#        df_class_sorted = df_class.sort_values(by=f'{class_name}_importance', ascending=False)
+#        x = np.arange(len(df_class_sorted))
+#        plt.figure(figsize=(max(20, len(df_class_sorted) * 0.35), 8))  # Dynamically scale width
+#        plt.bar(x, df_class_sorted[f'{class_name}_importance'], 
+#                yerr=df_class_sorted[f'{class_name}_std'], align='center')
+#
+#        plt.xticks(x, df_class_sorted['Feature'], rotation=45, ha='right', fontsize=10)
+#        plt.ylabel('Permutation importance')
+#        plt.title(f'Permutation importance for {class_name}')
+#        plt.tight_layout()
+#        plt.savefig(f'{path_to_importance_plots}/permutation_importance_{class_name}_vertical_cleaned.png', dpi=300)
+#        plt.clf()
