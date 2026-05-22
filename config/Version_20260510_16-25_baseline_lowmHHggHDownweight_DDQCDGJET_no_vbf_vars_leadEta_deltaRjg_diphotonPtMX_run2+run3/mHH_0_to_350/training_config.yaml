@@ -205,7 +205,7 @@ samples_info:
         GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00: "phys_b2g/HHbbgg/HiggsDNA_parquet/v6/Run3_2025/sim/GluGlutoHH_kl-2p45_kt-1p00_c2-0p00/NOTAG_merged.parquet"
         GluGlutoHHto2B2G_kl_m20p00_kt_1p00_c2_2p24: "phys_b2g/HHbbgg/HiggsDNA_parquet/v6/Run3_2025/sim/GluGlutoHH_kl-m20p00_kt-1p00_c2-2p24/NOTAG_merged.parquet"
     data:
-        2016preVFP_EraBv1: "phys_b2g/HHbbgg/HiggsDNA_parquet/v6/Run2_2016preVFP/data/DataBv1_2016preVFP_NOTAG_merged.parquet"
+        # 2016preVFP_EraBv1: "phys_b2g/HHbbgg/HiggsDNA_parquet/v6/Run2_2016preVFP/data/DataBv1_2016preVFP_NOTAG_merged.parquet"
         2016preVFP_EraBv2: "phys_b2g/HHbbgg/HiggsDNA_parquet/v6/Run2_2016preVFP/data/DataBv2_2016preVFP_NOTAG_merged.parquet"
         2016preVFP_EraC: "phys_b2g/HHbbgg/HiggsDNA_parquet/v6/Run2_2016preVFP/data/DataC_2016preVFP_NOTAG_merged.parquet"
         2016preVFP_EraD: "phys_b2g/HHbbgg/HiggsDNA_parquet/v6/Run2_2016preVFP/data/DataD_2016preVFP_NOTAG_merged.parquet"
