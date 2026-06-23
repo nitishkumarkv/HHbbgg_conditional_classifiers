@@ -1171,11 +1171,19 @@ class GridSearchCategorizer:
             sig_peak_list, bkg_side_list, cat_path)
 
         return best_cut_params_list, best_sig_values
+    
+    def _remove_fake_digits(self, value, place=12):
+        # assume precision is less than 12 digits, so we can round to 12 digits to remove fake digits
+        return round(value, place) if isinstance(value, float) else value
 
     def _write_output_files(self, best_cut_params_list, best_sig_values,
                             sig_peak_list, bkg_side_list, cat_path):
         """Write txt, json, metric outputs and summary plot."""
         z_sum_quad = np.sqrt(np.sum(np.array(best_sig_values) ** 2))
+
+        for p in best_cut_params_list:
+            for k in p.keys():
+                p[k] = self._remove_fake_digits(p[k])
 
         sig_col = SCORE_COLS[self.signal_class]
         base_cuts = []
@@ -1184,8 +1192,6 @@ class GridSearchCategorizer:
             for idx, bg_idx in enumerate(self.bkg_classes):
                 bg_col = SCORE_COLS[bg_idx]
                 parts.append(f"{bg_col} < {p[f'th_bg_{bg_idx}']}")
-            if self.apply_boosted_veto:
-                parts.append("is_boosted == 0")
             base_cuts.append("(" + " & ".join(parts) + ")")
 
         cat_strings = {}
@@ -1194,10 +1200,15 @@ class GridSearchCategorizer:
             if i >= 2:
                 for j in range(i - 1):
                     parts.append(f"not({base_cuts[j]})")
-            if not self.apply_boosted_veto:
-                parts.append("dijet_mass > 80")
-                parts.append("dijet_mass < 190")
             cat_strings[f"cat{i}"] = " & ".join(parts)
+        
+        for i, base in enumerate(base_cuts, start=1):
+            if self.apply_boosted_veto:
+                cat_strings[f"cat{i}"] += " & (is_boosted == 0)"
+            if self.vbf_thresholds is not None:
+                vbf_col = SCORE_COLS[self.vbfhh_class]
+                cat_strings[f"cat{i}"] += f" & ({vbf_col} < {self.vbf_thresholds})"
+            cat_strings[f"cat{i}"] += " & (dijet_mass > 80) & (dijet_mass < 190)"
 
         txt_path = os.path.join(cat_path, "best_cut_params.txt")
         with open(txt_path, "w") as f:
@@ -1414,6 +1425,8 @@ class GridSearchCategorizer:
                 if best_vbfhh_threshold is None:
                     print(f"No valid VBFHH SR found at iteration {i_cat + 1}, stopping.")
                     break
+
+                self.vbf_thresholds = best_vbfhh_threshold
 
                 print(f"VBFHH SR {i_cat + 1}: threshold = {best_vbfhh_threshold:.4f}, "
                       f"Z = {best_vbfhh_z:.4f}, s = {best_vbfhh_s:.4g}, "
