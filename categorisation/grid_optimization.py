@@ -116,6 +116,7 @@ class GridSearchCategorizer:
         vbf_thresholds=None,
         n_coarse_bins=100,
         n_fine_bins=100,
+        require_sb_ratio=False,
     ):
         # -- Paths and I/O --------------------------------------------
         self.base_path = base_path
@@ -146,6 +147,7 @@ class GridSearchCategorizer:
         # -- Grid search parameters -----------------------------------
         self.n_coarse_bins = n_coarse_bins
         self.n_fine_bins = n_fine_bins
+        self.require_sb_ratio = require_sb_ratio
 
         # -- VBFHH parameters -----------------------------------------
         self.vbfhh_class = vbfhh_class
@@ -541,6 +543,18 @@ class GridSearchCategorizer:
             scores_3d[mask], bins=bins, range=bin_range, weights=weights[mask]
         )
 
+        # -- H_data_LSB / H_data_RSB -- split sideband for SB ratio constraint
+        mask_L = is_data & in_LSB
+        print(f"  data_LSB: {mask_L.sum():,} events")
+        H_data_LSB, _ = np.histogramdd(
+            scores_3d[mask_L], bins=bins, range=bin_range, weights=weights[mask_L]
+        )
+        mask_R = is_data & in_RSB
+        print(f"  data_RSB: {mask_R.sum():,} events")
+        H_data_RSB, _ = np.histogramdd(
+            scores_3d[mask_R], bins=bins, range=bin_range, weights=weights[mask_R]
+        )
+
         # Event COUNT histogram (unweighted) for per-bin event retrieval
         mask = ~is_data # should not include Data for counting either
         H_count, _ = np.histogramdd(scores_3d[mask], bins=bins, range=bin_range)
@@ -551,6 +565,8 @@ class GridSearchCategorizer:
             "interp_RSB": H_interp_RSB,
             "noninterp_SR": H_noninterp_SR,
             "bkg_sideband": H_bkg_sideband,
+            "data_LSB": H_data_LSB,
+            "data_RSB": H_data_RSB,
             "count": H_count,
         }
 
@@ -607,6 +623,12 @@ class GridSearchCategorizer:
         m = is_bkg & ~is_data & in_sideband
         H["bkg_sideband"] -= np.histogramdd(s3d[m], bins=bins, weights=w_sub[m])[0]
 
+        m = is_data & in_LSB
+        H["data_LSB"] -= np.histogramdd(s3d[m], bins=bins, weights=w_sub[m])[0]
+
+        m = is_data & in_RSB
+        H["data_RSB"] -= np.histogramdd(s3d[m], bins=bins, weights=w_sub[m])[0]
+
         m = ~is_data
         H["count"] -= np.histogramdd(s3d[m], bins=bins)[0]
 
@@ -633,6 +655,8 @@ class GridSearchCategorizer:
             ("sig_SR", H["sig_SR"]),
             ("bkg_SR", H_bkg_SR),
             ("bkg_sideband", H["bkg_sideband"]),
+            ("data_LSB", H["data_LSB"]),
+            ("data_RSB", H["data_RSB"]),
             ("count", H["count"]),
         ]:
             C[key] = self._compute_reverse_cumsum(data)
@@ -691,10 +715,17 @@ class GridSearchCategorizer:
             & (C["sig_SR"] > 0)
             & (C["bkg_sideband"] >= self.side_band_threshold_low)
         )
+        if self.require_sb_ratio:
+            candidate = (
+                candidate
+                & (C["data_LSB"] > 0)
+                & (C["data_RSB"] / C["data_LSB"] < _WIDTH_R / _WIDTH_L)
+            )
         idx = np.where(candidate)
         n_cand = len(idx[0])
         pct = 100.0 * n_cand / total_combos
-        print(f"  Candidates (has events, S>0, sb>={self.side_band_threshold_low}): "
+        sb_ratio_str = f", RSB/LSB<{_WIDTH_R/_WIDTH_L:.2f}" if self.require_sb_ratio else ""
+        print(f"  Candidates (has events, S>0, sb>={self.side_band_threshold_low}{sb_ratio_str}): "
               f"{n_cand:,} ({pct:.2f}% of {total_combos:,})")
 
         if n_cand == 0:
@@ -896,12 +927,20 @@ class GridSearchCategorizer:
         m = is_bkg & ~is_data & in_sideband
         H_bs, _ = np.histogramdd(r_s3d[m], bins=bins_3d, weights=r_w[m])
 
+        # -- Split sideband for SB ratio constraint --
+        m = is_data & in_LSB
+        H_bs_L, _ = np.histogramdd(r_s3d[m], bins=bins_3d, weights=r_w[m])
+        m = is_data & in_RSB
+        H_bs_R, _ = np.histogramdd(r_s3d[m], bins=bins_3d, weights=r_w[m])
+
         # -- Reverse cumulative sums (survival function) ---------------
         C_sig = self._compute_reverse_cumsum(H_sig)
         C_il = self._compute_reverse_cumsum(H_il)
         C_ir = self._compute_reverse_cumsum(H_ir)
         C_ni = self._compute_reverse_cumsum(H_ni)
         C_bs = self._compute_reverse_cumsum(H_bs)
+        C_bs_L = self._compute_reverse_cumsum(H_bs_L)
+        C_bs_R = self._compute_reverse_cumsum(H_bs_R)
 
         # -- Sideband constraints --------------------------------------
         sb_min = self.side_band_threshold_low
@@ -913,9 +952,16 @@ class GridSearchCategorizer:
         B = np.maximum(B_interp + C_ni, 1e-9)
         B_side = C_bs
 
+        valid_mask = (S > 0) & (B_side >= sb_min) & (B_side <= sb_max)
+        if self.require_sb_ratio:
+            valid_mask = (
+                valid_mask
+                & (C_bs_L > 0)
+                & (C_bs_R / C_bs_L < _WIDTH_R / _WIDTH_L)
+            )
         with np.errstate(invalid="ignore", divide="ignore"):
             Z = np.where(
-                (S > 0) & (B_side >= sb_min) & (B_side <= sb_max),
+                valid_mask,
                 np.sqrt(2.0 * ((S + B) * np.log(1.0 + S / B) - S)),
                 0.0,
             )
@@ -1526,6 +1572,10 @@ if __name__ == "__main__":
                         help="Fine bins per dimension within each coarse bin "
                              "(produces (n_fine_bins+1)^3 approx 1M threshold "
                              "combinations per coarse bin)")
+    parser.add_argument("--require_sb_ratio", action="store_true", default=False,
+                        help="Require right_sideband / left_sideband "
+                             "< right_width / left_width (=%.2f)"
+                             % (_WIDTH_R / _WIDTH_L))
 
     # -- Output ------------------------------------------------------
     parser.add_argument("--output_dir", type=str, default=None,
@@ -1613,6 +1663,7 @@ if __name__ == "__main__":
         vbf_thresholds=args.vbf_thresholds,
         n_coarse_bins=args.n_coarse_bins,
         n_fine_bins=args.n_fine_bins,
+        require_sb_ratio=args.require_sb_ratio,
     )
     categoriser.apply_boosted_veto = args.apply_boosted_veto
     categoriser.weight_scale = args.weight_scale
