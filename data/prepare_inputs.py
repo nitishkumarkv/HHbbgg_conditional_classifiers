@@ -123,23 +123,6 @@ class PrepareInputs:
             del record_batch
             #print(f"  [MEM] after ak.from_arrow:      {self._mem_mb():.0f} MB")
 
-            # Temporary fix for v3 version of 2022+2023
-            if ("EE" in era) or ("BPix" in era):
-                batch = ak.Array({
-                    (name.replace("nonResReg", "nonResReg_vbfpair", 1)
-                     if name.startswith("nonResReg")
-                     else name
-                    ): batch[name]
-                    for name in batch.fields
-                })
-                batch = ak.Array({
-                    (f"nonResReg_vbfpair_{name}"
-                     if "VBF" in name and not name.startswith("nonResReg_vbfpair")
-                     else name
-                    ): batch[name]
-                    for name in batch.fields
-                })
-
             batch = preselection_func(batch)
             #print(f"  [MEM] after preselection:       {self._mem_mb():.0f} MB  ({len(batch)} events)")
 
@@ -758,11 +741,6 @@ class PrepareInputs:
 
             vars_to_load = vars_for_training + self.extra_vars
 
-            # Temporary fix for v3 version of 2022+2023
-            if ("EE" in era) or ("BPix" in era):
-                vars_to_load = [var.replace(f"{self.var_prefix}_", "") if "VBF" in var else var for var in vars_to_load]
-                vars_to_load = [var.replace(f"{self.var_prefix}_", "nonResReg_") for var in vars_to_load]
-
             for samples in self.sample_to_class.keys():
                 print(samples)
 
@@ -951,11 +929,6 @@ class PrepareInputs:
 
             vars_to_load = vars_for_training + self.extra_vars + self.vars_for_boosted + ["lead_genPartFlav", "sublead_genPartFlav", "weight_tot"]
 
-            # Temporary fix for v3 version of 2022+2023
-            if ("EE" in era) or ("BPix" in era):
-                vars_to_load = [var.replace(f"{self.var_prefix}_", "") if "VBF" in var else var for var in vars_to_load]
-                vars_to_load = [var.replace(f"{self.var_prefix}_", "nonResReg_") for var in vars_to_load]
-
             for samples in training_info["samples_info"][era].keys():
 
                 parquet_path = training_info["samples_info"][era][samples]
@@ -1085,11 +1058,6 @@ class PrepareInputs:
                 # vars_for_log = vars_config["vars_for_log_transform"]
 
                 vars_to_load = vars_for_training + self.extra_vars + self.vars_for_boosted + ["lead_genPartFlav", "sublead_genPartFlav", "weight_tot"]
-
-                # Temporary fix for v3 version of 2022+2023
-                if ("EE" in era) or ("BPix" in era):
-                    vars_to_load = [var.replace(f"{self.var_prefix}_", "") if "VBF" in var else var for var in vars_to_load]
-                    vars_to_load = [var.replace(f"{self.var_prefix}_", "nonResReg_") for var in vars_to_load]
 
                 for sys in training_info["systematics"]:
 
@@ -1237,11 +1205,6 @@ class PrepareInputs:
             # vars_for_log = vars_config["vars_for_log_transform"]
 
             vars_to_load = vars_for_training + self.extra_vars + self.vars_for_boosted
-
-            # Temporary fix for v3 version of 2022+2023
-            if ("2022" in data) or ("2023" in data):
-                vars_to_load = [var.replace(f"{self.var_prefix}_", "") if "VBF" in var else var for var in vars_to_load]
-                vars_to_load = [var.replace(f"{self.var_prefix}_", "nonResReg_") for var in vars_to_load]
 
             era = sample_to_era[data]
             parquet_path = datas[data]
