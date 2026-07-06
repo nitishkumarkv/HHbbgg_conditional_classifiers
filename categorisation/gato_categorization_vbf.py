@@ -91,8 +91,10 @@ def preselection(events, scores):
         #events = events[(mass_bool & dijet_mass_bool & lead_mvaID_bool & sublead_mvaID_bool)]
         #scores = scores[(mass_bool & dijet_mass_bool & lead_mvaID_bool & sublead_mvaID_bool)]
 
-        events = events[(mass_bool & dijet_mass_bool & lead_mvaID_bool & sublead_mvaID_bool & boosted_mask)]
-        scores = scores[(mass_bool & dijet_mass_bool & lead_mvaID_bool & sublead_mvaID_bool & boosted_mask)]
+        score_bool = (scores[:, 3]<0.774)
+
+        events = events[(mass_bool & dijet_mass_bool & lead_mvaID_bool & sublead_mvaID_bool & boosted_mask & score_bool)]
+        scores = scores[(mass_bool & dijet_mass_bool & lead_mvaID_bool & sublead_mvaID_bool & boosted_mask & score_bool)]
 
         return events, scores
 
@@ -110,10 +112,8 @@ def _load_one_sample_era(base_path, sample, era, dijet_mass_key, dim=3):
 
     try:
         y = np.load(y_file, mmap_mode="r")
-        # remove the first column
-        if (y.ndim > 1 and y.shape[1] > 1) and dim == 3:
-            y = y[:, 1:]
-        print("shape of y after removing first column:", y.shape)
+        
+        
         events = ak.from_parquet(
             evt_file,
             columns=[
@@ -126,6 +126,11 @@ def _load_one_sample_era(base_path, sample, era, dijet_mass_key, dim=3):
         )
 
         events, y = preselection(events, y)
+        print("shape of y before removing last column:", y.shape)
+        # remove the last column
+        if (y.ndim > 1 and y.shape[1] > 1) and dim == 3:
+            y = y[:, :-1]
+        print("shape of y after removing last column:", y.shape)
 
         if sample.startswith("TTG_") or sample in {"TT", "TTGG"}:
             sel = (
@@ -156,95 +161,6 @@ def _load_one_sample_era(base_path, sample, era, dijet_mass_key, dim=3):
         print(f"[load_samples] ERROR while reading {samp_dir}: {exc}")
         return None
 
-"""def load_samples(base_path, sample_list):
-        
-        Load predictions and event weights across eras and samples.
-        Skips missing files, copes with empty selections, and fails loudly
-        only if *nothing* is collected.
-        
-        eras = ("2016preVFP", "2016postVFP", "2017", "2018", "preEE", "postEE", "preBPix", "postBPix", "2024")
-        dijet_mass_key = "nonResReg_vbfpair_dijet_mass_DNNreg"
-
-        #data_dict_MC = {}
-        data_dict_MC = defaultdict(pd.DataFrame)
-
-        for sample in sample_list:
-
-            data = {k: [] for k in (
-            "NN_output", "diphoton_mass", "dijet_mass", "massH",
-            "weights", "labels", "sample"
-            )}
-            for era in eras:
-                print(f"[load_samples] Processing {sample} for era {era}...")
-                samp_dir = os.path.join(
-                    base_path, "individual_samples", era, sample
-                )
-                y_file   = os.path.join(samp_dir, "y.npy")
-                evt_file = os.path.join(samp_dir, "events.parquet")
-
-                # Skip if either file is missing
-                if not (os.path.exists(y_file) and os.path.exists(evt_file)):
-                    print(f"[load_samples] WARNING: missing files for {samp_dir}, skipping.")
-                    continue
-
-                try:
-                    y = np.load(y_file)
-                    events = ak.from_parquet(
-                        evt_file,
-                        columns=[
-                            "mass", dijet_mass_key,
-                            "lead_genPartFlav", "sublead_genPartFlav",
-                            "weight_tot",
-                            "lead_mvaID", "sublead_mvaID",
-                        ],
-                    )
-                    events, y = preselection(events, y)
-                except Exception as exc:
-                    print(f"[load_samples] ERROR while reading {samp_dir}: {exc}")
-                    continue
-
-                # Prompt-photon requirement for tt̄γ‐like samples
-                if sample.startswith("TTG_") or sample in {"TT", "TTGG"}:
-                    sel = ((events["lead_genPartFlav"] == 1) &
-                           (events["sublead_genPartFlav"] == 1))
-                    events = events[sel]
-                    y = y[sel]
-
-                if len(y) == 0:  # Nothing survived the cuts
-                    continue
-
-                data["NN_output"].append(y)
-                data["diphoton_mass"].append(np.asarray(events["mass"]))
-                data["massH"].append(np.asarray(events["mass"]))
-                data["dijet_mass"].append(np.asarray(events[dijet_mass_key]))
-                data["weights"].append(np.asarray(events["weight_tot"]))
-                data["labels"].append(
-                    np.full(len(y), 1 if sample in signal_samples else 0, dtype=int)
-                )
-                data["sample"].append(np.repeat(sample, len(y)))
-
-            # Concatenate each list into one array
-            for key in data:
-                data[key] = np.concatenate(data[key], axis=0)
-
-            scores = data.pop("NN_output")          # shape (N, n_scores)
-            argmax = np.argmax(scores, axis=1)  # safest when scores is 2-D
-
-            # Assemble DataFrame
-            df = pd.DataFrame(data)
-            df["NN_output"] = list(scores)          # store per-event score vectors
-            df["arg_max_score"] = argmax
-
-            data_dict_MC[sample] = df
-
-        # Quick bookkeeping
-        #in_peak = (df["diphoton_mass"] > 120) & (df["diphoton_mass"] < 130)
-        #print(f"Background weight: {df.loc[df['labels'] == 0, 'weights'].sum():.3g}")
-        #print(f"Signal weight:     {df.loc[df['labels'] == 1, 'weights'].sum():.3g}")
-        #print(f"Bkg weight 120-130 GeV: {df.loc[(df['labels'] == 0) & in_peak, 'weights'].sum():.3g}")
-        #print(f"Sig weight 120-130 GeV: {df.loc[(df['labels'] == 1) & in_peak, 'weights'].sum():.3g}")
-
-        return data_dict_MC"""
 
 def load_samples(base_path, sample_list, n_workers=1, dim=3):
 
@@ -319,13 +235,13 @@ def _load_one_data_sample(base_path, data, dijet_mass_key, dim=3):
         )
 
         y = np.load(y_file, mmap_mode="r")
-        # remove the first column
-        if (y.ndim > 1 and y.shape[1] > 1) and dim == 3:
-            y = y[:, 1:]
-
-        print("shape of y:", y.shape)
+        
 
         df, y = preselection(df, y)
+        # remove the last column
+        if (y.ndim > 1 and y.shape[1] > 1) and dim == 3:
+            y = y[:, :-1]
+        print("shape of y:", y.shape)
         df["NN_output"] = list(y)
         df["massH"] = df["mass"]  # for consistency with MC data_dict
         df["weights"] = np.ones(len(df))  # dummy weights for data

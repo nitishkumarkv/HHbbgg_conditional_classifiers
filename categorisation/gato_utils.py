@@ -1336,6 +1336,46 @@ def plot_significance_and_loss_histories(out_dir, z_hist, loss_hist, reg_hist):
     fig.savefig(os.path.join(out_dir, "Regularisation_log.pdf"))
     plt.close(fig)
 
+def plot_significance_and_loss_histories_(out_dir, z_hist, loss_hist, reg_hist):
+    epochs = np.arange(len(z_hist))
+
+    # Significance history
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.plot(epochs, z_hist, marker='o', label="ggHH")
+    #ax.plot(epochs, z_tH_hist, marker='o', label="tH")
+    ax.set_xlabel("Iteration", fontsize=22)
+    ax.set_ylabel("Significance", fontsize=22)
+    ax.legend(fontsize=20, loc="upper right")
+    ax.set_ylim(0, 1.2*ax.get_ylim()[1])
+    fig.tight_layout()
+    fig.savefig(os.path.join(out_dir, "significanceHistory.pdf"))
+    ax.set_yscale("log")
+    ax.set_ylim(3e-2, 3*ax.get_ylim()[1])
+    fig.tight_layout()
+    fig.savefig(os.path.join(out_dir, "significanceHistory_log.pdf"))
+    plt.close(fig)
+
+    # Loss history
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.plot(epochs, loss_hist, marker='o', label="Loss")
+    ax.set_xlabel("Iteration", fontsize=22)
+    ax.set_ylabel(r"Neg. geom. mean ($z_{ggHH}$)", fontsize=22)
+    fig.tight_layout()
+    fig.savefig(os.path.join(out_dir, "Loss.pdf"))
+    plt.close(fig)
+
+    # Regularisation history
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.plot(epochs, reg_hist, marker='o', label="Regularisation")
+    ax.set_xlabel("Iteration", fontsize=22)
+    ax.set_ylabel("Low-background penalty", fontsize=22)
+    fig.tight_layout()
+    fig.savefig(os.path.join(out_dir, "Regularisation.pdf"))
+    ax.set_yscale("log")
+    fig.tight_layout()
+    fig.savefig(os.path.join(out_dir, "Regularisation_log.pdf"))
+    plt.close(fig)
+
 def plot_significance_and_loss_histories(out_dir, z_ttH_hist, z_tH_hist, loss_hist, reg_hist):
     epochs = np.arange(len(z_ttH_hist))
 
@@ -1428,24 +1468,24 @@ def plot_bias_history_with_temp(out_dir, bias_epochs, bias_history, temp_points,
     plt.close(fig)
 
 
-def plot_yield_histories(out_dir, epochs_arr, S_ttH_history, B_nonres_history, channel, n_cats):
+def plot_yield_histories_(out_dir, epochs_arr, S_ttH_history, B_nonres_history, channel, n_cats):
 
     # ttH-like region yields (S vs B)
     fig, ax = plt.subplots(figsize=(8, 6))
     S_ttH_arr = np.stack(S_ttH_history)
     ncat_ttH = S_ttH_arr.shape[1]
     for cat in range(ncat_ttH):
-        ax.plot(epochs_arr, S_ttH_arr[:, cat], label=fr"S, $t\bar{{t}}H$ cat. {cat}", linewidth=3)
+        ax.plot(epochs_arr, S_ttH_arr[:, cat], label=fr"S, $ggHH$ cat. {cat}", linewidth=3)
     ax.set_xlabel("Iteration", fontsize=22)
     ax.set_ylabel("Yields", fontsize=22)
     ax.legend(ncol=2, fontsize=16, loc="upper right", labelspacing=0.4, columnspacing=1.5)
     ax.set_ylim(ax.get_ylim()[0], 1.2*ax.get_ylim()[1])
     fig.tight_layout()
-    fig.savefig(os.path.join(out_dir, "yields_ttH_linear.pdf"))
+    fig.savefig(os.path.join(out_dir, "yields_ggHH_linear.pdf"))
     ax.set_yscale('log')
     ax.set_ylim(1e-1, 10*ax.get_ylim()[1])
     fig.tight_layout()
-    fig.savefig(os.path.join(out_dir, "yields_ttH_log.pdf"))
+    fig.savefig(os.path.join(out_dir, "yields_ggHH_log.pdf"))
     plt.close(fig)
 
     
