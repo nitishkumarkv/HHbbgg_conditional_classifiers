@@ -126,6 +126,7 @@ if __name__ == "__main__":
     parser.add_argument('--config_path', type=str, help='Path to the configuration files')
     parser.add_argument('--get_pred_nominal', action='store_true', help='Get predictions for nominal samples')
     parser.add_argument('--get_pred_sys', action='store_true', help='Get predictions for systematics samples')
+    parser.add_argument('--skip_data', action='store_true', help='Skip real-data prediction')
     args = parser.parse_args()
 
     model_folder = args.model_folder
@@ -163,18 +164,21 @@ if __name__ == "__main__":
                 print(f"Saving prediction for {sample} in {era} era \n")
                 np.save(f"{samples_path}/individual_samples/{era}/{sample}/y.npy", pred)
 
-        data_samples = training_config["samples_info"]["data"].keys()
-        for data_sample in data_samples:
-            inputs_path = f"{samples_path}/individual_samples_data/{data_sample}"
-            device = torch.device('cuda:'+training_config["cuda_device"] if torch.cuda.is_available() else 'cpu')
-            X = torch.tensor(np.load(f'{inputs_path}/X.npy'), dtype=torch.float32).to(device)
+        if args.skip_data:
+            print("Skipping real-data prediction")
+        else:
+            data_samples = training_config["samples_info"]["data"].keys()
+            for data_sample in data_samples:
+                inputs_path = f"{samples_path}/individual_samples_data/{data_sample}"
+                device = torch.device('cuda:'+training_config["cuda_device"] if torch.cuda.is_available() else 'cpu')
+                X = torch.tensor(np.load(f'{inputs_path}/X.npy'), dtype=torch.float32).to(device)
 
-            print(f"Getting prediction for {data_sample}")
-            pred = get_prediction(model_dict_path, model_path, X, output_size=output_size)
-            print(np.sum(pred, axis=1))
-            # save the prediction
-            print(f"Saving prediction for {data_sample} \n")
-            np.save(f"{samples_path}/individual_samples_data/{data_sample}/y.npy", pred)
+                print(f"Getting prediction for {data_sample}")
+                pred = get_prediction(model_dict_path, model_path, X, output_size=output_size)
+                print(np.sum(pred, axis=1))
+                # save the prediction
+                print(f"Saving prediction for {data_sample} \n")
+                np.save(f"{samples_path}/individual_samples_data/{data_sample}/y.npy", pred)
 
     elif args.get_pred_sys:
         for era in eras:   

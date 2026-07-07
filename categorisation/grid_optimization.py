@@ -43,7 +43,7 @@ import pandas as pd
 # -- Pre-computed interpolation coefficients ------------------------------
 # Mass windows (GeV):
 #   left  sideband: [100.0, 120.0]  width_L  = 20.0, centroid_L  = 110.0
-#   signal region:   [122.5, 127.0]  width_SR = 4.5,  centroid_SR = 124.75
+#   signal region:   [120.0, 130.0]  width_SR = 10.0, centroid_SR = 125.0
 #   right sideband:  [130.0, 180.0]  width_R  = 50.0, centroid_R  = 155.0
 #
 # dens_SR = w_L * (sumW_L / width_L) + w_R * (sumW_R / width_R)
@@ -54,22 +54,22 @@ import pandas as pd
 
 # -- Mass window definitions ----------------------------------------------
 MASS_LEFT_SB = (100.0, 120.0)
-MASS_SR = (122.5, 127.0)
+MASS_SR = (120, 130)
 MASS_RIGHT_SB = (130.0, 180.0)
 
 _WIDTH_L = MASS_LEFT_SB[1] - MASS_LEFT_SB[0]  # 20.0
-_WIDTH_SR = MASS_SR[1] - MASS_SR[0]  # 4.5
+_WIDTH_SR = MASS_SR[1] - MASS_SR[0]  # 10.0
 _WIDTH_R = MASS_RIGHT_SB[1] - MASS_RIGHT_SB[0]
 _CENTROID_L = 0.5 * (MASS_LEFT_SB[0] + MASS_LEFT_SB[1])  # 110.0
-_CENTROID_SR = 0.5 * (MASS_SR[0] + MASS_SR[1])  # 124.75
+_CENTROID_SR = 0.5 * (MASS_SR[0] + MASS_SR[1])  # 125.0
 _CENTROID_R = 0.5 * (MASS_RIGHT_SB[0] + MASS_RIGHT_SB[1])  # 155.0
 _SPAN = _CENTROID_R - _CENTROID_L  # 45.0
 
-_W_L = (_CENTROID_R - _CENTROID_SR) / _SPAN  # ~0.6722
-_W_R = (_CENTROID_SR - _CENTROID_L) / _SPAN  # ~0.3278
+_W_L = (_CENTROID_R - _CENTROID_SR) / _SPAN  # 2/3
+_W_R = (_CENTROID_SR - _CENTROID_L) / _SPAN  # 1/3
 
-COEFF_L = (_W_L * _WIDTH_SR) / _WIDTH_L  # ~0.15125
-COEFF_R = (_W_R * _WIDTH_SR) / _WIDTH_R  # ~0.02950
+COEFF_L = (_W_L * _WIDTH_SR) / _WIDTH_L  # 1/3
+COEFF_R = (_W_R * _WIDTH_SR) / _WIDTH_R  # 1/15
 
 # -- Interpolation samples (smoothly-falling backgrounds) -----------------
 INTERP_SAMPLES = {"TTGG", "GGJets", "DDQCDGJets"}
@@ -183,6 +183,7 @@ class GridSearchCategorizer:
         self.mass_all = None
         self.dijet_mass_all = None
         self.weights_all = None
+        self.weights_unscaled_all = None
         self.labels_all = None
         self.samples_all = None
         self.weight_scale = 1.44
@@ -282,10 +283,33 @@ class GridSearchCategorizer:
         """Load scored events from a single merged parquet file."""
         if self.input_file is None:
             parquet_file = os.path.join(
-                self.base_path, "scored_samples", "merged", "merged_scored_events.parquet"
+                self.base_path,
+                "scored_samples",
+                "merged",
+                "merged_scored_events_boostedCat.parquet",
             )
         else:
             parquet_file = self.input_file
+
+            # mergerScript.py writes the _boostedCat file. Flag the common
+            # failure mode where an older pre-existing sibling is selected.
+            if os.path.basename(parquet_file) == "merged_scored_events.parquet":
+                boosted_file = os.path.join(
+                    os.path.dirname(parquet_file),
+                    "merged_scored_events_boostedCat.parquet",
+                )
+                if (
+                    os.path.exists(parquet_file)
+                    and os.path.exists(boosted_file)
+                    and os.path.getmtime(boosted_file) > os.path.getmtime(parquet_file)
+                ):
+                    print(
+                        "WARNING: The selected merged_scored_events.parquet is older "
+                        "than mergerScript.py's output:\n"
+                        f"  selected: {parquet_file}\n"
+                        f"  newer:    {boosted_file}\n"
+                        "Use the newer _boostedCat file to match the per-era inputs."
+                    )
 
         if not os.path.exists(parquet_file):
             raise FileNotFoundError(f"Merged parquet file not found: {parquet_file}")
@@ -319,6 +343,8 @@ class GridSearchCategorizer:
         N = len(table)
         print(f"[load_samples_merged] Loaded {N} events.")
 
+        weights_unscaled = table.column("weight_tot").to_numpy()
+
         # apply scale to GGJets and DDQCDGJets with nonRes_score < 0.05: 1.44
         def scale_weight(events, cut_mask, scale_factor = 1, scale_samples = []):
             """Scale weights for a specific sample."""
@@ -343,6 +369,7 @@ class GridSearchCategorizer:
 
         if self.apply_preselection:
             data, scores = self.preselection(data, scores)
+            weights_unscaled = weights_unscaled[data.index.to_numpy()]
 
             # TTG / TTGG-like samples filter
             if "lead_mvaID" in pq_cols and "sublead_mvaID" in pq_cols:
@@ -352,6 +379,7 @@ class GridSearchCategorizer:
                     & (data["sublead_genPartFlav"] == 1)
                 )
                 data = data[~sel]
+                weights_unscaled = weights_unscaled[~sel.to_numpy()]
                 scores = scores[~sel.to_numpy()]
 
         if len(scores) == 0:
@@ -384,6 +412,7 @@ class GridSearchCategorizer:
         self.mass_all = df["diphoton_mass"].to_numpy()
         self.dijet_mass_all = df["dijet_mass"].to_numpy()
         self.weights_all = df["weights"].to_numpy()
+        self.weights_unscaled_all = weights_unscaled
         self.labels_all = df["labels"].to_numpy()
         self.samples_all = df["sample"].to_numpy()
 
@@ -506,6 +535,12 @@ class GridSearchCategorizer:
 
         print(f"[Phase 1] Building 3D histograms ({n_bins}^3 = {n_bins**3:,} cells) ...")
         print(f"  Axes: nonRes_inv in {bin_range[0]}, Res_inv in {bin_range[1]}, ggHH in {bin_range[2]}")
+        data_sideband_mask = is_data & in_sideband
+        bkg_sideband_mask = is_bkg & ~is_data & in_sideband
+        print("  Sideband summary after selection:")
+        print(f"    Data sideband events: {data_sideband_mask.sum():,}")
+        print(f"    Background sideband events: {bkg_sideband_mask.sum():,}")
+        print(f"    Background sideband sumW: {weights[bkg_sideband_mask].sum():.6g}")
         t0 = time.time()
 
         # -- H_sig_SR --
@@ -1009,7 +1044,12 @@ class GridSearchCategorizer:
         best_cut_params_list = []
         best_sig_values = []
         sig_peak_list = []
+        gghh_sig_peak_list = []
         bkg_side_list = []
+        bkg_side_unscaled_list = []
+        data_side_event_list = []
+        bkg_side_event_list = []
+        data_side_weight_list = []
 
         for cat in range(1, self.n_categories + 1):
             print(f"\n{'='*60}")
@@ -1153,26 +1193,52 @@ class GridSearchCategorizer:
                 ml = self.labels_all[mask_local]
                 mm = self.mass_all[mask_local]
                 mw = self.weights_all[mask_local]
+                mw_unscaled = self.weights_unscaled_all[mask_local]
                 ms = self.samples_all[mask_local]
                 in_peak = (mm > MASS_SR[0]) & (mm < MASS_SR[1])
+                # Match the sideband convention used to build the optimization
+                # histograms and by make_yield_table_5cats_autodetect.py.
+                in_left_sideband = (
+                    (mm >= MASS_LEFT_SB[0]) & (mm < MASS_LEFT_SB[1])
+                )
+                in_right_sideband = (
+                    (mm >= MASS_RIGHT_SB[0]) & (mm < MASS_RIGHT_SB[1])
+                )
+                sideband_mask = in_left_sideband | in_right_sideband
                 sig_peak = mw[in_peak & (ml == 1)].sum()
-                bkg_side = mw[
-                    ((mm < MASS_LEFT_SB[1]) | (mm > MASS_RIGHT_SB[0]))
-                    & (ml == 0) & (ms != "Data")
-                ].sum()
-                data_side = mw[
-                    ((mm < MASS_LEFT_SB[1]) | (mm > MASS_RIGHT_SB[0]))
-                    & (ml == 0) & (ms == "Data")
-                ].sum()
+                is_gghh_sample = np.array([
+                    ("GluGluToHH" in s) or ("GluGlutoHH" in s)
+                    for s in ms
+                ])
+                gghh_sig_peak = mw[in_peak & is_gghh_sample].sum()
+                bkg_side_mask = sideband_mask & (ml == 0) & (ms != "Data")
+                data_side_mask = sideband_mask & (ml == 0) & (ms == "Data")
+                bkg_side = mw[bkg_side_mask].sum()
+                bkg_side_unscaled = mw_unscaled[bkg_side_mask].sum()
+                data_side = mw[data_side_mask].sum()
+                bkg_side_events = bkg_side_mask.sum()
+                data_side_events = data_side_mask.sum()
             else:
                 sig_peak = 0.0
+                gghh_sig_peak = 0.0
                 bkg_side = 0.0
+                bkg_side_unscaled = 0.0
                 data_side = 0.0
+                bkg_side_events = 0
+                data_side_events = 0
 
             sig_peak_list.append(sig_peak)
+            gghh_sig_peak_list.append(gghh_sig_peak)
             bkg_side_list.append(bkg_side)
+            bkg_side_unscaled_list.append(bkg_side_unscaled)
+            data_side_event_list.append(data_side_events)
+            bkg_side_event_list.append(bkg_side_events)
+            data_side_weight_list.append(data_side)
             print(f"  Signal in SR: {sig_peak:.3g}  Bkg in SB: {bkg_side:.3g}  Data in SB: {data_side:.3g} "
                   f"Removed: {mask_local.sum():,}")
+            print(f"  Optimized-threshold sideband events: Data={data_side_events:,}  "
+                  f"Background={bkg_side_events:,}  Background sumW unscaled={bkg_side_unscaled:.6g}  "
+                  f"Background sumW scaled={bkg_side:.6g}")
             
             # if this is the last category, we don't need to remove events and rebuild
             if cat == self.n_categories:
@@ -1189,6 +1255,7 @@ class GridSearchCategorizer:
             self.mass_all = self.mass_all[keep]
             self.dijet_mass_all = self.dijet_mass_all[keep]
             self.weights_all = self.weights_all[keep]
+            self.weights_unscaled_all = self.weights_unscaled_all[keep]
             self.labels_all = self.labels_all[keep]
             self.samples_all = self.samples_all[keep]
 
@@ -1211,6 +1278,20 @@ class GridSearchCategorizer:
         print(f"Quadrature sum:  {z_sum_quad:.4f}")
         print(f"Signal in SR:    {sig_peak_list}")
         print(f"Bkg in SB:       {bkg_side_list}")
+        print("Optimized-threshold sideband summary per category:")
+        print("  Category  ggHH SR yield  Data events  Bkg events  Data weight  Bkg sumW unscaled  Bkg sumW scaled")
+        for i, (gghh_sig, data_evt, bkg_evt, data_w, bkg_w_unscaled, bkg_w) in enumerate(
+            zip(gghh_sig_peak_list, data_side_event_list, bkg_side_event_list,
+                data_side_weight_list, bkg_side_unscaled_list, bkg_side_list),
+            start=1,
+        ):
+            print(f"  cat{i:<5} {gghh_sig:>13.6g} {data_evt:>11,} {bkg_evt:>11,} "
+                  f"{data_w:>12.6g} {bkg_w_unscaled:>17.6g} {bkg_w:>16.6g}")
+        print("  Total    "
+              f"{sum(gghh_sig_peak_list):>13.6g} "
+              f"{sum(data_side_event_list):>11,} {sum(bkg_side_event_list):>11,} "
+              f"{sum(data_side_weight_list):>12.6g} {sum(bkg_side_unscaled_list):>17.6g} "
+              f"{sum(bkg_side_list):>16.6g}")
 
         self._write_output_files(
             best_cut_params_list, best_sig_values,
@@ -1519,6 +1600,7 @@ class GridSearchCategorizer:
                 self.mass_all = self.mass_all[remaining]
                 self.dijet_mass_all = self.dijet_mass_all[remaining]
                 self.weights_all = self.weights_all[remaining]
+                self.weights_unscaled_all = self.weights_unscaled_all[remaining]
                 self.labels_all = self.labels_all[remaining]
                 self.samples_all = self.samples_all[remaining]
 

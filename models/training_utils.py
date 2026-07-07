@@ -12,6 +12,7 @@ from mlp import MLP
 import torch.nn.functional as F
 import yaml
 from torch.cuda.amp import autocast, GradScaler
+from sklearn.model_selection import train_test_split
 
 
 # Define custom dataset
@@ -30,8 +31,7 @@ class CustomDataset(Dataset):
             return self.X[idx], self.y[idx], self.sample_weights[idx], self.no_aboslute_weights[idx]
         else:
             return self.X[idx], self.y[idx], self.sample_weights[idx]
-
-
+            
 # Training and evaluation functions
 def train_one_epoch(model, optimizer, data_loader, loss_fn, device, scaler, scheduler=None):
     model.train()
@@ -205,6 +205,26 @@ if __name__ == "__main__":
 
     class_weights_for_train_no_aboslute = np.load(f'{input_path}/true_class_weights.npy')
     class_weights_for_val = np.load(f'{input_path}/class_weights_for_val.npy')
+    
+    # -----------------------------------------
+    # Stratified 50% sampling on training data
+    # -----------------------------------------
+    train_fraction = training_config["train_fraction"]
+
+    if train_fraction < 1.0:
+        print(f"[INFO]: Training with partial data: {train_fraction}")
+        y_train_labels_for_stratify = np.argmax(y_train, axis=1)
+        train_indices, _ = train_test_split(
+          np.arange(len(X_train)),
+          train_size=training_config["train_fraction"],
+          random_state=seed,
+          stratify=y_train_labels_for_stratify
+        )
+
+        X_train = X_train[train_indices]
+        y_train = y_train[train_indices]
+        class_weights_for_training = class_weights_for_training[train_indices]
+        class_weights_for_train_no_aboslute = class_weights_for_train_no_aboslute[train_indices]
 
     # Convert targets to class indices (if one-hot encoded)
     y_train = np.argmax(y_train, axis=1)
