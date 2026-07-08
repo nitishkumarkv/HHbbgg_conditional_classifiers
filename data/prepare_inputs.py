@@ -62,8 +62,19 @@ class PrepareInputs:
 
         vars_VBFHH_MVA = ["nonResReg_vbfpair_pholead_PtOverM", "nonResReg_vbfpair_phosublead_PtOverM", "lead_mvaID", "sublead_mvaID", "nonResReg_vbfpair_FirstJet_PtOverM", "nonResReg_vbfpair_SecondJet_PtOverM", "nonResReg_vbfpair_lead_bjet_btagPNetB", "nonResReg_vbfpair_sublead_bjet_btagPNetB", "nonResReg_vbfpair_DeltaR_jg_min", "nonResReg_vbfpair_CosThetaStar_CS", "nonResReg_vbfpair_CosThetaStar_gg", "nonResReg_vbfpair_CosThetaStar_jj", "nonResReg_vbfpair_VBF_first_jet_btagPNetQvG", "nonResReg_vbfpair_VBF_second_jet_btagPNetQvG","nonResReg_vbfpair_VBF_jet_eta_prod", "nonResReg_vbfpair_VBF_jet_eta_diff", "nonResReg_vbfpair_VBF_DeltaR_jb_min", "nonResReg_vbfpair_VBF_DeltaR_jg_min", "nonResReg_vbfpair_VBF_Cgg", "nonResReg_vbfpair_VBF_Cbb", "nonResReg_vbfpair_VBF_first_jet_PtOverM", "nonResReg_vbfpair_VBF_second_jet_PtOverM", "nonResReg_vbfpair_VBF_dijet_mass", "nonResReg_vbfpair_VBF_dijet_vbfpair_Score_jj", "nonResReg_vbfpair_HHbbggCandidate_pt"]
         vars_VBFHH_MVA += ["nonResReg_vbfpair_dijet_mass"]
+        # raw vars needed by VBFMVA inference (loaded only during prediction via extra_vars_out)
+        vars_VBFHH_MVA += [
+            "nonResReg_vbfpair_VBF_first_jet_pt", "nonResReg_vbfpair_VBF_first_jet_eta",
+            "nonResReg_vbfpair_VBF_first_jet_phi", "nonResReg_vbfpair_VBF_first_jet_mass",
+            "nonResReg_vbfpair_VBF_second_jet_pt", "nonResReg_vbfpair_VBF_second_jet_eta",
+            "nonResReg_vbfpair_VBF_second_jet_phi", "nonResReg_vbfpair_VBF_second_jet_mass",
+            "nonResReg_vbfpair_HHbbggCandidate_phi", "phi",
+        ]
 
         self.extra_vars_out = self.extra_vars_out + vars_VBFHH_MVA
+
+        self.extra_vars_syst_2024 = ["weight_ElectronVetoSFDown", "weight_ElectronVetoSFUp", "weight_LoosePhoIDSFDown", "weight_LoosePhoIDSFUp", "weight_PileupDown", "weight_PileupUp", "weight_PreselSFDown", "weight_PreselSFUp", "weight_TriggerSFDown", "weight_TriggerSFUp", "weight_btagSFbc_2024Down", "weight_btagSFbc_2024Up", "weight_btagSFbc_correlatedDown", "weight_btagSFbc_correlatedUp", "weight_btagSFlight_2024Down", "weight_btagSFlight_2024Up", "weight_btagSFlight_correlatedDown", "weight_btagSFlight_correlatedUp", "weight_central", "weight_nominal"]
+        self.extra_vars_syst_v3 = ["weight_bTagSF_sys_hfUp", "weight_ElectronVetoSFDown", "weight_bTagSF_sys_hfstats1Down", "weight_bTagSF_sys_lfUp", "weight_TriggerSFUp", "weight_bTagSF_sys_lfstats1Down", "weight_bTagSF_sys_cferr2Down", "weight_bTagSF_sys_lfstats1Up", "weight_bTagSF_sys_lfstats2Down", "weight_TriggerSFDown", "weight_bTagSF_sys_hfstats2Up", "weight_ElectronVetoSFUp", "weight_PreselSFDown", "weight_PileupUp", "weight_bTagSF_sys_hfstats1Up", "weight_bTagSF_sys_jesDown", "weight_bTagSF_sys_lfDown", "weight_bTagSF_sys_cferr1Up", "weight_PileupDown", "weight_bTagSF_sys_lfstats2Up", "weight_bTagSF_sys_hfstats2Down", "weight_bTagSF_sys_hfDown", "weight_bTagSF_sys_cferr2Up", "weight_PreselSFUp", "weight_bTagSF_sys_cferr1Down", "weight_bTagSF_sys_jesUp"]
 
         # prepare process numbers for proccesses in each class
         num_process_each_class = {
@@ -81,6 +92,16 @@ class PrepareInputs:
         self.process_numbers = process_numbers
 
         self.class_idx_to_name = {i: class_ for i, class_ in enumerate(self.classes)}
+
+        eps = self.training_info.get("event_parity_split") if self.training_info is not None else None
+        if eps:
+            self.train_parity = eps["train_on"]
+            self.apply_parity = "even" if self.train_parity == "odd" else "odd"
+            self.fallback_eras = eps.get("fallback_eras", [])
+        else:
+            self.train_parity = None
+            self.apply_parity = None
+            self.fallback_eras = []
 
         # info to save in parquet
         self.save_all_columns_sim_nominal = training_info["save_all_columns_sim_nominal"]
@@ -129,7 +150,30 @@ class PrepareInputs:
 
     def _reset_input_file_counter(self) -> None:
         self._files_processed = 0
-        
+
+    def _parity_mask(self, events, parity, era):
+        ev = ak.to_numpy(events["event"])
+        if era in self.fallback_eras:
+            is_even = ev % 2 == 0
+            is_odd  = ev % 2 == 1
+            has_even = is_even.any()
+            has_odd  = is_odd.any()
+            if has_even and has_odd:
+                return is_even if parity == "even" else is_odd
+            elif has_even:
+                return (ev % 4 == 0) if parity == "even" else (ev % 4 == 2)
+            else:
+                return (ev % 4 == 1) if parity == "even" else (ev % 4 == 3)
+        return (ev % 2 == 0) if parity == "even" else (ev % 2 == 1)
+
+    def _log_parity_counts(self, events, era, sample):
+        ev = ak.to_numpy(events["event"])
+        n_even = int((ev % 2 == 0).sum())
+        n_odd  = int((ev % 2 == 1).sum())
+        print(f"INFO [parity] {era}/{sample}: total={len(ev)}  even={n_even}  odd={n_odd}")
+        if era in self.fallback_eras:
+            c = [int((ev % 4 == r).sum()) for r in range(4)]
+            print(f"INFO [parity] {era}/{sample}: mod4: 0={c[0]} 1={c[1]} 2={c[2]} 3={c[3]}")
 
     def load_vars(self, path):
         with open(path, 'r') as f:
@@ -156,14 +200,14 @@ class PrepareInputs:
         # events["diphoton_PtOverM_ggjj"] = events.pt / events.nonResReg_HHbbggCandidate_mass
         # events["nonResReg_dijet_PtOverM_ggjj"] = events.nonResReg_dijet_pt / events.nonResReg_HHbbggCandidate_mass
 
-        # events["diphoton_PtOverM_X"] = events.pt / events.nonResReg_vbfpair_M_X
-        # events["nonResReg_dijet_PtOverM_X"] = events.nonResReg_dijet_pt / events.nonResReg_vbfpair_M_X
+        events["diphoton_PtOverM_X"] = events.pt / events.nonResReg_vbfpair_M_X
+        events["nonResReg_vbfpair_dijet_PtOverM_X"] = events.nonResReg_vbfpair_dijet_pt / events.nonResReg_vbfpair_M_X
 
-        events["nonResReg_lead_bjet_over_M_regressed"] = events.nonResReg_vbfpair_lead_bjet_pt / events.nonResReg_vbfpair_dijet_mass
+        # events["nonResReg_lead_bjet_over_M_regressed"] = events.nonResReg_vbfpair_lead_bjet_pt / events.nonResReg_vbfpair_dijet_mass
         events["nonResReg_sublead_bjet_over_M_regressed"] = events.nonResReg_vbfpair_sublead_bjet_pt / events.nonResReg_vbfpair_dijet_mass
 
         # add deltaR between lead and sublead photon
-        # events["deltaR_gg"] = self.deltaR(events.lead_eta, events.lead_phi, events.sublead_eta, events.sublead_phi)
+        events["deltaR_gg"] = self.deltaR(events.lead_eta, events.lead_phi, events.sublead_eta, events.sublead_phi)
 
         btagVariable = "btag"
         # Use PNetB for NanoAODv12/v13 
@@ -289,6 +333,39 @@ class PrepareInputs:
         elif era == "2025":
             events["year"] = 6
 
+        # compute VBFMVA derived vars when raw inputs are available (prediction only)
+        if "nonResReg_vbfpair_VBF_first_jet_pt" in ak.fields(events):
+            import vector as _vector
+            jet1 = ak.zip({
+                "pt": events["nonResReg_vbfpair_VBF_first_jet_pt"],
+                "eta": events["nonResReg_vbfpair_VBF_first_jet_eta"],
+                "phi": events["nonResReg_vbfpair_VBF_first_jet_phi"],
+                "mass": events["nonResReg_vbfpair_VBF_first_jet_mass"],
+            }, with_name="Momentum4D")
+            jet2 = ak.zip({
+                "pt": events["nonResReg_vbfpair_VBF_second_jet_pt"],
+                "eta": events["nonResReg_vbfpair_VBF_second_jet_eta"],
+                "phi": events["nonResReg_vbfpair_VBF_second_jet_phi"],
+                "mass": events["nonResReg_vbfpair_VBF_second_jet_mass"],
+            }, with_name="Momentum4D")
+            dijet = ak.with_name(jet1 + jet2, "Momentum4D")
+            HH = ak.zip({
+                "pt": events["nonResReg_vbfpair_HHbbggCandidate_pt"],
+                "eta": events["nonResReg_vbfpair_HHbbggCandidate_eta"],
+                "phi": events["nonResReg_vbfpair_HHbbggCandidate_phi"],
+                "mass": events["nonResReg_vbfpair_HHbbggCandidate_mass"],
+            }, with_name="Momentum4D")
+            Hgg = ak.zip({
+                "pt": events["pt"], "eta": events["eta"],
+                "phi": events["phi"], "mass": events["mass"],
+            }, with_name="Momentum4D")
+            events["nonResReg_vbfpair_DeltaPhi_jj_abs"] = abs(_vector.Spatial.deltaphi(jet1, jet2))
+            events["nonResReg_vbfpair_DeltaPhi_HHjj_abs"] = abs(_vector.Spatial.deltaphi(dijet, HH))
+            events["nonResReg_vbfpair_pt_balance"] = (
+                ak.with_name(HH + dijet, "Momentum4D").pt
+                / (jet1.pt + jet2.pt + Hgg.pt + events["nonResReg_vbfpair_dijet_pt"])
+            )
+
         return events
 
     def _apply_mhh_filter(self, events):
@@ -353,7 +430,7 @@ class PrepareInputs:
             # For singleH, XS(process) * BR(HtoGG)
             # Using mH = 125.4 unless specified otherwise
             "ttHtoGG_M_125": 0.5033e3 * 0.00227,
-            "BBHto2G_M_125": 0.5223e3 * 0.00227,
+            "BBHToGG_M_125": 0.5223e3 * 0.00227,
             "GluGluHToGG_M_125": 48.30e3 * 0.00227,
             "VBFHToGG_M_125": 3.770e3 * 0.00227,
             "VHtoGG_M_125": 2.2347e3 * 0.00227, # XS is sum of WH and ZH
@@ -393,7 +470,7 @@ class PrepareInputs:
             # For singleH, XS(process) * BR(HtoGG)
             # Using mH = 125.38 unless specified otherwise
             "ttHtoGG_M_125": 0.5638e3 * 0.00227,
-            "BBHto2G_M_125": 0.5251e3 * 0.00227, # mH = 125.09
+            "BBHToGG_M_125": 0.5251e3 * 0.00227, # mH = 125.09
             "GluGluHToGG_M_125": 51.96e3 * 0.00227,
             "VBFHToGG_M_125": 4.067e3 * 0.00227,
             "VHtoGG_M_125": 2.3781e3 * 0.00227, # XS is sum of WH and ZH
@@ -785,6 +862,8 @@ class PrepareInputs:
         for era in self.training_info["samples_info"]["eras"]:
 
             vars_to_load = vars_for_training + self.extra_vars_train
+            if self.train_parity is not None and "event" not in vars_to_load:
+                vars_to_load = vars_to_load + ["event"]
 
             # remove the UParTAK4B if NanoAODv12/v13
             if any(x in era for x in ["preEE", "postEE", "preBPix", "postBPix"]):
@@ -822,6 +901,12 @@ class PrepareInputs:
 
                 print(f"INFO: Number of MC events in {samples} after selection for {era}: {len(events)}")
                 print(f"INFO: Sum of weight_tot in {samples} after selection for {era}: {sum(events.weight_tot)}")
+
+                if self.train_parity is not None:
+                    self._log_parity_counts(events, era, samples)
+                    mask = self._parity_mask(events, self.train_parity, era)
+                    events = events[mask]
+                    print(f"INFO [parity] {era}/{samples}: kept {len(events)} events for train_parity={self.train_parity}")
 
                 # add the bools for each class
                 for cls in self.classes:  # first intialize everything to zero
@@ -1033,17 +1118,24 @@ class PrepareInputs:
 
         for era in training_info["samples_info"]["eras"]:
 
-            vars_to_load = vars_for_training + self.extra_vars_train + self.extra_vars_out
-
-            # remove the UParTAK4B if NanoAODv12/v13
-            if any(x in era for x in ["preEE", "postEE", "preBPix", "postBPix"]):
-                vars_to_load.remove("nonResReg_vbfpair_lead_bjet_btagUParTAK4B")
-                vars_to_load.remove("nonResReg_vbfpair_sublead_bjet_btagUParTAK4B")
-    
             for samples in training_info["samples_info"][era].keys():
                 if stop_processing or not self._can_process_more_input_files():
                     stop_processing = True
                     break
+                
+                vars_to_load = vars_for_training + self.extra_vars_train + self.extra_vars_out
+
+                # remove the UParTAK4B if NanoAODv12/v13
+                if any(x in era for x in ["preEE", "postEE", "preBPix", "postBPix"]):
+                    vars_to_load.remove("nonResReg_vbfpair_lead_bjet_btagUParTAK4B")
+                    vars_to_load.remove("nonResReg_vbfpair_sublead_bjet_btagUParTAK4B")
+                    if samples not in ["GGJets", "DDQCDGJET", "TTGG"]:
+                        vars_to_load = vars_to_load + self.extra_vars_syst_v3
+
+                if era == "2024" and samples not in ["GGJets", "DDQCDGJET", "TTGG"]:
+                    vars_to_load = vars_to_load + self.extra_vars_syst_2024
+                
+                print(f"DEBUG: vars_to_load = {vars_to_load}")
                 
                 parquet_path = training_info["samples_info"][era][samples]
                 if self.save_all_columns_sim_nominal:
@@ -1076,6 +1168,12 @@ class PrepareInputs:
                     if len(events) == 0:
                         print(f"WARNING: No events left in sample {samples} for era {era} after mHH filter {self.mhh_range}. Skipping.")
                         continue
+
+                if self.apply_parity is not None:
+                    self._log_parity_counts(events, era, samples)
+                    mask = self._parity_mask(events, self.apply_parity, era)
+                    events = events[mask]
+                    print(f"INFO [parity] {era}/{samples}: kept {len(events)} events for apply_parity={self.apply_parity}")
 
                 # also save the event
                 full_path_to_save = f"{out_path}/{era}/{samples}/"
@@ -1163,6 +1261,7 @@ class PrepareInputs:
         reported_x_features = False
 
         # vars_for_log = vars_config["vars_for_log_transform"]
+        vars_gen = ["gen_mHH_hardProc", "gen_pT_HH_hardProc", "gen_CosThetaStar_HH_hardProc"]
 
         samples_path = training_info["samples_info"]["samples_path"]
 
@@ -1190,19 +1289,29 @@ class PrepareInputs:
                     if samples in ["GGJets", "DDQCDGJET", "TTG_10_100", "TTG_100_200", "TTG_200", "TT", "TTGG"]:
                         continue
                 
+                    if "nominal" not in training_info["samples_info"][era][samples]:
+                        print(f"WARNING: No nominal sample found for {samples} for {era}. Skipping systematic variations for this sample.")
+                        continue
+
                     parquet_path = (training_info["samples_info"][era][samples]).replace("nominal", sys)
-                    print(f"DEBUG: Checking existence of {samples} for {era} for {sys} at path: {samples_path}/{parquet_path}")
                     if not os.path.exists(f"{samples_path}/{parquet_path}"):
                         print(f"WARNING: {samples} for {era} for {sys} does not exist. Skipping.: {samples_path}/{parquet_path}")
                         continue
                     if self.save_all_columns_sim_systematics:
                         events = ak.from_parquet(f"{samples_path}/{parquet_path}")
+                    elif ("GluGlutoHHto2B2G_kl" in samples):
+                        vars_to_load = vars_to_load + vars_gen
+                        events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
+                    elif ("EFTReweighted" in samples):
+                        vars_to_load = vars_to_load + vars_EFTReweighted + vars_gen
+                        events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
                     else:
                         events = ak.from_parquet(f"{samples_path}/{parquet_path}", columns=vars_to_load)
                     events = self._apply_input_caps(events)
                     stop_processing = self._record_input_file()
 
                     print(f"INFO: Number of events in {samples} for {era} for {sys}: {len(events)}")
+                    print(f"DEBUG: path to load: {samples_path}/{parquet_path}")
 
                     # add preselection
                     events = self.preselection_for_pred(events)
@@ -1219,6 +1328,12 @@ class PrepareInputs:
                         if len(events) == 0:
                             print(f"WARNING: No events left in sample {samples} for era {era} after mHH filter {self.mhh_range}. Skipping.")
                             continue
+
+                    if self.apply_parity is not None:
+                        self._log_parity_counts(events, era, samples)
+                        mask = self._parity_mask(events, self.apply_parity, era)
+                        events = events[mask]
+                        print(f"INFO [parity] {era}/{samples}/{sys}: kept {len(events)} events for apply_parity={self.apply_parity}")
 
                     # also save the event
                     full_path_to_save = f"{out_path}/{era}/{samples}/{sys}/"
@@ -1417,7 +1532,14 @@ class PrepareInputs:
                     continue
 
             # add more variables
-            events = self.add_var(events, sample_to_era.get(data, "2024"))
+            data_era = sample_to_era.get(data, "2024")
+            events = self.add_var(events, data_era)
+
+            if self.apply_parity is not None:
+                self._log_parity_counts(events, data_era, data)
+                mask = self._parity_mask(events, self.apply_parity, data_era)
+                events = events[mask]
+                print(f"INFO [parity] {data_era}/{data}: kept {len(events)} events for apply_parity={self.apply_parity}")
 
             # also save the event
             full_path_to_save = f"{out_path}/{data}/"

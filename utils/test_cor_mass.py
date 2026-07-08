@@ -108,7 +108,7 @@ if __name__ == "__main__":
     with open(f"{training_config_path}", 'r') as f:
         training_config = yaml.safe_load(f)
 
-    samples_in_config = training_config["samples_info"]["preEE"].keys()
+    samples_in_config = training_config["samples_info"]["2016preVFP"].keys()
     eras = training_config["samples_info"]["eras"]
     events_path = training_config["samples_info"]["samples_path"]
 
