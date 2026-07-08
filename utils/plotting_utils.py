@@ -317,22 +317,12 @@ def plot_stacked_histogram(
   make_score_process_plots=True,
   make_mgg_sideband_preselection_plots=True,
   make_sr_plots=True,
-  mc_percentage=100.0,
 ):
   """
   Load data first, then loop over variables to plot stacked histograms with MC and Data.
 
     boosted -> VBF -> ggHH
   """
-
-  if not 0.0 < mc_percentage <= 100.0:
-    raise ValueError("mc_percentage must be greater than 0 and at most 100")
-
-  mc_weight_scale = 100.0 / mc_percentage
-  print(
-    f"[MC normalization] Using {mc_percentage:g}% of MC events; "
-    f"scaling MC weights by {mc_weight_scale:g}."
-  )
 
   if only_MC:
     out_path = os.path.join(out_path, "MC_Plots_preselection")
@@ -1213,9 +1203,6 @@ def plot_stacked_histogram(
       )
 
     sample_combined = add_preselection(sample_combined)
-    sample_combined["weight_tot"] = (
-      sample_combined["weight_tot"] * mc_weight_scale
-    )
 
     if sample == "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00":
       print(
@@ -1795,16 +1782,6 @@ if __name__ == "__main__":
   )
 
   parser.add_argument(
-    "--mc-percentage",
-    type=float,
-    default=100.0,
-    help=(
-      "Percentage of the full MC sample present in base-path (greater than 0 and at most 100). "
-      "MC weights are scaled by 100/percentage; data is unchanged."
-    ),
-  )
-
-  parser.add_argument(
     "--boosted-field",
     type=str,
     default="is_boosted",
@@ -1969,7 +1946,6 @@ if __name__ == "__main__":
     make_score_process_plots=args.plot_score_process,
     make_mgg_sideband_preselection_plots=args.plot_mgg_sideband_preselection,
     make_sr_plots=args.plot_sr,
-    mc_percentage=args.mc_percentage,
   )
 
   if args.plot_mc_only:
@@ -1996,7 +1972,6 @@ if __name__ == "__main__":
       make_score_process_plots=args.plot_score_process,
       make_mgg_sideband_preselection_plots=args.plot_mgg_sideband_preselection,
       make_sr_plots=args.plot_sr,
-      mc_percentage=args.mc_percentage,
     )
   else:
     print("[plot] Separate MC-only plots disabled; input files were loaded once.")

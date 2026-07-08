@@ -72,6 +72,22 @@ class PrepareInputs:
     else:
       self.var_prefix = "nonResReg"
 
+    self.mc_split_weight_scale = 1.0
+    if self.split_select is not None:
+      if not 0.0 < self.train_sample_fraction < 1.0:
+        raise ValueError("train_sample_fraction must be greater than 0 and less than 1")
+
+      split_fraction = (
+        self.train_sample_fraction
+        if self.split_select == "train"
+        else 1.0 - self.train_sample_fraction
+      )
+      self.mc_split_weight_scale = 1.0 / split_fraction
+      print(
+        f"INFO: MC weights for {self.split_select} split are scaled by "
+        f"{self.mc_split_weight_scale:g} to represent the full MC yield"
+      )
+
     self.fill_nan = -9
 
     self.extra_vars = [
@@ -543,8 +559,14 @@ class PrepareInputs:
     if sample_type == "DDQCDGJET":
       lumi = 1.0
 
-    events["rel_xsec_weight"] = events.weight * dict_xsec[sample_type] * lumi
-    events["weight_tot"] = events.weight * dict_xsec[sample_type] * lumi
+    full_weight = (
+      events.weight
+      * dict_xsec[sample_type]
+      * lumi
+      * self.mc_split_weight_scale
+    )
+    events["rel_xsec_weight"] = full_weight
+    events["weight_tot"] = full_weight
 
     return events
 
