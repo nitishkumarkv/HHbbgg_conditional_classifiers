@@ -16,31 +16,18 @@ Algorithm:
            (n_fine_bins+1)^3 approx 1M threshold combinations via fully vectorized
            numpy operations.
 
-Usage:
- # base can be /eos/cms/store/group/phys_higgs/nonresonant_HH/PrivateProd/Yuxiang/manos_bbgg_verify/correct_data/scored_samples/merged
- # input file can be ${base}/merged_scored_events_replaced_2024_2025.parquet
-  conda run -n XXX python3 grid_search_categorization.py   \
-  --input_file XXX_merged.parquet   \
-  --output_dir .   --base_path XXXX --optuna_folder grid_search_test_lowTh8  \
-  --signal_samples '[GluGluToHH_kl-1p00_kt-1p00_c2-0p00]' --vbf_thresholds 0.774   --apply_boosted_veto \
-  --n_categories 3   --n_coarse_bins 500  \
-  --n_fine_bins 100 --cat_sideband_max 15,100,150 --side_band_threshold_low 10
 """
 
 import argparse
 import json
 import os
-import sys
 import time
-from collections import defaultdict
 
-import awkward as ak
 import matplotlib.pyplot as plt
 import mplhep as hep
 import numpy as np
 import pandas as pd
 
-# -- Pre-computed interpolation coefficients ------------------------------
 # Mass windows (GeV):
 #   left  sideband: [100.0, 120.0]  width_L  = 20.0, centroid_L  = 110.0
 #   signal region:   [120.0, 130.0]  width_SR = 10.0, centroid_SR = 125.0
@@ -52,7 +39,6 @@ import pandas as pd
 # b_SR_interp = dens_SR * width_SR
 #             = coeff_L * sumW_L + coeff_R * sumW_R
 
-# -- Mass window definitions ----------------------------------------------
 MASS_LEFT_SB = (100.0, 120.0)
 MASS_SR = (120, 130)
 MASS_RIGHT_SB = (130.0, 180.0)
@@ -71,10 +57,8 @@ _W_R = (_CENTROID_SR - _CENTROID_L) / _SPAN  # 1/3
 COEFF_L = (_W_L * _WIDTH_SR) / _WIDTH_L  # 1/3
 COEFF_R = (_W_R * _WIDTH_SR) / _WIDTH_R  # 1/15
 
-# -- Interpolation samples (smoothly-falling backgrounds) -----------------
 INTERP_SAMPLES = {"TTGG", "GGJets", "DDQCDGJets"}
 
-# -- Score column names ---------------------------------------------------
 SCORE_COLS = [
     "is_nonRes_bkg_score",
     "is_Res_bkg_score",
@@ -82,10 +66,6 @@ SCORE_COLS = [
     "is_VBFHH_sig_score",
 ]
 
-
-# --------------------------------------------------------------------------
-#                          GRID SEARCH CATEGORIZER                         
-# --------------------------------------------------------------------------
 
 class GridSearchCategorizer:
     """Exhaustive grid-search categorization using cumulative histograms."""
@@ -118,14 +98,12 @@ class GridSearchCategorizer:
         n_fine_bins=100,
         require_sb_ratio=False,
     ):
-        # -- Paths and I/O --------------------------------------------
         self.base_path = base_path
         self.cat_folder = cat_folder or "grid_search_categorization"
         self.output_dir = output_dir or base_path
         self.input_file = input_file
         self.use_individual_samples = use_individual_samples
 
-        # -- Signal / background definitions --------------------------
         self.signal_class = signal_class
         self.signal_class_name = signal_class_name
         self.bkg_classes = bkg_classes if bkg_classes is not None else [0, 1]
@@ -134,7 +112,6 @@ class GridSearchCategorizer:
         else:
             self.bkg_class_names = [f"bkg_{i}" for i in self.bkg_classes]
 
-        # -- Categorization parameters --------------------------------
         self.n_categories = n_categories
         self.side_band_threshold_low = side_band_threshold_low
         self.side_band_threshold_high = side_band_threshold_high
@@ -144,12 +121,10 @@ class GridSearchCategorizer:
             self.cat_sideband_max = [25, 100, 500]  # defaults for cat1, cat2, cat3
         self.sig_type = sig_type
 
-        # -- Grid search parameters -----------------------------------
         self.n_coarse_bins = n_coarse_bins
         self.n_fine_bins = n_fine_bins
         self.require_sb_ratio = require_sb_ratio
 
-        # -- VBFHH parameters -----------------------------------------
         self.vbfhh_class = vbfhh_class
         self.vbfhh_samples = vbfhh_samples
         self.vbfhh_n_scan_points = vbfhh_n_scan_points
@@ -157,11 +132,9 @@ class GridSearchCategorizer:
         self.vbfhh_n_categories = vbfhh_n_categories
         self.vbf_thresholds = vbf_thresholds
 
-        # -- Pre-selection flags --------------------------------------
         self.apply_preselection = True
         self.apply_boosted_veto = False
 
-        # -- Parse sample lists ---------------------------------------
         self.signal_samples = self._parse_bracket_list(signal_samples, "signal_samples")
         self.bkg_samples = self._parse_bracket_list(
             bkg_samples, "bkg_samples",
@@ -177,7 +150,6 @@ class GridSearchCategorizer:
         else:
             self.vbfhh_samples = None
 
-        # -- Data arrays (filled by load_samples) ---------------------
         self.dijet_mass_key = "nonResReg_vbfpair_dijet_mass_DNNreg"
         self.scores_all = None
         self.mass_all = None
@@ -230,33 +202,10 @@ class GridSearchCategorizer:
         Makes one contiguous reversed copy then cumsums forward on
         contiguous memory (much faster than repeated np.flip calls).
         """
-        # One contiguous reversed copy, then forward cumsum on dense memory
         rev = np.ascontiguousarray(hist[::-1, ::-1, ::-1])
         for axis in range(hist.ndim):
             rev = np.cumsum(rev, axis=axis)
-        # Reverse view back - O(1), no copy
         return rev[::-1, ::-1, ::-1]
-
-    @staticmethod
-    def _query_region(cumsum, i0, i1, i2):
-        """Sum over region: dim0 >= i0, dim1 >= i1, dim2 >= i2.
-
-        With reverse cumsum, this is just a direct lookup.
-        All cuts are '>' after 1-bg_score transformation.
-        """
-        n0, n1, n2 = cumsum.shape
-        if i0 >= n0 or i1 >= n1 or i2 >= n2:
-            return 0.0
-        return float(cumsum[i0, i1, i2])
-
-    @staticmethod
-    def _zero_region_inplace(hist, i0, i1, i2):
-        """Zero out region dim0 >= i0, dim1 >= i1, dim2 >= i2 (in-place)."""
-        hist[i0:, i1:, i2:] = 0.0
-
-    # ----------------------------------------------------------------------
-    #  DATA LOADING  (reused from bayesian_categorization_withVBFHH.py)
-    # ----------------------------------------------------------------------
 
     def preselection(self, events, scores):
         """Apply pre-selection cuts."""
@@ -267,12 +216,9 @@ class GridSearchCategorizer:
         ggHH_bool = scores[:, self.signal_class] > 0
 
         mask = mass_bool & dijet_mass_bool & ggHH_bool
-        try:
-            lead_mvaID_bool = events.lead_mvaID > -0.7
-            sublead_mvaID_bool = events.sublead_mvaID > -0.7
-            mask = mask & lead_mvaID_bool & sublead_mvaID_bool
-        except Exception:
-            pass
+        event_fields = events.columns if hasattr(events, "columns") else events.fields
+        if {"lead_mvaID", "sublead_mvaID"}.issubset(event_fields):
+            mask &= (events.lead_mvaID > -0.7) & (events.sublead_mvaID > -0.7)
         if self.apply_boosted_veto:
             mask = mask & (events.is_boosted == False)  # noqa: E712
         events = events[mask]
@@ -428,10 +374,6 @@ class GridSearchCategorizer:
             f"{df.loc[(df['labels'] == 1) & in_peak, 'weights'].sum():.3g}"
         )
         return df
-
-    # ----------------------------------------------------------------------
-    #  BACKGROUND ESTIMATION  (reused from original)
-    # ----------------------------------------------------------------------
 
     def _sr_from_sidebands_linear(self, mass, weights):
         """Estimate SR background from sideband densities.
@@ -699,32 +641,6 @@ class GridSearchCategorizer:
         self.coarse_cumsums = C
         dt = time.time() - t0
         print(f"[Phase 1] Cumsums computed in {dt:.1f}s")
-
-    def _evaluate_single_threshold(self, i0, i1, i2):
-        """Evaluate Z for a single threshold combination.
-
-        All cuts are '>': nonRes_inv > edge[0][i0], Res_inv > edge[1][i1],
-        ggHH > edge[2][i2].
-
-        Returns (s, b, b_sideband, Z) or (0, 0, 0, 0) if invalid.
-        """
-        C = self.coarse_cumsums
-
-        s = self._query_region(C["sig_SR"], i0, i1, i2)
-        if s <= 0:
-            return 0.0, 0.0, 0.0, 0.0
-
-        b_interp_L = self._query_region(C["interp_LSB"], i0, i1, i2)
-        b_interp_R = self._query_region(C["interp_RSB"], i0, i1, i2)
-        b_interp = COEFF_L * b_interp_L + COEFF_R * b_interp_R
-
-        b_noninterp = self._query_region(C["noninterp_SR"], i0, i1, i2)
-        b_total = max(b_interp + b_noninterp, 1e-9)
-
-        b_side = self._query_region(C["bkg_sideband"], i0, i1, i2)
-
-        Z = self.asymptotic_significance(s, b_total)
-        return float(s), float(b_total), float(b_side), float(Z)
 
     def _phase1_coarse_evaluation(self):
         """Evaluate threshold combinations, skipping empty grid cells.
@@ -1239,7 +1155,7 @@ class GridSearchCategorizer:
             print(f"  Optimized-threshold sideband events: Data={data_side_events:,}  "
                   f"Background={bkg_side_events:,}  Background sumW unscaled={bkg_side_unscaled:.6g}  "
                   f"Background sumW scaled={bkg_side:.6g}")
-            
+
             # if this is the last category, we don't need to remove events and rebuild
             if cat == self.n_categories:
                 break
@@ -1298,7 +1214,7 @@ class GridSearchCategorizer:
             sig_peak_list, bkg_side_list, cat_path)
 
         return best_cut_params_list, best_sig_values
-    
+
     def _remove_fake_digits(self, value, place=12):
         # assume precision is less than 12 digits, so we can round to 12 digits to remove fake digits
         return round(value, place) if isinstance(value, float) else value
@@ -1328,7 +1244,7 @@ class GridSearchCategorizer:
                 for j in range(i - 1):
                     parts.append(f"not({base_cuts[j]})")
             cat_strings[f"cat{i}"] = " & ".join(parts)
-        
+
         for i, base in enumerate(base_cuts, start=1):
             if self.apply_boosted_veto:
                 cat_strings[f"cat{i}"] += " & (is_boosted == 0)"
@@ -1443,10 +1359,6 @@ class GridSearchCategorizer:
         plt.savefig(os.path.join(save_path, "category_summary_new.png"))
         plt.close(fig)
 
-    # ----------------------------------------------------------------------
-    #  VBFHH OPTIMIZATION  (1D scan - identical to original)
-    # ----------------------------------------------------------------------
-
     def optimize_vbfhh_sr(self, vbfhh_class, vbfhh_samples,
                            n_scan_points=1000, sideband_threshold=10.0):
         """Scan VBFHH score and return best threshold."""
@@ -1510,10 +1422,6 @@ class GridSearchCategorizer:
 
         return best_threshold, best_z, best_s, best_b
 
-    # ----------------------------------------------------------------------
-    #  MAIN ENTRY POINT
-    # ----------------------------------------------------------------------
-
     def run_categorisation(self):
         """Full categorization pipeline: VBFHH (optional) + grid-search SR."""
         if self.use_individual_samples:
@@ -1524,7 +1432,6 @@ class GridSearchCategorizer:
         else:
             _ = self.load_samples_merged()
 
-        # -- VBFHH SR optimization (optional) -------------------------
         if self.vbfhh_class is not None and self.vbfhh_samples is not None:
             sr_low, sr_high = MASS_SR
             all_vbfhh_sr_info = []
@@ -1615,28 +1522,20 @@ class GridSearchCategorizer:
                 json.dump(all_vbfhh_sr_info, f, indent=4)
             print(f"VBFHH SR info saved to {vbfhh_sr_json}")
 
-        # -- Grid search SR categorization ----------------------------
         if self.n_categories > 0:
-
             self._sequential_grid_optimization()
-
-# --------------------------------------------------------------------------
-#                                MAIN                                      
-# --------------------------------------------------------------------------
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Grid-search-based categorization for HHbbgg analysis."
     )
 
-    # -- Required ----------------------------------------------------
     parser.add_argument("--base_path", type=str, required=True,
                         help="Base path for input samples")
     parser.add_argument("--signal_samples", type=str, required=True,
                         help="Bracket-enclosed signal sample list, "
                              "e.g. '[GluGluToHH_kl-1p00_kt-1p00_c2-0p00]'")
 
-    # -- Categorization ----------------------------------------------
     parser.add_argument("--n_categories", type=int, default=5,
                         help="Number of categories to optimize")
     parser.add_argument("--side_band_threshold_low", type=float, default=10.0,
@@ -1647,7 +1546,6 @@ if __name__ == "__main__":
                         help="Comma-separated per-category sideband upper "
                              "limits (cat1, cat2, cat3, ...)")
 
-    # -- Grid search -------------------------------------------------
     parser.add_argument("--n_coarse_bins", type=int, default=100,
                         help="Bins per dimension for Phase 1 coarse grid")
     parser.add_argument("--n_fine_bins", type=int, default=100,
@@ -1659,7 +1557,6 @@ if __name__ == "__main__":
                              "< right_width / left_width (=%.2f)"
                              % (_WIDTH_R / _WIDTH_L))
 
-    # -- Output ------------------------------------------------------
     parser.add_argument("--output_dir", type=str, default=None,
                         help="Base directory for output files")
     parser.add_argument("--optuna_folder", type=str,
@@ -1668,7 +1565,6 @@ if __name__ == "__main__":
     parser.add_argument("--input_file", type=str, default=None,
                         help="Path to merged scored parquet file")
 
-    # -- Background classes ------------------------------------------
     parser.add_argument("--signal_class", type=int, default=2,
                         help="Signal class index in score array")
     parser.add_argument("--signal_class_name", type=str, default="ggHH",
@@ -1682,7 +1578,6 @@ if __name__ == "__main__":
                                 "TTGG,GGJets,DDQCDGJets]",
                         help="Bracket-enclosed background sample list")
 
-    # -- VBFHH -------------------------------------------------------
     parser.add_argument("--vbfhh_class", type=int, default=3,
                         help="VBFHH score index")
     parser.add_argument("--vbfhh_samples", type=str,
@@ -1697,7 +1592,6 @@ if __name__ == "__main__":
     parser.add_argument("--vbf_thresholds", type=float, default=None,
                         help="Fixed VBFHH threshold (skip scan if set)")
 
-    # -- Pre-selection -----------------------------------------------
     parser.add_argument("--apply_boosted_veto", action="store_true", default=False,
                         help="Exclude boosted events")
     parser.add_argument("--use_individual_samples", action="store_true",

@@ -246,7 +246,7 @@ def build_sr_masks_for_events(
 
   # -------------------------------------------------
   # 1) boosted category first
-                                                
+
   # -------------------------------------------------
   if include_boosted_cat:
     if boosted_field in events.fields:
@@ -262,7 +262,7 @@ def build_sr_masks_for_events(
 
   # -------------------------------------------------
   # 2) VBF categories next
-                                               
+
   # -------------------------------------------------
   if vbfhh_class_idx is not None and len(vbfhh_info_list) > 0:
     for i_cat, info in enumerate(vbfhh_info_list, start=1):
@@ -448,8 +448,8 @@ def plot_stacked_histogram(
       (events[f"{var_prefix}_dijet_mass_DNNreg"] > 80)
       & (events[f"{var_prefix}_dijet_mass_DNNreg"] < 190)
     )
-                                                    
-                                                          
+
+
 
     lead_mvaID_bool = events.lead_mvaID > -0.7
     sublead_mvaID_bool = events.sublead_mvaID > -0.7
@@ -666,16 +666,16 @@ def plot_stacked_histogram(
       for _, data_ in stack_dict.items():
         if len(data_) == 0 or variable not in data_.fields:
           continue
-                                                
-                                  
-                                                                    
-                                                                
+
+
+
+
 
         values = ak.to_numpy(data_[variable])
         values = values[np.isfinite(values)]
         values = values[values != -999]
-                 
-                                                                                                          
+
+
 
         if len(values) == 0:
           continue
@@ -727,9 +727,9 @@ def plot_stacked_histogram(
         bins=bin_edges,
         weights=weights,
       )
-                                
-                                    
-                                                                
+
+
+
 
       hist_err, _ = np.histogram(
         values,
@@ -769,13 +769,13 @@ def plot_stacked_histogram(
       data_err = np.sqrt(data_hist).astype(float)
       data_hist = data_hist.astype(float)
 
-                                        
-                            
-                                        
-                                                                                
 
-                                      
-                                     
+
+
+
+
+
+
     else:
       data_hist = None
       data_err = None
@@ -1405,9 +1405,6 @@ def plot_stacked_histogram(
     }
 
   if make_inclusive_plots:
-    # =========================
-    # Per-process score plotting
-    # =========================
     if make_score_process_plots:
       all_mc_process_dict = {}
       all_mc_process_dict.update(stack_mc_dict)
@@ -1424,9 +1421,6 @@ def plot_stacked_histogram(
     else:
       print("[score plot] Score_Plots_By_Process disabled by switch.")
 
-    # =========================
-    # Inclusive plotting
-    # =========================
     for variable in variables:
       if variable not in data_combined.fields:
         print(f"Variable {variable} not found in data fields. Skipping...")
@@ -1457,9 +1451,6 @@ def plot_stacked_histogram(
       )
 
     if make_mgg_sideband_preselection_plots and (not only_MC):
-      # =========================
-      # mgg sideband Data/MC preselection plotting
-      # =========================
       mgg_sideband_out_path = f"{out_path}_mggSideband"
       os.makedirs(mgg_sideband_out_path, exist_ok=True)
 
@@ -1553,10 +1544,7 @@ def plot_stacked_histogram(
     print("[SR] *_SR_Plots plotting disabled by switch.")
     return
 
-  # =========================
-  # Exclusive category plotting
-  # boosted -> VBF -> ggHH
-  # =========================
+  # Categories are exclusive in boosted, VBF, then ggHH order.
   best_cut_params = []
   vbfhh_info_list = []
 
@@ -1665,7 +1653,7 @@ def plot_stacked_histogram(
   os.makedirs(sr_out_path, exist_ok=True)
 
   # Plot all variables in each SR/category.
-                                                                                              
+
   sr_variables = variables
 
   for region_name in region_names:

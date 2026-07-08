@@ -43,7 +43,6 @@ class PrepareInputs:
     self.split_seed = 12345
     self.train_split_dir_name = "Train_split"
     self.final_split_dir_name = "Final_split"
-    self._split_index_cache = {}
 
     if self.training_info is not None:
       self.sample_to_class = self.training_info["sample_to_class"]
@@ -53,9 +52,7 @@ class PrepareInputs:
       self.class_weight_scale = self.training_info.get("class_weight_scale", None)
       self.var_prefix = self.training_info.get("var_prefix", "nonResReg")
 
-      # IMPORTANT:
-      # split_data now controls real data only.
-      # MC is always split into Train_split and Final_split.
+      # split_data applies only to real data; MC is always split.
       self.split_data = self.training_info.get("split_data", False)
       self.train_sample_fraction = self.training_info.get("train_sample_fraction", 0.5)
       self.split_seed = self.training_info.get("split_seed", 12345)
@@ -260,28 +257,6 @@ class PrepareInputs:
     random_values = hashed.astype(np.float64) / np.float64(np.iinfo(np.uint64).max)
 
     return random_values < self.train_sample_fraction
-
-  def _get_train_indices_for_file(self, file_path, n_rows):
-    cache_key = (
-      file_path,
-      n_rows,
-      self.train_sample_fraction,
-      self.split_seed,
-    )
-
-    if cache_key in self._split_index_cache:
-      return self._split_index_cache[cache_key]
-
-    rng = np.random.default_rng(self._stable_file_seed(file_path))
-
-    n_train = int(round(n_rows * self.train_sample_fraction))
-    n_train = max(0, min(n_train, n_rows))
-
-    train_indices = rng.choice(n_rows, size=n_train, replace=False)
-    train_indices = np.sort(train_indices)
-
-    self._split_index_cache[cache_key] = train_indices
-    return train_indices
 
   def _source_row_split_mask(
     self,
@@ -551,29 +526,30 @@ class PrepareInputs:
     era = self.normalize_era(era)
 
     dict_xsec = {
-      "GGJets": 86.96e3 if ("201" in era) else (88.75e3 * 1.59) if (era == "2024" or era == "2025") else 88.75e3,
-      "GJetPt20To40": 242.5e3,
-      "GJetPt40": 919.1e3,
-      "TTGG": 0.01696e3 if ("201" in era) else 0.02391e3,
-      "ttHtoGG_M_125": 0.0011e3 if ("201" in era) else (0.5700e3 * 0.00227),
-      "BBHto2G_M_125": 0.4385e3 * 0.00227,
-      "GluGluHToGG_M_125": 0.1103e3 if ("201" in era) else (52.23e3 * 0.00227),
-      "VBFHToGG_M_125": 0.00855e3 if ("201" in era) else (4.078e3 * 0.00227),
-      "VHtoGG_M_125": 0.00508e3 if ("201" in era) else (2.4009e3 * 0.00227),
-      "WpHtoGG_M_125": 0.880114e3 * 0.00227,
-      "WmHtoGG_M_125": 0.562032e3 * 0.00227,
-      "ZHtoGG_M_125": 0.9361e3 * 0.00227,
-      "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": 8.1e-02 if ("201" in era) else (0.034e3 * 0.00227 * 0.582 * 2),
-      "VBFHH_CV_1p000_C2V_1p000_C3_1p000": 0.00173e3 * 0.00227 * 0.582 * 2,
-      "DDQCDGJET": 1.0,
-      "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": 0.09965e3 * 0.00227 * 0.582 * 2,
-      "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": 0.07575e3 * 0.00227 * 0.582 * 2,
-      "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": 0.01477e3 * 0.00227 * 0.582 * 2,
-      "TTG_10_100": 4.334e3,
-      "TTG_100_200": 0.44e3,
-      "TTG_200": 0.12e3,
-      "TT": 730e3,
-    }
+            "GGJets": 86.96e3 if ("201" in era) else 88.75e3,
+            "GJetPt20To40": 242.5e3,
+            "GJetPt40": 919.1e3,
+            "TTGG": 0.01696e3 if ("201" in era) else 0.02391e3,
+            "ttHtoGG_M_125": 0.0011e3 if ("201" in era) else (0.5700e3 * 0.00227),
+            "BBHto2G_M_125": 0.4385e3 * 0.00227,
+            "GluGluHToGG_M_125": 0.1103e3 if ("201" in era) else (52.23e3 * 0.00227),
+            "VBFHToGG_M_125": 0.00855e3 if ("201" in era) else (4.078e3 * 0.00227),
+            "VHtoGG_M_125": 0.00508e3 if ("201" in era) else (2.4009e3 * 0.00227),
+            "WpHtoGG_M_125": 0.880114e3 * 0.00227,
+            "WmHtoGG_M_125": 0.562032e3 * 0.00227,
+            "ZHtoGG_M_125": 0.9361e3 * 0.00227,
+            # xs(HH) * BR(HToGG) * BR(HToGG) * 2 from https://gitlab.cern.ch/hh/recommendations/-/blob/master/CrossSections.md
+            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": (0.030922e3 * 0.00227 * 0.576 * 2) if ("201" in era) else (0.034170e3 * 0.00227 * 0.576 * 2),
+            "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": (0.068321e3 * 0.00227 * 0.576 * 2) if ("201" in era) else (0.075766e3 * 0.00227 * 0.576 * 2),
+            "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": (0.013405e3 * 0.00227 * 0.576 * 2) if ("201" in era) else (0.014814e3 * 0.00227 * 0.576 * 2),
+            "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": (0.088012e3 * 0.00227 * 0.576 * 2) if ("201" in era) else (0.097259e3 * 0.00227 * 0.576 * 2),
+            "VBFHH_CV_1p000_C2V_1p000_C3_1p000": (0.0017260e3 * 0.00227 * 0.576 * 2) if ("201" in era) else (0.0019292e3 * 0.00227 * 0.576 * 2),
+            "DDQCDGJET": 1.0,
+            "TTG_10_100": 4.334e3,
+            "TTG_100_200": 0.44e3,
+            "TTG_200": 0.12e3,
+            "TT": 730e3,
+        }
 
     luminosities = {
       "2016preVFP": 19.5,
@@ -1597,10 +1573,7 @@ class PrepareInputs:
       "2025": "2025",
     }
 
-    # IMPORTANT:
-    # split_data controls only real data.
-    # split_data: true  -> data is split into Train_split and Final_split.
-    # split_data: false -> data is not split; all data goes to Final_split only.
+    # With split_data disabled, all real data goes to Final_split.
     force_split_data = self.training_info.get("split_data", False)
 
     for data in datas:
