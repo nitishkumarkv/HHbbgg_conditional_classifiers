@@ -339,24 +339,6 @@ class PrepareInputs:
 
       batch = batch[split_mask]
 
-      if ("EE" in era) or ("BPix" in era):
-        batch = ak.Array({
-          (
-            name.replace("nonResReg", "nonResReg_vbfpair", 1)
-            if name.startswith("nonResReg")
-            else name
-          ): batch[name]
-          for name in batch.fields
-        })
-        batch = ak.Array({
-          (
-            f"nonResReg_vbfpair_{name}"
-            if "VBF" in name and not name.startswith("nonResReg_vbfpair")
-            else name
-          ): batch[name]
-          for name in batch.fields
-        })
-
       batch = preselection_func(batch)
 
       if len(batch) > 0:
@@ -481,41 +463,33 @@ class PrepareInputs:
 
     events["deltaR_gg"] = self.deltaR(events.lead_eta, events.lead_phi, events.sublead_eta, events.sublead_phi)
 
-    btagVariable = "btag"
+    btag_wp_config = {
+      "2016preVFP": ("btagUParTAK4B", [0.0387, 0.1847, 0.5467, 0.6777, 0.9218]),
+      "2016postVFP": ("btagUParTAK4B", [0.0400, 0.1898, 0.5538, 0.6872, 0.9353]),
+      "2017": ("btagUParTAK4B", [0.0331, 0.1776, 0.5755, 0.7274, 0.9666]),
+      "2018": ("btagUParTAK4B", [0.0308, 0.1610, 0.5405, 0.6992, 0.9655]),
+      "preEE": ("btagPNetB", [0.0470, 0.2450, 0.6734, 0.7862, 0.9610]),
+      "postEE": ("btagPNetB", [0.0499, 0.2605, 0.6915, 0.8033, 0.9664]),
+      "preBPix": ("btagPNetB", [0.0358, 0.1917, 0.6172, 0.7515, 0.9659]),
+      "postBPix": ("btagPNetB", [0.0359, 0.1919, 0.6133, 0.7544, 0.9688]),
+      "2024": ("btagUParTAK4B", [0.0246, 0.1272, 0.4648, 0.6298, 0.9739]),
+      "2025": ("btagUParTAK4B", [0.0246, 0.1272, 0.4648, 0.6298, 0.9739]),
+    }
+    if era not in btag_wp_config:
+      raise ValueError(f"No b-tagging working points configured for era: {era}")
 
-    if era == "preEE":
-      btag_var = f"{self.var_prefix}_lead_bjet_btagPNetB"
-      sub_btag_var = f"{self.var_prefix}_sublead_bjet_btagPNetB"
-      wps = [0.047, 0.245, 0.6734, 0.7862, 0.961]
-
-    elif era == "postEE":
-      btag_var = f"{self.var_prefix}_lead_bjet_btagPNetB"
-      sub_btag_var = f"{self.var_prefix}_sublead_bjet_btagPNetB"
-      wps = [0.0499, 0.2605, 0.6915, 0.8033, 0.9664]
-
-    elif era == "preBPix":
-      btag_var = f"{self.var_prefix}_lead_bjet_btagPNetB"
-      sub_btag_var = f"{self.var_prefix}_sublead_bjet_btagPNetB"
-      wps = [0.0358, 0.1917, 0.6172, 0.7515, 0.9659]
-
-    elif era == "postBPix":
-      btag_var = f"{self.var_prefix}_lead_bjet_btagPNetB"
-      sub_btag_var = f"{self.var_prefix}_sublead_bjet_btagPNetB"
-      wps = [0.0359, 0.1919, 0.6133, 0.7544, 0.9688]
-
-    else:
-      btag_var = f"{self.var_prefix}_lead_bjet_btagUParTAK4B"
-      sub_btag_var = f"{self.var_prefix}_sublead_bjet_btagUParTAK4B"
-      wps = [0.0246, 0.1272, 0.4648, 0.6298, 0.9739]
+    discriminator, wps = btag_wp_config[era]
+    btag_var = f"{self.var_prefix}_lead_bjet_{discriminator}"
+    sub_btag_var = f"{self.var_prefix}_sublead_bjet_{discriminator}"
 
     wp_names = ["L", "M", "T", "XT", "XXT"]
 
     for wp_name, wp_value in zip(wp_names, wps):
-      events[f"{self.var_prefix}_lead_bjet_{btagVariable}_WP_{wp_name}"] = ak.values_astype(
+      events[f"{self.var_prefix}_lead_bjet_btag_WP_{wp_name}"] = ak.values_astype(
         events[btag_var] > wp_value,
         int,
       )
-      events[f"{self.var_prefix}_sublead_bjet_{btagVariable}_WP_{wp_name}"] = ak.values_astype(
+      events[f"{self.var_prefix}_sublead_bjet_btag_WP_{wp_name}"] = ak.values_astype(
         events[sub_btag_var] > wp_value,
         int,
       )
@@ -556,20 +530,18 @@ class PrepareInputs:
       "2016postVFP": 16.8,
       "2017": 42.07,
       "2018": 59.56,
-      "preEE": 7.98,
-      "postEE": 26.67,
-      "preBPix": 17.794,
-      "postBPix": 9.451,
-      "2024": 108.95,
-      "2025": 110.73,
+      "preEE": 7.99,
+      "postEE": 26.68,
+      "preBPix": 17.96,
+      "postBPix": 9.68,
+      "2024": 109.95,
+      "2025": 110.84,
     }
 
     lumi = luminosities[era]
 
     if sample_type == "DDQCDGJET":
       lumi = 1.0
-      if "25" in era:
-        lumi = 110.73 / 108.95
 
     events["rel_xsec_weight"] = events.weight * dict_xsec[sample_type] * lumi
     events["weight_tot"] = events.weight * dict_xsec[sample_type] * lumi
@@ -995,18 +967,6 @@ class PrepareInputs:
       vars_for_training = self.substitute_var_prefix(vars_config["vars"])
       vars_to_load = vars_for_training + self.extra_vars
 
-      if ("EE" in era) or ("BPix" in era):
-        vars_to_load = [
-          var.replace(f"{self.var_prefix}_", "")
-          if "VBF" in var
-          else var
-          for var in vars_to_load
-        ]
-        vars_to_load = [
-          var.replace(f"{self.var_prefix}_", "nonResReg_")
-          for var in vars_to_load
-        ]
-
       for samples in self.sample_to_class.keys():
         print(samples)
 
@@ -1225,18 +1185,6 @@ class PrepareInputs:
         + ["lead_genPartFlav", "sublead_genPartFlav", "weight_tot"]
       )
 
-      if ("EE" in era) or ("BPix" in era):
-        vars_to_load = [
-          var.replace(f"{self.var_prefix}_", "")
-          if "VBF" in var
-          else var
-          for var in vars_to_load
-        ]
-        vars_to_load = [
-          var.replace(f"{self.var_prefix}_", "nonResReg_")
-          for var in vars_to_load
-        ]
-
       for samples in training_info["samples_info"][era].keys():
         parquet_path = training_info["samples_info"][era][samples]
 
@@ -1380,18 +1328,6 @@ class PrepareInputs:
           + self.vars_for_boosted
           + ["lead_genPartFlav", "sublead_genPartFlav", "weight_tot"]
         )
-
-        if ("EE" in era) or ("BPix" in era):
-          vars_to_load = [
-            var.replace(f"{self.var_prefix}_", "")
-            if "VBF" in var
-            else var
-            for var in vars_to_load
-          ]
-          vars_to_load = [
-            var.replace(f"{self.var_prefix}_", "nonResReg_")
-            for var in vars_to_load
-          ]
 
         for sys in training_info["systematics"]:
           if samples in [
@@ -1581,18 +1517,6 @@ class PrepareInputs:
         vars_for_training = json.load(f)
 
       vars_to_load = vars_for_training + self.extra_vars + self.vars_for_boosted
-
-      if ("2022" in data) or ("2023" in data):
-        vars_to_load = [
-          var.replace(f"{self.var_prefix}_", "")
-          if "VBF" in var
-          else var
-          for var in vars_to_load
-        ]
-        vars_to_load = [
-          var.replace(f"{self.var_prefix}_", "nonResReg_")
-          for var in vars_to_load
-        ]
 
       era = sample_to_era[data]
       parquet_path = datas[data]

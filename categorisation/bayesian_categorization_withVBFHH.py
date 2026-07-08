@@ -38,11 +38,6 @@ class OptunaCategorizer:
     vbfhh_sideband_threshold=10.0,
     vbfhh_n_categories=1,
     output_dir=None,
-    ddqcd_sf=1.0,
-    ggjet_sf=1.0,
-    sf_nonRes_bkg_class=None,
-    sf_nonRes_bkg_min=None,
-    sf_nonRes_bkg_max=None,
   ):
     self.base_path = base_path
     self.cat_folder = cat_folder
@@ -55,6 +50,7 @@ class OptunaCategorizer:
     self.samples_list = samples_list
     self.n_categories = n_categories
     self.n_trials_optuna = n_trials_optuna
+    print(side_band_threshold_low, side_band_threshold_high)
     self.side_band_threshold_low = side_band_threshold_low
     self.side_band_threshold_high = side_band_threshold_high
     self.n_runs = n_runs
@@ -94,7 +90,7 @@ class OptunaCategorizer:
         "VBFHToGG_M_125",
         "VHtoGG_M_125",
         "ttHtoGG_M_125",
-        #"BBHto2G_M_125",
+        "BBHto2G_M_125",
         "GluGluHToGG_M_125",
         "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00",
         #"GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00",
@@ -104,8 +100,8 @@ class OptunaCategorizer:
         "TTGG",
         "GGJets",
         "DDQCDGJET",
-        #"TTG_100_200",
-        #"TTG_200",
+        "TTG_100_200",
+        "TTG_200",
       ]
     if self.bkg_samples is None:
       self.bkg_samples = [
@@ -180,12 +176,6 @@ class OptunaCategorizer:
     self.vbfhh_sideband_threshold = vbfhh_sideband_threshold
     self.vbfhh_n_categories = vbfhh_n_categories
 
-    self.ddqcd_sf = ddqcd_sf
-    self.ggjet_sf = ggjet_sf
-    self.sf_nonRes_bkg_class = sf_nonRes_bkg_class
-    self.sf_nonRes_bkg_min = sf_nonRes_bkg_min
-    self.sf_nonRes_bkg_max = sf_nonRes_bkg_max
-
 
   def gamma_fn(self):
     def gamma_linear(n):
@@ -240,41 +230,6 @@ class OptunaCategorizer:
     return events, scores
 
 
-  def _apply_sample_scaling(self):
-    needs_range = self.sf_nonRes_bkg_min is not None or self.sf_nonRes_bkg_max is not None
-    if needs_range and self.sf_nonRes_bkg_class is None:
-      raise ValueError(
-        "--sf_nonRes_bkg_class must be set when specifying a score range for scaling."
-      )
-
-    for sample_name, sf in [("DDQCDGJET", self.ddqcd_sf), ("GGJets", self.ggjet_sf)]:
-      if sf == 1.0:
-        continue
-      sample_mask = self.samples_all == sample_name
-      if not np.any(sample_mask):
-        print(f"[scaling] WARNING: sample {sample_name} not found, skipping.")
-        continue
-
-      if needs_range:
-        score_col = self.scores_all[:, self.sf_nonRes_bkg_class]
-        range_mask = np.ones(len(self.samples_all), dtype=bool)
-        if self.sf_nonRes_bkg_min is not None:
-          range_mask &= score_col >= self.sf_nonRes_bkg_min
-        if self.sf_nonRes_bkg_max is not None:
-          range_mask &= score_col <= self.sf_nonRes_bkg_max
-        apply_mask = sample_mask & range_mask
-        range_str = (
-          f" in score class {self.sf_nonRes_bkg_class} "
-          f"[{self.sf_nonRes_bkg_min}, {self.sf_nonRes_bkg_max}]"
-        )
-      else:
-        apply_mask = sample_mask
-        range_str = " (all events)"
-
-      self.weights_all[apply_mask] *= sf
-      print(f"[scaling] Applied SF={sf} to {apply_mask.sum()} events of {sample_name}{range_str}")
-
-
   def load_samples(self):
     data = {
       k: []
@@ -288,14 +243,15 @@ class OptunaCategorizer:
       )
     }
     #eras = ["2024"]
-    eras = ["2016preVFP", "2016postVFP", "2017", "2018", "2022preEE", "2022postEE", "2023preBPix", "2023postBPix", "2024", "2025"]
+    eras = ["2016preVFP", "2016postVFP", "2017", "2018", "preEE", "postEE", "preBPix", "postBPix", "2024", "2025"]
     self.dijet_mass_key = "nonResReg_vbfpair_dijet_mass_DNNreg"
 
     for era in eras:
       for sample in self.samples_list:
         samp_dir = os.path.join(self.base_path, "individual_samples", era, sample)
         y_file = os.path.join(samp_dir, "y.npy")
-        evt_file = os.path.join(samp_dir, "events"+("_boostedCat" if self.apply_boosted_veto else "")+".parquet")
+        # evt_file = os.path.join(samp_dir, "events"+("_boostedCat" if self.apply_boosted_veto else "")+".parquet")
+        evt_file = os.path.join(samp_dir, "events_boostedCat.parquet")
 
         if not (os.path.exists(y_file) and os.path.exists(evt_file)):
           print(
@@ -391,8 +347,6 @@ class OptunaCategorizer:
     print(
       f"Sig weight 120-130 GeV: {df.loc[(df['labels'] == 1) & in_peak, 'weights'].sum():.3g}"
     )
-
-    self._apply_sample_scaling()
 
     return df
 
@@ -590,11 +544,6 @@ class OptunaCategorizer:
     total_signal_weight = self.weights_all[self.labels_all == 1].sum()
     print(f"Total signal weight (all events): {total_signal_weight}")
 
-    # set random seed to be set to the sampler for the `n_runs` loop
-    import random
-    random.seed(42)
-    run_seed = [random.randint(0, 1_000_000) for _ in range(self.n_runs)]
-
     for run in range(self.n_runs):
       print(f"--- Run {run} ---")
 
@@ -641,17 +590,15 @@ class OptunaCategorizer:
             & (labels[mask] == 0)
           )
           bkg_side_val = weights[mask][side_mask].sum()
-          #if cat == 1:
-          #  if (
-          #    bkg_side_val < self.side_band_threshold_low
-          #    or bkg_side_val > self.side_band_threshold_high
-          #  ):
-          #    return -1.0
-          #else:
-          #  if bkg_side_val < self.side_band_threshold_low:
-          #    return -1.0
-          if bkg_side_val < self.side_band_threshold_low:
-            return -1.0
+          if cat == 1:
+            if (
+              bkg_side_val < self.side_band_threshold_low
+              or bkg_side_val > self.side_band_threshold_high
+            ):
+              return -1.0
+          else:
+            if bkg_side_val < self.side_band_threshold_low:
+              return -1.0
 
           # SR window
           mass_mask = (dipho_mass[mask] > 120) & (
@@ -703,11 +650,7 @@ class OptunaCategorizer:
           z = self.asymptotic_significance(s, b_total)
           return float(z)
 
-        sampler = optuna.samplers.TPESampler(
-          gamma=self.gamma_fn(),
-          seed=run_seed[run])
-        study = optuna.create_study(direction="maximize", sampler=sampler)
-
+        sampler = optuna.samplers.TPESampler(gamma=self.gamma_fn())
         study = optuna.create_study(direction="maximize", sampler=sampler)
         study.optimize(
           objective, n_trials=self.n_trials_optuna, show_progress_bar=False
@@ -1070,7 +1013,7 @@ if __name__ == "__main__":
   parser.add_argument(
     "--n_trials",
     type=int,
-    default=200,
+    default=150,
     help="Number of trials for Optuna optimization",
   )
   parser.add_argument(
@@ -1083,7 +1026,7 @@ if __name__ == "__main__":
   parser.add_argument(
     "--n_runs",
     type=int,
-    default=50,
+    default=30,
     help="Number of complete runs for the categorization",
   )
   parser.add_argument(
@@ -1192,38 +1135,6 @@ if __name__ == "__main__":
          "Defaults to --base_path if not set.",
   )
 
-  parser.add_argument(
-    "--ddqcd_sf",
-    type=float,
-    default=1.0,
-    help="Scale factor applied to DDQCDGJET weights (default: 1).",
-  )
-  parser.add_argument(
-    "--ggjet_sf",
-    type=float,
-    default=1.0,
-    help="Scale factor applied to GGJets weights (default: 1).",
-  )
-  parser.add_argument(
-    "--sf_nonRes_bkg_class",
-    type=int,
-    default=None,
-    help="Score class index used to define the range where the scale factors are applied. "
-         "Required when --sf_nonRes_bkg_min or --sf_nonRes_bkg_max are set.",
-  )
-  parser.add_argument(
-    "--sf_nonRes_bkg_min",
-    type=float,
-    default=None,
-    help="Lower bound of the score range (class --sf_nonRes_bkg_class) where SFs are applied.",
-  )
-  parser.add_argument(
-    "--sf_nonRes_bkg_max",
-    type=float,
-    default=None,
-    help="Upper bound of the score range (class --sf_nonRes_bkg_class) where SFs are applied.",
-  )
-
   args = parser.parse_args()
 
   # Parse bkg_classes from comma-separated string to list of ints
@@ -1265,11 +1176,6 @@ if __name__ == "__main__":
     vbfhh_sideband_threshold = args.vbfhh_sideband_threshold,
     vbfhh_n_categories = args.vbfhh_n_categories,
     output_dir = args.output_dir,
-    ddqcd_sf = args.ddqcd_sf,
-    ggjet_sf = args.ggjet_sf,
-    sf_nonRes_bkg_class = args.sf_nonRes_bkg_class,
-    sf_nonRes_bkg_min = args.sf_nonRes_bkg_min,
-    sf_nonRes_bkg_max = args.sf_nonRes_bkg_max,
   )
   categoriser.apply_boosted_veto = args.apply_boosted_veto
   categoriser.run_categorisation()
