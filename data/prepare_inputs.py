@@ -404,7 +404,7 @@ class PrepareInputs:
         # for singleH at 13 TeV: https://twiki.cern.ch/twiki/bin/view/LHCPhysics/CERNYellowReportPageAt13TeV#gluon_gluon_Fusion_Process
         
         dict_xsec_13TeV = {
-            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": 0.030649e3 * 0.00227 * 0.576 * 2,#0.033969e3 * 0.00227 * 0.576 * 2,  # cross sectio of GluGluToHH * BR(HToGG) * BR(HTobb) * 2 for two combination ### have to recheck if this is correct. 
+            "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": 0.030649e3 * 0.00227 * 0.576 * 2, # cross sectio of GluGluToHH * BR(HToGG) * BR(HTobb) * 2 for two combination ### have to recheck if this is correct. 
             "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": 0.068317e3 * 0.00227 * 0.576 * 2,
             "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": 0.013422e3 * 0.00227 * 0.576 * 2,
             "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": 0.090488e3 * 0.00227 * 0.576 * 2,
@@ -428,12 +428,13 @@ class PrepareInputs:
             "VBFHH_CV_m1p83_C2V_3p57_C3_m3p39": 0.0149850e3 * 0.00227 * 0.576 * 2,
 
             # For singleH, XS(process) * BR(HtoGG)
-            # Using mH = 125.4 unless specified otherwise
-            "ttHtoGG_M_125": 0.5033e3 * 0.00227,
-            "BBHToGG_M_125": 0.5223e3 * 0.00227,
-            "GluGluHToGG_M_125": 48.30e3 * 0.00227,
-            "VBFHToGG_M_125": 3.770e3 * 0.00227,
-            "VHtoGG_M_125": 2.2347e3 * 0.00227, # XS is sum of WH and ZH
+            # Using mH = 125.38 for XS from: https://gitlab.cern.ch/LHCHIGGSXS/LHCHXSWG1/crosssections
+            # mH = 125.4 for BR
+            "ttHtoGG_M_125": 0.525e3 * 0.00227,
+            "BBHToGG_M_125": 0.522e3 * 0.00227,
+            "GluGluHToGG_M_125": 47.84e3 * 0.00227,
+            "VBFHToGG_M_125": 3.802e3 * 0.00227,
+            "VHtoGG_M_125": 2.250e3 * 0.00227, # XS is sum of WH and ZH
 
             "DDQCDGJET": 1.0,
             "TTG_10_100": 4.216e3,
@@ -468,15 +469,16 @@ class PrepareInputs:
             "VBFHH_CV_m1p83_C2V_3p57_C3_m3p39": 0.0168528e3 * 0.00227 * 0.576 * 2,
 
             # For singleH, XS(process) * BR(HtoGG)
-            # Using mH = 125.38 unless specified otherwise
-            "ttHtoGG_M_125": 0.5638e3 * 0.00227,
-            "BBHToGG_M_125": 0.5251e3 * 0.00227, # mH = 125.09
-            "GluGluHToGG_M_125": 51.96e3 * 0.00227,
-            "VBFHToGG_M_125": 4.067e3 * 0.00227,
-            "VHtoGG_M_125": 2.3781e3 * 0.00227, # XS is sum of WH and ZH
-            "WmHtoGG": 0.8801e3 * 0.00227,
-            "WpHtoGG": 0.5620e3 * 0.00227,
-            "ZHtoGG": 0.9361e3 * 0.00227,
+            # Using mH = 125.38 for XS from: https://gitlab.cern.ch/LHCHIGGSXS/LHCHXSWG1/crosssections
+            # mH = 125.4 for BR
+            "ttHtoGG_M_125": 0.589e3 * 0.00227,
+            "BBHToGG_M_125": 0.563e3 * 0.00227,
+            "GluGluHToGG_M_125": 51.45e3 * 0.00227,
+            "VBFHToGG_M_125": 4.10e3 * 0.00227,
+            "VHtoGG_M_125": 2.394e3 * 0.00227, # XS is sum of WH and ZH
+            "WmHtoGG": 0.562e3 * 0.00227,
+            "WpHtoGG": 0.891e3 * 0.00227,
+            "ZHtoGG": 0.941e3 * 0.00227,
 
             "DDQCDGJET": 1.0,
             "TTG_10_100": 4.216e3,
@@ -490,16 +492,16 @@ class PrepareInputs:
         }
 
         luminosities = {
-        "2016preVFP": 19.5,
-        "2016postVFP": 16.8,
-        "2017": 42.07,
-        "2018": 59.56,
-        "preEE": 7.98,  # Integrated luminosity for preEE in fb^-1
-        "postEE": 26.67,  # Integrated luminosity for postEE in fb^-1
-        "preBPix": 18.06,  # Integrated luminosity for preEE in fb^-1
-        "postBPix": 9.89,  # Integrated luminosity for postEE in fb^-1
-        "2024": 108.82,
-        "2025": 110.58,
+            "2016preVFP":  19.5,
+            "2016postVFP": 16.8,
+            "2017":        42.07,
+            "2018":        59.56,
+            "preEE":       7.99, # We don't use era B
+            "postEE":      26.68, # We don't use era B
+            "preBPix":     17.96, # We don't use era B
+            "postBPix":    9.68, # We don't use era B
+            "2024":        109.82, # We don't use era B
+            "2025":        110.58, # We don't use era B
         }
 
         lumi = luminosities[era]
