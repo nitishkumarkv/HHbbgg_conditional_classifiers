@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import pickle
 import gc
+import shutil
 from vector import register_awkward
 register_awkward()
 
@@ -71,6 +72,31 @@ class PrepareInputs:
         with open(path, 'r') as f:
             vars = yaml.safe_load(f)
         return vars
+
+
+    def split_mc_events(self, events):
+        from sklearn.model_selection import train_test_split
+
+        mc_train_split_fraction = self.training_info.get("mc_train_split_fraction", 1.0)
+        if mc_train_split_fraction >= 1.0:
+            return events, events[:0]
+
+        indices = np.arange(len(events))
+        train_idx, final_idx = train_test_split(indices, train_size=mc_train_split_fraction, shuffle=True, random_state=self.random_seed)
+        return events[np.sort(train_idx)], events[np.sort(final_idx)]
+
+
+    def split_mc_arrays_for_final(self, X, relative_weights, events_table):
+        from sklearn.model_selection import train_test_split
+
+        mc_train_split_fraction = self.training_info.get("mc_train_split_fraction", 1.0)
+        if mc_train_split_fraction >= 1.0:
+            return X[:0], relative_weights[:0], events_table.slice(0, 0)
+
+        indices = np.arange(len(X))
+        _, final_idx = train_test_split(indices, train_size=mc_train_split_fraction, shuffle=True, random_state=self.random_seed)
+        final_idx = np.sort(final_idx)
+        return X[final_idx], relative_weights[final_idx], events_table.take(pa.array(final_idx))
 
 
     def substitute_var_prefix(self, var_list):
@@ -726,8 +752,10 @@ class PrepareInputs:
 
         fill_nan = self.fill_nan
 
-        out_path = self.outpath
+        out_path = f"{self.outpath}/Train_split"
+        final_out_path = f"{self.outpath}/Final_split"
         os.makedirs(out_path, exist_ok=True)
+        os.makedirs(final_out_path, exist_ok=True)
 
         comb_inputs = []
 
@@ -766,11 +794,14 @@ class PrepareInputs:
                     events[cls] = ak.zeros_like(events.eta)
 
                 events[self.sample_to_class[samples]] = ak.ones_like(events.pt) # one-hot encoded
-                comb_inputs.append(events)
                 events["sample_type"] = samples
 
                 # add process number which is specific for each class
                 events["process_number"] = self.process_numbers[samples]
+
+                events, _ = self.split_mc_events(events)
+                print(f"INFO: Number of MC events in {samples} used for Train_split for {era}: {len(events)}")
+                comb_inputs.append(events)
 
                 # plot_correlation_matrix
                 os.makedirs(f"{out_path}/correlation_matrix/", exist_ok=True)
@@ -891,6 +922,9 @@ class PrepareInputs:
         with open(f"{out_path}/mean_std_dict.pkl", 'wb') as f:
             pickle.dump(mean_std_dict, f)
 
+        shutil.copyfile(f"{out_path}/input_vars.txt", f"{final_out_path}/input_vars.txt")
+        shutil.copyfile(f"{out_path}/mean_std_dict.pkl", f"{final_out_path}/mean_std_dict.pkl")
+
         return 0
     
 
@@ -898,7 +932,7 @@ class PrepareInputs:
 
         fill_nan = self.fill_nan
         training_info = self.training_info
-        inputs_path = self.outpath
+        inputs_path = f"{self.outpath}/Final_split"
         out_path = f"{inputs_path}/individual_samples/"
         os.makedirs(out_path, exist_ok=True)
 
@@ -950,10 +984,8 @@ class PrepareInputs:
                 full_path_to_save = f"{out_path}/{era}/{samples}/"
                 os.makedirs(full_path_to_save, exist_ok=True)
 
-                is_composite = len(file_xsec_pairs) > 1
                 X_chunks, w_chunks = [], []
-                parquet_writer = None   # used for single-file samples (streaming)
-                parquet_chunks = []     # used for composite samples (schema unification)
+                parquet_chunks = []
 
                 for file_path, xsec_name in file_xsec_pairs:
                     for batch in self._iter_file_batched(
@@ -973,22 +1005,9 @@ class PrepareInputs:
                             ak.fill_none(batch["rel_xsec_weight"], np.nan)
                         ).astype(np.float32))
                         arrow_table = pa.table({field: ak.to_arrow(batch[field]) for field in batch.fields})
-                        if is_composite:
-                            parquet_chunks.append(arrow_table)
-                        else:
-                            if parquet_writer is None:
-                                parquet_writer = pq.ParquetWriter(f"{full_path_to_save}/events.parquet", arrow_table.schema)
-                            parquet_writer.write_table(arrow_table)
+                        parquet_chunks.append(arrow_table)
                         del batch, arrow_table
 
-                if parquet_writer is not None:
-                    parquet_writer.close()
-                if parquet_chunks:
-                    pq.write_table(
-                        pa.concat_tables(parquet_chunks, promote_options="default"),
-                        f"{full_path_to_save}/events.parquet"
-                    )
-                    del parquet_chunks
 
                 if not X_chunks:
                     print(f"WARNING: No events survived selection for {samples} in {era}. Skipping.")
@@ -998,8 +1017,18 @@ class PrepareInputs:
                 del X_chunks
                 relative_weights = np.concatenate(w_chunks)
                 del w_chunks
+                events_table = pa.concat_tables(parquet_chunks, promote_options="default")
+                del parquet_chunks
+                X, relative_weights, events_table = self.split_mc_arrays_for_final(X, relative_weights, events_table)
 
-                print(f"INFO: Number of events in {samples} for {era}: {len(X)}")
+                if len(X) == 0:
+                    print(f"WARNING: No events kept for Final_split for {samples} in {era}. Skipping.")
+                    continue
+
+                pq.write_table(events_table, f"{full_path_to_save}/events.parquet")
+                del events_table
+
+                print(f"INFO: Number of events in {samples} for {era} in Final_split: {len(X)}")
 
                 mask = (X < -998.0)
                 X[mask] = np.nan
@@ -1027,7 +1056,7 @@ class PrepareInputs:
 
         fill_nan = self.fill_nan
         training_info = self.training_info
-        inputs_path = self.outpath
+        inputs_path = f"{self.outpath}/Final_split"
         out_path = f"{inputs_path}/individual_samples/"
         os.makedirs(out_path, exist_ok=True)
 
@@ -1094,10 +1123,8 @@ class PrepareInputs:
                     full_path_to_save = f"{out_path}/{era}/{samples}/{sys}/"
                     os.makedirs(full_path_to_save, exist_ok=True)
 
-                    is_composite = len(file_xsec_pairs) > 1
                     X_chunks, w_chunks = [], []
-                    parquet_writer = None   # used for single-file samples (streaming)
-                    parquet_chunks = []     # used for composite samples (schema unification)
+                    parquet_chunks = []
 
                     for file_path, xsec_name in file_xsec_pairs:
                         for batch in self._iter_file_batched(
@@ -1117,22 +1144,9 @@ class PrepareInputs:
                                 ak.fill_none(batch["rel_xsec_weight"], np.nan)
                             ).astype(np.float32))
                             arrow_table = pa.table({field: ak.to_arrow(batch[field]) for field in batch.fields})
-                            if is_composite:
-                                parquet_chunks.append(arrow_table)
-                            else:
-                                if parquet_writer is None:
-                                    parquet_writer = pq.ParquetWriter(f"{full_path_to_save}/events.parquet", arrow_table.schema)
-                                parquet_writer.write_table(arrow_table)
+                            parquet_chunks.append(arrow_table)
                             del batch, arrow_table
 
-                    if parquet_writer is not None:
-                        parquet_writer.close()
-                    if parquet_chunks:
-                        pq.write_table(
-                            pa.concat_tables(parquet_chunks, promote_options="default"),
-                            f"{full_path_to_save}/events.parquet"
-                        )
-                        del parquet_chunks
 
                     if not X_chunks:
                         print(f"WARNING: No events survived selection for {samples} in {era} for {sys}. Skipping.")
@@ -1142,8 +1156,18 @@ class PrepareInputs:
                     del X_chunks
                     relative_weights = np.concatenate(w_chunks)
                     del w_chunks
+                    events_table = pa.concat_tables(parquet_chunks, promote_options="default")
+                    del parquet_chunks
+                    X, relative_weights, events_table = self.split_mc_arrays_for_final(X, relative_weights, events_table)
 
-                    print(f"INFO: Number of events in {samples} for {era} for {sys}: {len(X)}")
+                    if len(X) == 0:
+                        print(f"WARNING: No events kept for Final_split for {samples} in {era} for {sys}. Skipping.")
+                        continue
+
+                    pq.write_table(events_table, f"{full_path_to_save}/events.parquet")
+                    del events_table
+
+                    print(f"INFO: Number of events in {samples} for {era} for {sys} in Final_split: {len(X)}")
 
                     mask = (X < -998.0)
                     X[mask] = np.nan
@@ -1170,7 +1194,7 @@ class PrepareInputs:
 
         fill_nan = self.fill_nan
         training_info = self.training_info
-        inputs_path = self.outpath
+        inputs_path = f"{self.outpath}/Final_split"
         out_path = f"{inputs_path}/individual_samples_data/"
         os.makedirs(out_path, exist_ok=True)
 

@@ -43,6 +43,7 @@ weight_scheme: weighted_abs # weighted_only_positive # weighted_CRUW_abs # weigh
 random_seed: 42
 cuda_device: "0"
 var_prefix: "nonResReg_vbfpair" # prefix for variables (e.g., "nonResReg" or "nonResReg_vbfpair")
+mc_train_split_fraction: 0.5
 
 samples_info:
     samples_path: /ceph/cms/store/group/Hgg/HHbbgg_Run3/HiggsDNA_parquet/v7_onlyNominal/ # samples path
