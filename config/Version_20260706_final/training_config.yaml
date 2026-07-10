@@ -41,8 +41,15 @@ do_random_search: False
 num_random_search: 1
 weight_scheme: weighted_abs # weighted_only_positive # weighted_CRUW_abs # weighted_CRUW_only_positive
 random_seed: 42
-cuda_device: "0"
+cuda_device: "3"
 var_prefix: "nonResReg_vbfpair" # prefix for variables (e.g., "nonResReg" or "nonResReg_vbfpair")
+train_fraction: 1
+
+train_sample_fraction: 0.5
+split_seed: 12345
+train_split_dir_name: Train_split
+final_split_dir_name: Final_split
+split_data: false
 
 samples_info:
     samples_path: /ceph/cms/store/group/Hgg/HHbbgg_Run3/HiggsDNA_parquet/v7_onlyNominal/ # samples path
@@ -338,6 +345,6 @@ systematics:
 
 
 # info to save in the parquets
-save_all_columns_sim_nominal : True
-save_all_columns_data : True
+save_all_columns_sim_nominal : False
+save_all_columns_data : False
 save_all_columns_sim_systematics : False

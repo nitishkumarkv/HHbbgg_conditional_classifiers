@@ -22,7 +22,7 @@ import yaml
 hep.style.use("CMS")
 
 
-def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, bins=40, mass_window=(120, 130), mjj_mass_window=(110, 140), signal_scale=100, only_MC=False, var_prefix="nonResReg"):
+def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, bins=40, mass_window=(120, 130), mjj_mass_window=(110, 140), signal_scale=100, only_MC=False, var_prefix="nonResReg", region="full", plot_label=None, sim_weight_scales=None):
     """
     Load data first, then loop over variables to plot stacked histograms with MC and Data, including ratio plots.
 
@@ -36,10 +36,22 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
         signal_scale (int): Scale factor for signal visualization.
     """
     # create output directory if it does not exist
-    if only_MC:
-        out_path = os.path.join(out_path, "MC_Plots_70_190")
+    if isinstance(sim_folder, str):
+        sim_folders = [sim_folder]
     else:
-        out_path = os.path.join(out_path, "Data_MC_Plots_70_190")
+        sim_folders = sim_folder
+    if sim_weight_scales is None:
+        sim_weight_scales = [1.0 for _ in sim_folders]
+    if isinstance(data_folder, str):
+        data_folders = [data_folder]
+    else:
+        data_folders = data_folder
+    plot_suffix = f"_{plot_label}" if plot_label is not None else ""
+    plot_suffix = f"{plot_suffix}_{region}"
+    if only_MC:
+        out_path = os.path.join(out_path, f"MC_Plots_70_190{plot_suffix}")
+    else:
+        out_path = os.path.join(out_path, f"Data_MC_Plots_70_190{plot_suffix}")
     os.makedirs(out_path, exist_ok=True)
     mc_colors = ["red", "blue", "green", "purple", "orange", "cyan", "magenta", "gold", "brown", "pink", "lime"]
     mc_colors = [
@@ -129,6 +141,14 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
 
         return events
 
+    def apply_region(events):
+        if region == "full":
+            return events
+        if region == "sideband":
+            sideband_bool = ((events.mass < mass_window[0]) | (events.mass > mass_window[1]))
+            return events[sideband_bool]
+        raise ValueError(f"Unknown region {region}")
+
     # Load class names from training config and append "_score" suffix
     class_names_raw = training_config["classes"]
     class_names = [f"{class_name}_score" for class_name in class_names_raw]
@@ -136,50 +156,50 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
 
     events_path = samples_info["samples_path"]
 
-    # Load Data First
     data_combined = None
 
     data_samples = training_config["samples_info"]["data"]
 
-    for data_sample, path in data_samples.items():
-        if os.path.exists(f"{data_folder}/{data_sample}/events.parquet"):
-            print(f"Loading data from {data_folder}/{data_sample}/events.parquet")
-            data_part = ak.from_parquet(f"{data_folder}/{data_sample}/events.parquet", columns=variables+["lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE"])
-        else:
-            data_part = ak.from_parquet(f"{events_path}/{path}", columns=variables+["lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE"])
-        if os.path.exists(f"{data_folder}/{data_sample}/y.npy"):
-            data_score = np.load(f"{data_folder}/{data_sample}/y.npy")
-            num_classes = data_score.shape[1]
-            for i, class_name in enumerate(class_names):
-                if i < num_classes:
-                    data_part[class_name] = data_score[:, i]
+    if not only_MC:
+        for data_sample, path in data_samples.items():
+            data_part = None
+            for data_folder_ in data_folders:
+                if os.path.exists(f"{data_folder_}/{data_sample}/events.parquet"):
+                    print(f"Loading data from {data_folder_}/{data_sample}/events.parquet")
+                    data_part = ak.from_parquet(f"{data_folder_}/{data_sample}/events.parquet", columns=variables+["lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE"])
+                    if os.path.exists(f"{data_folder_}/{data_sample}/y.npy"):
+                        data_score = np.load(f"{data_folder_}/{data_sample}/y.npy")
+                        num_classes = data_score.shape[1]
+                        for i, class_name in enumerate(class_names):
+                            if i < num_classes:
+                                data_part[class_name] = data_score[:, i]
+                    break
+            if data_part is None:
+                data_part = ak.from_parquet(f"{events_path}/{path}", columns=variables+["lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE"])
 
-        if data_combined is None:
-            data_combined = data_part
-        else:
-            data_combined = ak.concatenate([data_combined, data_part], axis=0)
-    if "minMVAID" in variables:
-        data_combined["minMVAID"] = np.min([data_combined.lead_mvaID, data_combined.sublead_mvaID], axis = 0)
-        data_combined["maxMVAID"] = np.max([data_combined.lead_mvaID, data_combined.sublead_mvaID], axis = 0)
+            if data_combined is None:
+                data_combined = data_part
+            else:
+                data_combined = ak.concatenate([data_combined, data_part], axis=0)
+        if "minMVAID" in variables:
+            data_combined["minMVAID"] = np.min([data_combined.lead_mvaID, data_combined.sublead_mvaID], axis = 0)
+            data_combined["maxMVAID"] = np.max([data_combined.lead_mvaID, data_combined.sublead_mvaID], axis = 0)
 
-    # Apply preselection
-    data_combined = add_preselection(data_combined)
-    print("before: ", len(data_combined))
-    
-    # get number of data events in sideband
-    int_data_sideband = len(data_combined)
+        data_combined = apply_region(add_preselection(data_combined))
+        print("number of data events after region selection: ", len(data_combined))
 
     eras = samples_info["eras"]
     for sample in sim_samples:
         sample_combined = []
         for era in eras:
-            if os.path.exists(f"{sim_folder}/{era}/{sample}/events.parquet"):
-                events_ = ak.from_parquet(f"{sim_folder}/{era}/{sample}/events.parquet", columns=variables+["lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_genPartFlav", "sublead_genPartFlav", "weight_tot"])
-            else:
-                events_ = ak.from_parquet(f"{events_path}/{samples_info[era][sample]}", columns=variables+["lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_genPartFlav", "sublead_genPartFlav", "weight_tot"])
+            for sim_folder_, sim_weight_scale in zip(sim_folders, sim_weight_scales):
+                if os.path.exists(f"{sim_folder_}/{era}/{sample}/events.parquet"):
+                    events_ = ak.from_parquet(f"{sim_folder_}/{era}/{sample}/events.parquet", columns=variables+["lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_genPartFlav", "sublead_genPartFlav", "weight_tot"])
+                else:
+                    events_ = ak.from_parquet(f"{events_path}/{samples_info[era][sample]}", columns=variables+["lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_genPartFlav", "sublead_genPartFlav", "weight_tot"])
+                events_["weight_tot"] = events_.weight_tot * sim_weight_scale
 
-        
-            scores_ = np.load(f"{sim_folder}/{era}/{sample}/y.npy")
+                scores_ = np.load(f"{sim_folder_}/{era}/{sample}/y.npy")
             # select prompt photons for TTG and TT samples
             #if (("TTG_" in sample) or (sample == "TT")):
             #    print("selecting prompt photons for TTG and TT samples")
@@ -189,19 +209,18 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
             #    scores_ = scores_[prompt_photon_bool]
 
             #events_["weight_tot"] = rel_w_
-            for i, class_name in enumerate(class_names):
-                if i < scores_.shape[1]:
-                    num_classes = scores_.shape[1]
-                    events_[class_name] = scores_[:, i]
-            sample_combined.append(events_)
+                for i, class_name in enumerate(class_names):
+                    if i < scores_.shape[1]:
+                        num_classes = scores_.shape[1]
+                        events_[class_name] = scores_[:, i]
+                sample_combined.append(events_)
         sample_combined = ak.concatenate(sample_combined, axis=0)
 
         if "minMVAID" in variables:
             sample_combined["minMVAID"] = np.min([sample_combined.lead_mvaID, sample_combined.sublead_mvaID], axis = 0)
             sample_combined["maxMVAID"] = np.max([sample_combined.lead_mvaID, sample_combined.sublead_mvaID], axis = 0)
 
-        # Apply preselection
-        sample_combined = add_preselection(sample_combined)
+        sample_combined = apply_region(add_preselection(sample_combined))
         if sample == "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00":
             print("number of events in GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00", sum(sample_combined["weight_tot"]))
 
@@ -245,8 +264,9 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
 
     # Loop Over Variables and Create Plots
     for variable in variables:
-        if variable not in data_combined.fields:
-            print(f"Variable {variable} not found in data fields. Skipping...")
+        fields_to_check = data_combined.fields if data_combined is not None else next(iter(stack_mc_dict.values())).fields
+        if variable not in fields_to_check:
+            print(f"Variable {variable} not found in fields. Skipping...")
             continue
         #print(f"Processing variable: {variable}")
 
@@ -293,8 +313,11 @@ def plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, v
         mc_total = np.sum(mc_hist, axis=0)
         mc_err = np.sqrt(mc_err)  # Statistical uncertainty
 
-        data_hist, _ = np.histogram(ak.to_numpy((data_combined[variable])), bins=bin_edges)
-        data_err = np.sqrt(data_hist)  # Poisson errors
+        if not only_MC:
+            data_hist, _ = np.histogram(ak.to_numpy((data_combined[variable])), bins=bin_edges)
+            data_err = np.sqrt(data_hist)  # Poisson errors
+        else:
+            data_hist = mc_total
 
         signal_color_list = ["red", "green", "blue", "purple"]
         # Compute signal histograms with weights
@@ -454,6 +477,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot stacked histograms for MC and Data.")
     parser.add_argument("--base-path", type=str, required=True, help="Path to the base directory containing MC and Data folders.")
     parser.add_argument("--training_config_path", type=str, required=True, help="Path to the training config file.")
+    parser.add_argument("--split", choices=["current", "train", "final", "merged"], default="current", help="Which prepared split to plot.")
+    parser.add_argument("--region", choices=["full", "sideband"], default="full", help="Diphoton mass region to plot.")
     args = parser.parse_args()
 
     # Load training configuration
@@ -463,8 +488,47 @@ if __name__ == "__main__":
     samples_info = training_config["samples_info"]
 
     base_path = args.base_path
-    sim_folder = f"{base_path}/individual_samples"
-    data_folder = f"{base_path}/individual_samples_data"
+    data_prep_split = training_config.get("data_prep_split", None)
+    train_split_name = "Train_split"
+    final_split_name = "Final_split"
+    if data_prep_split is not None:
+        train_split_name = data_prep_split.get("train_split_name", train_split_name)
+        final_split_name = data_prep_split.get("final_split_name", final_split_name)
+
+    def split_base_path(split_name):
+        if os.path.basename(os.path.normpath(base_path)) == split_name:
+            return base_path
+        if os.path.basename(os.path.normpath(base_path)) in [train_split_name, final_split_name]:
+            return os.path.join(os.path.dirname(os.path.normpath(base_path)), split_name)
+        return os.path.join(base_path, split_name)
+
+    if args.split == "current" or data_prep_split is None:
+        plot_base_path = base_path
+        sim_folder = f"{plot_base_path}/individual_samples"
+        data_folder = f"{plot_base_path}/individual_samples_data"
+        plot_label = "current"
+        sim_weight_scales = None
+    elif args.split == "train":
+        plot_base_path = split_base_path(train_split_name)
+        sim_folder = f"{plot_base_path}/individual_samples"
+        data_folder = f"{split_base_path(final_split_name)}/individual_samples_data"
+        plot_label = train_split_name
+        sim_weight_scales = None
+    elif args.split == "final":
+        plot_base_path = split_base_path(final_split_name)
+        sim_folder = f"{plot_base_path}/individual_samples"
+        data_folder = f"{plot_base_path}/individual_samples_data"
+        plot_label = final_split_name
+        sim_weight_scales = None
+    else:
+        plot_base_path = base_path
+        if os.path.basename(os.path.normpath(base_path)) in [train_split_name, final_split_name]:
+            plot_base_path = os.path.dirname(os.path.normpath(base_path))
+        sim_folder = [f"{split_base_path(train_split_name)}/individual_samples", f"{split_base_path(final_split_name)}/individual_samples"]
+        data_folder = f"{split_base_path(final_split_name)}/individual_samples_data"
+        plot_label = "Merged_split"
+        train_split_fraction = data_prep_split.get("train_split_fraction", 0.5)
+        sim_weight_scales = [train_split_fraction, 1.0 - train_split_fraction]
 
     # Get var_prefix from training config, default to "nonResReg" for backwards compatibility
     var_prefix = training_config.get("var_prefix", "nonResReg")
@@ -492,6 +556,9 @@ if __name__ == "__main__":
     variables = list(set(variables))
 
 
-    out_path = f"{base_path}/"
-    plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, signal_scale=1000, var_prefix=var_prefix)
-    plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, signal_scale=1000, only_MC=True, var_prefix=var_prefix)
+    out_path = f"{plot_base_path}/"
+    if args.split != "train" and os.path.exists(data_folder):
+        plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, signal_scale=1000, var_prefix=var_prefix, region=args.region, plot_label=plot_label, sim_weight_scales=sim_weight_scales)
+    else:
+        print("INFO: Skipping Data/MC plots because no data folder is available for this split")
+    plot_stacked_histogram(samples_info, sim_folder, data_folder, sim_samples, variables, out_path, signal_scale=1000, only_MC=True, var_prefix=var_prefix, region=args.region, plot_label=plot_label, sim_weight_scales=sim_weight_scales)
