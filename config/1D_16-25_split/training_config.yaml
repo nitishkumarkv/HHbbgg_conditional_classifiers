@@ -1,0 +1,355 @@
+sample_to_class: # processes and classes
+    GGJets: is_nonRes_bkg
+    DDQCDGJET: is_nonRes_bkg
+    TTGG: is_nonRes_bkg
+    ttHtoGG_M_125: is_Res_bkg
+    #BBHto2G_M_125: is_Res_bkg
+    GluGluHToGG_M_125: is_Res_bkg
+    VBFHToGG_M_125: is_Res_bkg
+    VHtoGG_M_125: is_Res_bkg
+    GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00: is_ggHH_sig
+    VBFHH_CV_1p000_C2V_1p000_C3_1p000: is_VBFHH_sig
+
+classes: # all classes
+- is_nonRes_bkg
+- is_Res_bkg
+- is_ggHH_sig
+- is_VBFHH_sig
+
+weight_scheme_process: # how to weight each processes within a class
+    # xsec : weight them according to the cross-section of each process
+    # equal_weight: weight each process eqally, if there are two processes, you first weight the sum of each processes to be equal and then weight the whole class to be 1
+    is_nonRes_bkg: xsec
+    is_Res_bkg: xsec
+    is_ggHH_sig: xsec
+    is_VBFHH_sig: xsec
+
+class_weight_scale: # optional: scale factor applied after per-class normalization to 1
+    # Default (no key or 1.0): each class contributes equally (sum=1.0 each)
+    # Use this to weight signal classes proportional to their production cross-sections
+    # so the combined signal budget matches the old 3-class setup
+    # sigma_ggHH = 0.034e3 fb, sigma_VBFHH = 0.00173e3 fb
+    # ggHH fraction: 0.034 / (0.034 + 0.00173) = 0.9516
+    # VBFHH fraction: 0.00173 / (0.034 + 0.00173) = 0.0484
+    is_nonRes_bkg: 1.0
+    is_Res_bkg: 1.0
+    is_ggHH_sig: 0.9516
+    is_VBFHH_sig: 0.0484
+
+# some info for training
+do_random_search: False
+num_random_search: 1
+weight_scheme: weighted_abs # weighted_only_positive # weighted_CRUW_abs # weighted_CRUW_only_positive
+random_seed: 42
+cuda_device: "3"
+var_prefix: "nonResReg_vbfpair" # prefix for variables (e.g., "nonResReg" or "nonResReg_vbfpair")
+train_fraction: 1
+
+train_sample_fraction: 0.5
+split_seed: 12345
+train_split_dir_name: Train_split
+final_split_dir_name: Final_split
+# true: split data into Train_split and Final_split
+# false: put all data into Final_split only
+split_data: false
+
+samples_info:
+    samples_path: /ceph/cms/store/group/Hgg/HHbbgg_Run3/HiggsDNA_parquet/v7_onlyNominal/ # samples path
+    #samples_path: /eos/cms/store/group/phys_b2g/HHbbgg/HiggsDNA_parquet/ # samples path
+    eras:
+    - "2016preVFP"
+    - "2016postVFP"
+    - "2017"
+    - "2018"
+    - "2022preEE"
+    - "2022postEE"
+    - "2023preBPix"
+    - "2023postBPix"
+    - "2024"
+    - "2025"
+    "2016preVFP": # give relative path to
+        GGJets: "Run2_2016preVFP/sim/DDQCDGJets/GGJets_MGG-80_Rescaled.parquet"
+        DDQCDGJET: "Run2_2016preVFP/sim/DDQCDGJets/DDQCDGJets_Rescaled.parquet"
+        TTGG: "Run2_2016preVFP/sim/TTGG/NOTAG_merged.parquet"
+        ttHtoGG_M_125: "Run2_2016preVFP/sim/ttHtoGG/NOTAG_merged.parquet"
+        # BBHto2G_M_125: "Run2_2016preVFP/sim/bbHtoGG/NOTAG_merged.parquet"
+        GluGluHToGG_M_125: "Run2_2016preVFP/sim/GluGluHtoGG/NOTAG_merged.parquet"
+        VBFHToGG_M_125: "Run2_2016preVFP/sim/VBFHtoGG/NOTAG_merged.parquet"
+        VHtoGG_M_125: "Run2_2016preVFP/sim/VHtoGG/NOTAG_merged.parquet"
+        GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00: "Run2_2016preVFP/sim/GluGlutoHH_kl-1p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00: "Run2_2016preVFP/sim/GluGlutoHH_kl-5p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00: "Run2_2016preVFP/sim/GluGlutoHH_kl-0p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00: "Run2_2016preVFP/sim/GluGlutoHH_kl-2p45_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        VBFHH_CV_1p000_C2V_1p000_C3_1p000: "Run2_2016preVFP/sim/VBFHH_CV-1p000_C2V-1p000_C3-1p000/NOTAG_merged.parquet"
+    "2016postVFP": # give relative path to
+        GGJets: "Run2_2016postVFP/sim/DDQCDGJets/GGJets_MGG-80_Rescaled.parquet"
+        DDQCDGJET: "Run2_2016postVFP/sim/DDQCDGJets/DDQCDGJets_Rescaled.parquet"
+        TTGG: "Run2_2016postVFP/sim/TTGG/NOTAG_merged.parquet"
+        ttHtoGG_M_125: "Run2_2016postVFP/sim/ttHtoGG/NOTAG_merged.parquet"
+        # BBHto2G_M_125: "Run2_2016postVFP/sim/bbHtoGG/NOTAG_merged.parquet"
+        GluGluHToGG_M_125: "Run2_2016postVFP/sim/GluGluHtoGG/NOTAG_merged.parquet"
+        VBFHToGG_M_125: "Run2_2016postVFP/sim/VBFHtoGG/NOTAG_merged.parquet"
+        VHtoGG_M_125: "Run2_2016postVFP/sim/VHtoGG/NOTAG_merged.parquet"
+        GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00: "Run2_2016postVFP/sim/GluGlutoHH_kl-1p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00: "Run2_2016postVFP/sim/GluGlutoHH_kl-5p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00: "Run2_2016postVFP/sim/GluGlutoHH_kl-0p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00: "Run2_2016postVFP/sim/GluGlutoHH_kl-2p45_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        VBFHH_CV_1p000_C2V_1p000_C3_1p000: "Run2_2016postVFP/sim/VBFHH_CV-1p000_C2V-1p000_C3-1p000/NOTAG_merged.parquet"
+    "2017": # give relative path to
+        GGJets: "Run2_2017/sim/DDQCDGJets/GGJets_MGG-80_Rescaled.parquet"
+        DDQCDGJET: "Run2_2017/sim/DDQCDGJets/DDQCDGJets_Rescaled.parquet"
+        TTGG: "Run2_2017/sim/TTGG/NOTAG_merged.parquet"
+        ttHtoGG_M_125: "Run2_2017/sim/ttHtoGG/NOTAG_merged.parquet"
+        # BBHto2G_M_125: "Run2_2017/sim/bbHtoGG/NOTAG_merged.parquet"
+        GluGluHToGG_M_125: "Run2_2017/sim/GluGluHtoGG/NOTAG_merged.parquet"
+        VBFHToGG_M_125: "Run2_2017/sim/VBFHtoGG/NOTAG_merged.parquet"
+        VHtoGG_M_125: "Run2_2017/sim/VHtoGG/NOTAG_merged.parquet"
+        GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00: "Run2_2017/sim/GluGlutoHH_kl-1p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00: "Run2_2017/sim/GluGlutoHH_kl-5p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00: "Run2_2017/sim/GluGlutoHH_kl-0p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00: "Run2_2017/sim/GluGlutoHH_kl-2p45_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        VBFHH_CV_1p000_C2V_1p000_C3_1p000: "Run2_2017/sim/VBFHH_CV-1p000_C2V-1p000_C3-1p000/NOTAG_merged.parquet"
+    "2018": # give relative path to
+        GGJets: "Run2_2018/sim/DDQCDGJets/GGJets_MGG-80_Rescaled.parquet"
+        DDQCDGJET: "Run2_2018/sim/DDQCDGJets/DDQCDGJets_Rescaled.parquet"
+        TTGG: "Run2_2018/sim/TTGG/NOTAG_merged.parquet"
+        ttHtoGG_M_125: "Run2_2018/sim/ttHtoGG/NOTAG_merged.parquet"
+        # BBHto2G_M_125: "Run2_2018/sim/bbHtoGG/NOTAG_merged.parquet"
+        GluGluHToGG_M_125: "Run2_2018/sim/GluGluHtoGG/NOTAG_merged.parquet"
+        VBFHToGG_M_125: "Run2_2018/sim/VBFHtoGG/NOTAG_merged.parquet"
+        VHtoGG_M_125: "Run2_2018/sim/VHtoGG/NOTAG_merged.parquet"
+        GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00: "Run2_2018/sim/GluGlutoHH_kl-1p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00: "Run2_2018/sim/GluGlutoHH_kl-5p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00: "Run2_2018/sim/GluGlutoHH_kl-0p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00: "Run2_2018/sim/GluGlutoHH_kl-2p45_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        VBFHH_CV_1p000_C2V_1p000_C3_1p000: "Run2_2018/sim/VBFHH_CV-1p000_C2V-1p000_C3-1p000/NOTAG_merged.parquet"
+    "2022preEE": # give relative path to
+        GGJets: "Run3_2022/sim/preEE/DDQCDGJets/GGJets_MGG-80_Rescaled.parquet"
+        DDQCDGJET: "Run3_2022/sim/preEE/DDQCDGJets/DDQCDGJets_Rescaled.parquet"
+        TTGG: "Run3_2022/sim/preEE/TTGG/NOTAG_merged.parquet"
+        ttHtoGG_M_125: "Run3_2022/sim/preEE/ttHtoGG/NOTAG_merged.parquet"
+        # BBHto2G_M_125: "Run3_2022/sim/preEE/bbHtoGG/NOTAG_merged.parquet"
+        GluGluHToGG_M_125: "Run3_2022/sim/preEE/GluGluHtoGG/NOTAG_merged.parquet"
+        VBFHToGG_M_125: "Run3_2022/sim/preEE/VBFHtoGG/NOTAG_merged.parquet"
+        VHtoGG_M_125: "Run3_2022/sim/preEE/VHtoGG/NOTAG_merged.parquet"
+        GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00: "Run3_2022/sim/preEE/GluGlutoHH_kl-1p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00: "Run3_2022/sim/preEE/GluGlutoHH_kl-5p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00: "Run3_2022/sim/preEE/GluGlutoHH_kl-0p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00: "Run3_2022/sim/preEE/GluGlutoHH_kl-2p45_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        VBFHH_CV_1p000_C2V_1p000_C3_1p000: "Run3_2022/sim/preEE/VBFHH_CV-1p000_C2V-1p000_C3-1p000/NOTAG_merged.parquet"
+        # TTG_10_100: "Run3_2022/sim/preEE/TTG-1Jets_PTG-10to100.parquet"
+        #TTG_100_200: "Run3_2022/sim/preEE/TTG-1Jets_PTG-100to200/nominal/NOTAG_merged.parquet"
+        #TTG_200: "Run3_2022/sim/preEE/TTG-1Jets_PTG-200/nominal/NOTAG_merged.parquet"
+        # TT: "Run3_2022/sim/preEE/TT.parquet"
+    "2022postEE":
+        GGJets: "Run3_2022/sim/postEE/DDQCDGJets/GGJets_MGG-80_Rescaled.parquet"
+        DDQCDGJET: "Run3_2022/sim/postEE/DDQCDGJets/DDQCDGJets_Rescaled.parquet"
+        TTGG: "Run3_2022/sim/postEE/TTGG/NOTAG_merged.parquet"
+        ttHtoGG_M_125: "Run3_2022/sim/postEE/ttHtoGG/NOTAG_merged.parquet"
+        # BBHto2G_M_125: "Run3_2022/sim/postEE/bbHtoGG/NOTAG_merged.parquet"
+        GluGluHToGG_M_125: "Run3_2022/sim/postEE/GluGluHtoGG/NOTAG_merged.parquet"
+        VBFHToGG_M_125: "Run3_2022/sim/postEE/VBFHtoGG/NOTAG_merged.parquet"
+        VHtoGG_M_125: "Run3_2022/sim/postEE/VHtoGG/NOTAG_merged.parquet"
+        GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00: "Run3_2022/sim/postEE/GluGlutoHH_kl-1p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00: "Run3_2022/sim/postEE/GluGlutoHH_kl-5p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00: "Run3_2022/sim/postEE/GluGlutoHH_kl-0p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00: "Run3_2022/sim/postEE/GluGlutoHH_kl-2p45_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        VBFHH_CV_1p000_C2V_1p000_C3_1p000: "Run3_2022/sim/postEE/VBFHH_CV-1p000_C2V-1p000_C3-1p000/NOTAG_merged.parquet"
+        # TTG_10_100: "Run3_2022/sim/postEE/TTG-1Jets_PTG-10to100.parquet"
+        # TTG_100_200: "Run3_2022/sim/postEE/TTG-1Jets_PTG-100to200/nominal/NOTAG_merged.parquet"
+        # TTG_200: "Run3_2022/sim/postEE/TTG-1Jets_PTG-200/nominal/NOTAG_merged.parquet"
+        # TT: "Run3_2022/sim/postEE/TT.parquet"
+    "2023preBPix":
+        GGJets: "Run3_2023/sim/preBPix/DDQCDGJets/GGJets_MGG-80_Rescaled.parquet"
+        DDQCDGJET: "Run3_2023/sim/preBPix/DDQCDGJets/DDQCDGJets_Rescaled.parquet"
+        TTGG: "Run3_2023/sim/preBPix/TTGG/NOTAG_merged.parquet"
+        ttHtoGG_M_125: "Run3_2023/sim/preBPix/ttHtoGG/NOTAG_merged.parquet"
+        # BBHto2G_M_125: "Run3_2023/sim/preBPix/bbHtoGG/NOTAG_merged.parquet"
+        GluGluHToGG_M_125: "Run3_2023/sim/preBPix/GluGluHtoGG/NOTAG_merged.parquet"
+        VBFHToGG_M_125: "Run3_2023/sim/preBPix/VBFHtoGG/NOTAG_merged.parquet"
+        VHtoGG_M_125: "Run3_2023/sim/preBPix/VHtoGG/NOTAG_merged.parquet"
+        GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00: "Run3_2023/sim/preBPix/GluGlutoHH_kl-1p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00: "Run3_2023/sim/preBPix/GluGlutoHH_kl-5p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00: "Run3_2023/sim/preBPix/GluGlutoHH_kl-0p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00: "Run3_2023/sim/preBPix/GluGlutoHH_kl-2p45_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        VBFHH_CV_1p000_C2V_1p000_C3_1p000: "Run3_2023/sim/preBPix/VBFHH_CV-1p000_C2V-1p000_C3-1p000/NOTAG_merged.parquet"
+        # TTG_10_100: "Run3_2022postEE/TTG-1Jets_PTG-10to100.parquet"
+        # TTG_100_200: "Run3_2023/sim/preBPix/TTG-1Jets_PTG-100to200/nominal/NOTAG_merged.parquet"
+        # TTG_200: "Run3_2023/sim/preBPix/TTG-1Jets_PTG-200/nominal/NOTAG_merged.parquet"
+        # TT: "Run3_2022preEE/TT.parquet"
+    "2023postBPix":
+        GGJets: "Run3_2023/sim/postBPix/DDQCDGJets/GGJets_MGG-80_Rescaled.parquet"
+        DDQCDGJET: "Run3_2023/sim/postBPix/DDQCDGJets/DDQCDGJets_Rescaled.parquet"
+        TTGG: "Run3_2023/sim/postBPix/TTGG/NOTAG_merged.parquet"
+        ttHtoGG_M_125: "Run3_2023/sim/postBPix/ttHtoGG/NOTAG_merged.parquet"
+        # BBHto2G_M_125: "Run3_2023/sim/postBPix/bbHtoGG/NOTAG_merged.parquet"
+        GluGluHToGG_M_125: "Run3_2023/sim/postBPix/GluGluHtoGG/NOTAG_merged.parquet"
+        VBFHToGG_M_125: "Run3_2023/sim/postBPix/VBFHtoGG/NOTAG_merged.parquet"
+        VHtoGG_M_125: "Run3_2023/sim/postBPix/VHtoGG/NOTAG_merged.parquet"
+        GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00: "Run3_2023/sim/postBPix/GluGlutoHH_kl-1p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00: "Run3_2023/sim/postBPix/GluGlutoHH_kl-5p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00: "Run3_2023/sim/postBPix/GluGlutoHH_kl-0p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00: "Run3_2023/sim/postBPix/GluGlutoHH_kl-2p45_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        VBFHH_CV_1p000_C2V_1p000_C3_1p000: "Run3_2023/sim/postBPix/VBFHH_CV-1p000_C2V-1p000_C3-1p000/NOTAG_merged.parquet"
+        # TTG_10_100: "Run3_2022postEE/TTG-1Jets_PTG-10to100.parquet"
+        # TTG_100_200: "Run3_2023/sim/postBPix/TTG-1Jets_PTG-100to200/nominal/NOTAG_merged.parquet"
+        # TTG_200: "Run3_2023/sim/postBPix/TTG-1Jets_PTG-200/nominal/NOTAG_merged.parquet"
+        # TT: "Run3_2022preEE/TT.parquet"
+    "2024":
+        GGJets: "Run3_2024/sim/DDQCDGJets/GGJets_MGG-80_Rescaled.parquet"
+        DDQCDGJET: "Run3_2024/sim/DDQCDGJets/DDQCDGJets_Rescaled.parquet"
+        TTGG: "Run3_2024/sim/TTGG/NOTAG_merged.parquet"
+        ttHtoGG_M_125: "Run3_2024/sim/ttHtoGG/NOTAG_merged.parquet"
+        # BBHto2G_M_125: "Run3_2024/sim/bbHtoGG/NOTAG_merged.parquet"
+        GluGluHToGG_M_125: "Run3_2024/sim/GluGluHtoGG/NOTAG_merged.parquet"
+        VBFHToGG_M_125: "Run3_2024/sim/VBFHtoGG/NOTAG_merged.parquet"
+        VHtoGG_M_125:  # For 2024, VH is split into WpH, WmH, and ZH - these will be merged
+            - "Run3_2024/sim/WmHtoGG/NOTAG_merged.parquet"
+            - "Run3_2024/sim/WpHtoGG/NOTAG_merged.parquet"
+            - "Run3_2024/sim/ZHtoGG/NOTAG_merged.parquet"
+        GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00: "Run3_2024/sim/GluGlutoHH_kl-1p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00: "Run3_2024/sim/GluGlutoHH_kl-5p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00: "Run3_2024/sim/GluGlutoHH_kl-0p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00: "Run3_2024/sim/GluGlutoHH_kl-2p45_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        VBFHH_CV_1p000_C2V_1p000_C3_1p000: "Run3_2024/sim/VBFHH_CV-1p000_C2V-1p000_C3-1p000/NOTAG_merged.parquet"
+        # TTG_10_100: "Run3_2022postEE/TTG-1Jets_PTG-10to100.parquet"
+        # TTG_100_200: "Run3_2023/sim/postBPix/TTG-1Jets_PTG-100to200/nominal/NOTAG_merged.parquet"
+        # TTG_200: "Run3_2023/sim/postBPix/TTG-1Jets_PTG-200/nominal/NOTAG_merged.parquet"
+        # TT: "Run3_2022preEE/TT.parquet"
+    "2025":
+        GGJets: "Run3_2025/sim/DDQCDGJets/GGJets_MGG-80_Rescaled.parquet"
+        DDQCDGJET: "Run3_2025/sim/DDQCDGJets/DDQCDGJets_Rescaled.parquet"
+        TTGG: "Run3_2025/sim/TTGG/NOTAG_merged.parquet"
+        ttHtoGG_M_125: "Run3_2025/sim/ttHtoGG/NOTAG_merged.parquet"
+        # BBHto2G_M_125: "Run3_2025/sim/bbHtoGG/NOTAG_merged.parquet"
+        GluGluHToGG_M_125: "Run3_2025/sim/GluGluHtoGG/NOTAG_merged.parquet"
+        VBFHToGG_M_125: "Run3_2025/sim/VBFHtoGG/NOTAG_merged.parquet"
+        VHtoGG_M_125:  # For 2025, VH is split into WpH, WmH, and ZH - these will be merged
+            - "Run3_2025/sim/WmHtoGG/NOTAG_merged.parquet"
+            - "Run3_2025/sim/WpHtoGG/NOTAG_merged.parquet"
+            - "Run3_2025/sim/ZHtoGG/NOTAG_merged.parquet"
+        GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00: "Run3_2025/sim/GluGlutoHH_kl-1p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00: "Run3_2025/sim/GluGlutoHH_kl-5p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00: "Run3_2025/sim/GluGlutoHH_kl-0p00_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        # GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00: "Run3_2025/sim/GluGlutoHH_kl-2p45_kt-1p00_c2-0p00/NOTAG_merged.parquet"
+        VBFHH_CV_1p000_C2V_1p000_C3_1p000: "Run3_2025/sim/VBFHH_CV-1p000_C2V-1p000_C3-1p000/NOTAG_merged.parquet"
+        # TTG_10_100: "Run3_2022postEE/TTG-1Jets_PTG-10to100.parquet"
+        # TTG_100_200: "Run3_2023/sim/postBPix/TTG-1Jets_PTG-100to200/nominal/NOTAG_merged.parquet"
+        # TTG_200: "Run3_2023/sim/postBPix/TTG-1Jets_PTG-200/nominal/NOTAG_merged.parquet"
+        # TT: "Run3_2022preEE/TT.parquet"
+    data:
+        "2016preVFP":
+          - "Run2_2016preVFP/data/DataBv1_2016preVFP_NOTAG_merged.parquet"
+          - "Run2_2016preVFP/data/DataBv2_2016preVFP_NOTAG_merged.parquet"
+          - "Run2_2016preVFP/data/DataC_2016preVFP_NOTAG_merged.parquet"
+          - "Run2_2016preVFP/data/DataD_2016preVFP_NOTAG_merged.parquet"
+          - "Run2_2016preVFP/data/DataE_2016preVFP_NOTAG_merged.parquet"
+          - "Run2_2016preVFP/data/DataF_2016preVFP_NOTAG_merged.parquet"
+        "2016postVFP":
+          - "Run2_2016postVFP/data/DataF_2016postVFP_NOTAG_merged.parquet"
+          - "Run2_2016postVFP/data/DataG_2016postVFP_NOTAG_merged.parquet"
+          - "Run2_2016postVFP/data/DataH_2016postVFP_NOTAG_merged.parquet"
+        "2017":
+          - "Run2_2017/data/DataB_2017_NOTAG_merged.parquet"
+          - "Run2_2017/data/DataC_2017_NOTAG_merged.parquet"
+          - "Run2_2017/data/DataD_2017_NOTAG_merged.parquet"
+          - "Run2_2017/data/DataE_2017_NOTAG_merged.parquet"
+          - "Run2_2017/data/DataF_2017_NOTAG_merged.parquet"
+        "2018":
+          - "Run2_2018/data/DataA_2018_NOTAG_merged.parquet"
+          - "Run2_2018/data/DataB_2018_NOTAG_merged.parquet"
+          - "Run2_2018/data/DataC_2018_NOTAG_merged.parquet"
+          - "Run2_2018/data/DataD_2018_NOTAG_merged.parquet"
+        "2022preEE":
+          - "Run3_2022/data/DataC_2022_NOTAG_merged.parquet"
+          - "Run3_2022/data/DataD_2022_NOTAG_merged.parquet"
+        "2022postEE":
+          - "Run3_2022/data/DataE_2022_NOTAG_merged.parquet"
+          - "Run3_2022/data/DataF_2022_NOTAG_merged.parquet"
+          - "Run3_2022/data/DataG_2022_NOTAG_merged.parquet"
+        "2023preBPix":
+          - "Run3_2023/data/DataCv1EG0_2023_NOTAG_merged.parquet"
+          - "Run3_2023/data/DataCv1EG1_2023_NOTAG_merged.parquet"
+          - "Run3_2023/data/DataCv2EG0_2023_NOTAG_merged.parquet"
+          - "Run3_2023/data/DataCv2EG1_2023_NOTAG_merged.parquet"
+          - "Run3_2023/data/DataCv3EG0_2023_NOTAG_merged.parquet"
+          - "Run3_2023/data/DataCv3EG1_2023_NOTAG_merged.parquet"
+          - "Run3_2023/data/DataCv4EG0_2023_NOTAG_merged.parquet"
+          - "Run3_2023/data/DataCv4EG1_2023_NOTAG_merged.parquet"
+        "2023postBPix":
+          - "Run3_2023/data/DataDv1EG0_2023_NOTAG_merged.parquet"
+          - "Run3_2023/data/DataDv1EG1_2023_NOTAG_merged.parquet"
+          - "Run3_2023/data/DataDv2EG0_2023_NOTAG_merged.parquet"
+          - "Run3_2023/data/DataDv2EG1_2023_NOTAG_merged.parquet"
+        "2024":
+          - "Run3_2024/data/Data_Run2024C_EG0_NOTAG_merged.parquet"
+          - "Run3_2024/data/Data_Run2024C_EG1_NOTAG_merged.parquet"
+          - "Run3_2024/data/Data_Run2024D_EG0_NOTAG_merged.parquet"
+          - "Run3_2024/data/Data_Run2024D_EG1_NOTAG_merged.parquet"
+          - "Run3_2024/data/Data_Run2024E_EG0_NOTAG_merged.parquet"
+          - "Run3_2024/data/Data_Run2024E_EG1_NOTAG_merged.parquet"
+          - "Run3_2024/data/Data_Run2024F_EG0_NOTAG_merged.parquet"
+          - "Run3_2024/data/Data_Run2024F_EG1_NOTAG_merged.parquet"
+          - "Run3_2024/data/Data_Run2024G_EG0_NOTAG_merged.parquet"
+          - "Run3_2024/data/Data_Run2024G_EG1_NOTAG_merged.parquet"
+          - "Run3_2024/data/Data_Run2024H_EG0_NOTAG_merged.parquet"
+          - "Run3_2024/data/Data_Run2024H_EG1_NOTAG_merged.parquet"
+          - "Run3_2024/data/Data_Run2024Iv1_EG0_NOTAG_merged.parquet"
+          - "Run3_2024/data/Data_Run2024Iv1_EG1_NOTAG_merged.parquet"
+          - "Run3_2024/data/Data_Run2024Iv2_EG0_NOTAG_merged.parquet"
+          - "Run3_2024/data/Data_Run2024Iv2_EG1_NOTAG_merged.parquet"
+        "2025":
+          - "Run3_2025/data/DataCv1_2025EG0_NOTAG_merged.parquet"
+          - "Run3_2025/data/DataCv1_2025EG1_NOTAG_merged.parquet"
+          - "Run3_2025/data/DataCv1_2025EG2_NOTAG_merged.parquet"
+          - "Run3_2025/data/DataCv1_2025EG3_NOTAG_merged.parquet"
+          - "Run3_2025/data/DataCv2_2025EG0_NOTAG_merged.parquet"
+          - "Run3_2025/data/DataCv2_2025EG1_NOTAG_merged.parquet"
+          - "Run3_2025/data/DataCv2_2025EG2_NOTAG_merged.parquet"
+          - "Run3_2025/data/DataCv2_2025EG3_NOTAG_merged.parquet"
+          - "Run3_2025/data/DataD_2025EG0_NOTAG_merged.parquet"
+          - "Run3_2025/data/DataD_2025EG1_NOTAG_merged.parquet"
+          - "Run3_2025/data/DataD_2025EG2_NOTAG_merged.parquet"
+          - "Run3_2025/data/DataD_2025EG3_NOTAG_merged.parquet"
+          - "Run3_2025/data/DataEv1_2025EG0_NOTAG_merged.parquet"
+          - "Run3_2025/data/DataEv1_2025EG1_NOTAG_merged.parquet"
+          - "Run3_2025/data/DataEv1_2025EG2_NOTAG_merged.parquet"
+          - "Run3_2025/data/DataEv1_2025EG3_NOTAG_merged.parquet"
+          - "Run3_2025/data/DataFv1_2025EG0_NOTAG_merged.parquet"
+          - "Run3_2025/data/DataFv1_2025EG1_NOTAG_merged.parquet"
+          - "Run3_2025/data/DataFv1_2025EG2_NOTAG_merged.parquet"
+          - "Run3_2025/data/DataFv1_2025EG3_NOTAG_merged.parquet"
+          - "Run3_2025/data/DataFv2_2025EG0_NOTAG_merged.parquet"
+          - "Run3_2025/data/DataFv2_2025EG1_NOTAG_merged.parquet"
+          - "Run3_2025/data/DataFv2_2025EG2_NOTAG_merged.parquet"
+          - "Run3_2025/data/DataFv2_2025EG3_NOTAG_merged.parquet"
+          - "Run3_2025/data/DataG_2025EG0_NOTAG_merged.parquet"
+          - "Run3_2025/data/DataG_2025EG1_NOTAG_merged.parquet"
+          - "Run3_2025/data/DataG_2025EG2_NOTAG_merged.parquet"
+          - "Run3_2025/data/DataG_2025EG3_NOTAG_merged.parquet"
+
+
+systematics:
+- ScaleEB2G_IJazZ_down
+- ScaleEB2G_IJazZ_up
+- ScaleEE2G_IJazZ_up
+- ScaleEE2G_IJazZ_down
+- Smearing2G_IJazZ_down
+- Smearing2G_IJazZ_up
+- jec_syst_Total_down
+- jec_syst_Total_up
+- jer_syst_down
+- jer_syst_up
+- jec_AK8_syst_Total_down
+- jec_AK8_syst_Total_up
+- jer_AK8_syst_down
+- jer_AK8_syst_up
+- FNUF_down
+- FNUF_up
+- Material_down
+- Material_up
+
+# info to save in the parquets
+save_all_columns_sim_nominal : False
+save_all_columns_data : False
+save_all_columns_sim_systematics : False
