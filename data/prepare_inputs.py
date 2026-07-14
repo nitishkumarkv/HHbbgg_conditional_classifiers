@@ -11,6 +11,7 @@ import mplhep as hep
 import matplotlib.pyplot as plt
 import pandas as pd
 import pickle
+import shutil
 import gc
 from vector import register_awkward
 register_awkward()
@@ -36,8 +37,10 @@ class PrepareInputs:
             self.weight_scheme_process = self.training_info["weight_scheme_process"]
             self.class_weight_scale = self.training_info.get("class_weight_scale", None)  # optional per-class scale factors
             self.var_prefix = self.training_info.get("var_prefix", "nonResReg")  # default to "nonResReg" for backwards compatibility
+            self.data_prep_split = self.training_info.get("data_prep_split", None)
         else:
             self.var_prefix = "nonResReg"
+            self.data_prep_split = None
         self.fill_nan = -9
 
         self.extra_vars = ["mass", "nonRes_dijet_mass", f"{self.var_prefix}_dijet_mass", f"{self.var_prefix}_dijet_mass_DNNreg", f"{self.var_prefix}_HHbbggCandidate_mass", f"{self.var_prefix}_dijet_pt", f"{self.var_prefix}_lead_bjet_pt", f"{self.var_prefix}_sublead_bjet_pt", f"{self.var_prefix}_lead_bjet_eta", f"{self.var_prefix}_DNNpair_dijet_mass", f"{self.var_prefix}_DNNpair_dijet_mass_DNNreg", f"{self.var_prefix}_lead_bjet_btagPNetB", f"{self.var_prefix}_sublead_bjet_btagPNetB", f"{self.var_prefix}_lead_bjet_btagUParTAK4B", f"{self.var_prefix}_sublead_bjet_btagUParTAK4B", "weight", "pt", "nonRes_dijet_pt", "nonRes_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "lead_eta", "lead_phi", "sublead_eta", "sublead_phi"] # "lead_genPartFlav", "sublead_genPartFlav", "weight_tot" added for sim predictions only in the dedicated functions
@@ -66,6 +69,79 @@ class PrepareInputs:
         self.save_all_columns_data = training_info["save_all_columns_data"]
         self.save_all_columns_sim_systematics = training_info["save_all_columns_sim_systematics"]
         
+
+    def _get_split_paths(self):
+        if self.data_prep_split is None:
+            return self.outpath, self.outpath
+        train_split_name = self.data_prep_split.get("train_split_name", "Train_split")
+        final_split_name = self.data_prep_split.get("final_split_name", "Final_split")
+        return f"{self.outpath}/{train_split_name}", f"{self.outpath}/{final_split_name}"
+
+
+    def _copy_training_files_to_final(self, train_path, final_path):
+        if self.data_prep_split is None:
+            return
+        os.makedirs(final_path, exist_ok=True)
+        for file_name in ["mean_std_dict.pkl", "input_vars.txt"]:
+            shutil.copy2(f"{train_path}/{file_name}", f"{final_path}/{file_name}")
+
+
+    def _data_prep_split_indices(self, n_events):
+        if self.data_prep_split is None:
+            return np.arange(n_events), None
+        from sklearn.model_selection import train_test_split
+        train_split_fraction = self._data_prep_train_split_fraction()
+        if train_split_fraction <= 0.0 or train_split_fraction >= 1.0:
+            raise ValueError("data_prep_split train_split_fraction must be between 0 and 1")
+        if n_events < 2:
+            return np.arange(n_events), np.array([], dtype=int)
+        idx = np.arange(n_events)
+        train_idx, final_idx = train_test_split(idx, train_size=train_split_fraction, shuffle=True, random_state=self.random_seed)
+        return train_idx, final_idx
+
+
+    def _data_prep_train_split_fraction(self):
+        if self.data_prep_split is None:
+            return 1.0
+        return self.data_prep_split.get("train_split_fraction", 0.5)
+
+
+    def _data_prep_split_scales(self):
+        if self.data_prep_split is None:
+            return 1.0, 1.0
+        train_fraction = self._data_prep_train_split_fraction()
+        return 1.0 / train_fraction, 1.0 / (1.0 - train_fraction)
+
+
+    def _scale_event_weights(self, events, weight_scale):
+        if events is None:
+            return None
+        if weight_scale != 1.0:
+            for field in ["rel_xsec_weight", "weight_tot"]:
+                if field in events.fields:
+                    events[field] = events[field] * weight_scale
+        return events
+
+
+    def _split_events_for_data_prep(self, events):
+        train_idx, final_idx = self._data_prep_split_indices(len(events))
+        train_weight_scale, final_weight_scale = self._data_prep_split_scales()
+        train_events = self._scale_event_weights(events[train_idx], train_weight_scale)
+        final_events = None
+        if final_idx is not None:
+            final_events = self._scale_event_weights(events[final_idx], final_weight_scale)
+        return train_events, final_events
+
+
+    def _scaled_arrow_table(self, batch, idx, weight_scale):
+        table = {}
+        for field in batch.fields:
+            values = batch[field][idx]
+            if field in ["rel_xsec_weight", "weight_tot"]:
+                values = values * weight_scale
+            table[field] = ak.to_arrow(values)
+        return pa.table(table)
+
 
     def load_vars(self, path):
         with open(path, 'r') as f:
@@ -726,10 +802,16 @@ class PrepareInputs:
 
         fill_nan = self.fill_nan
 
-        out_path = self.outpath
+        out_path, final_path = self._get_split_paths()
         os.makedirs(out_path, exist_ok=True)
 
         comb_inputs = []
+
+        vh_component_names = {
+            "WmHtoGG": "WmHtoGG_M_125",
+            "WpHtoGG": "WpHtoGG_M_125",
+            "ZHtoGG": "ZHtoGG_M_125"
+        }
 
         for era in self.training_info["samples_info"]["eras"]:
             # get the variables required for training
@@ -747,16 +829,54 @@ class PrepareInputs:
                 samples_path = self.training_info["samples_info"]["samples_path"]
                 parquet_path = self.training_info["samples_info"][era][samples]
 
-                # Load and process sample
-                events = self.load_and_process_sample(
-                    samples_path=samples_path,
-                    parquet_path=parquet_path,
-                    samples=samples,
-                    era=era,
-                    vars_to_load=vars_to_load,
-                    preselection_func=self.preselection,
-                    save_all_columns=False
-                )
+                if self.data_prep_split is not None:
+                    if isinstance(parquet_path, list):
+                        print(f"INFO: Merging {len(parquet_path)} files for {samples} in {era}")
+                        file_xsec_pairs = []
+                        for path in parquet_path:
+                            component_name = None
+                            for key in vh_component_names:
+                                if key in path:
+                                    component_name = vh_component_names[key]
+                                    break
+                            file_xsec_pairs.append((f"{samples_path}/{path}", component_name))
+                    else:
+                        file_xsec_pairs = [(f"{samples_path}/{parquet_path}", samples)]
+
+                    events_list = []
+                    for file_path, xsec_name in file_xsec_pairs:
+                        for batch in self._iter_file_batched(
+                            file_path=file_path,
+                            vars_to_load=vars_to_load,
+                            save_all_columns=False,
+                            era=era,
+                            preselection_func=self.preselection_for_pred,
+                            xsec_sample_name=xsec_name,
+                            apply_xsec_weights=True
+                        ):
+                            train_idx, _ = self._data_prep_split_indices(len(batch))
+                            train_weight_scale, _ = self._data_prep_split_scales()
+                            train_events = self._scale_event_weights(batch[train_idx], train_weight_scale)
+                            train_events = self.preselection(train_events)
+                            if len(train_events) > 0:
+                                events_list.append(train_events)
+                            del batch, train_events
+                    if not events_list:
+                        print(f"WARNING: No events survived selection for {samples} in {era}. Skipping.")
+                        continue
+                    events = ak.concatenate(events_list, axis=0)
+                    del events_list
+                else:
+                    # Load and process sample
+                    events = self.load_and_process_sample(
+                        samples_path=samples_path,
+                        parquet_path=parquet_path,
+                        samples=samples,
+                        era=era,
+                        vars_to_load=vars_to_load,
+                        preselection_func=self.preselection,
+                        save_all_columns=False
+                    )
 
                 print(f"INFO: Number of MC events in {samples} after selection for {era}: {len(events)}")
                 print(f"INFO: Sum of weight_tot in {samples} after selection for {era}: {sum(events.weight_tot)}")
@@ -773,16 +893,16 @@ class PrepareInputs:
                 events["process_number"] = self.process_numbers[samples]
 
                 # plot_correlation_matrix
-                os.makedirs(f"{out_path}/correlation_matrix/", exist_ok=True)
-                corr_out_path = f"{out_path}/correlation_matrix/{samples}_{era}.pdf"
-                self.corr_with_mgg_mjj(events, vars_for_training, corr_out_path)
+                #os.makedirs(f"{out_path}/correlation_matrix/", exist_ok=True)
+                #corr_out_path = f"{out_path}/correlation_matrix/{samples}_{era}.pdf"
+                #self.corr_with_mgg_mjj(events, vars_for_training, corr_out_path)
 
         print("INFO: Combining all the samples")
         comb_inputs = ak.concatenate(comb_inputs, axis=0)
 
-        plot_path = f"{out_path}/var_plots/"
-        os.makedirs(plot_path, exist_ok=True)
-        self.plot_variables(comb_inputs, vars_for_training, plot_path)
+        #plot_path = f"{out_path}/var_plots/"
+        #os.makedirs(plot_path, exist_ok=True)
+        #self.plot_variables(comb_inputs, vars_for_training, plot_path)
 
         for cls in self.classes:
             print("\n", f"INFO: Number of events in {cls}: {ak.sum(comb_inputs[cls])}")
@@ -891,6 +1011,8 @@ class PrepareInputs:
         with open(f"{out_path}/mean_std_dict.pkl", 'wb') as f:
             pickle.dump(mean_std_dict, f)
 
+        self._copy_training_files_to_final(out_path, final_path)
+
         return 0
     
 
@@ -898,9 +1020,12 @@ class PrepareInputs:
 
         fill_nan = self.fill_nan
         training_info = self.training_info
-        inputs_path = self.outpath
+        inputs_path, final_inputs_path = self._get_split_paths()
         out_path = f"{inputs_path}/individual_samples/"
         os.makedirs(out_path, exist_ok=True)
+        final_out_path = f"{final_inputs_path}/individual_samples/"
+        if self.data_prep_split is not None:
+            os.makedirs(final_out_path, exist_ok=True)
 
         samples_path = training_info["samples_info"]["samples_path"]
 
@@ -949,11 +1074,17 @@ class PrepareInputs:
 
                 full_path_to_save = f"{out_path}/{era}/{samples}/"
                 os.makedirs(full_path_to_save, exist_ok=True)
+                final_full_path_to_save = f"{final_out_path}/{era}/{samples}/"
+                if self.data_prep_split is not None:
+                    os.makedirs(final_full_path_to_save, exist_ok=True)
 
                 is_composite = len(file_xsec_pairs) > 1
                 X_chunks, w_chunks = [], []
+                X_chunks_final, w_chunks_final = [], []
                 parquet_writer = None   # used for single-file samples (streaming)
+                parquet_writer_final = None
                 parquet_chunks = []     # used for composite samples (schema unification)
+                parquet_chunks_final = []
 
                 for file_path, xsec_name in file_xsec_pairs:
                     for batch in self._iter_file_batched(
@@ -972,23 +1103,56 @@ class PrepareInputs:
                         w_chunks.append(ak.to_numpy(
                             ak.fill_none(batch["rel_xsec_weight"], np.nan)
                         ).astype(np.float32))
-                        arrow_table = pa.table({field: ak.to_arrow(batch[field]) for field in batch.fields})
-                        if is_composite:
-                            parquet_chunks.append(arrow_table)
-                        else:
-                            if parquet_writer is None:
-                                parquet_writer = pq.ParquetWriter(f"{full_path_to_save}/events.parquet", arrow_table.schema)
-                            parquet_writer.write_table(arrow_table)
-                        del batch, arrow_table
+                        train_idx, final_idx = self._data_prep_split_indices(len(X_chunks[-1]))
+                        train_weight_scale, final_weight_scale = self._data_prep_split_scales()
+                        X_chunks[-1] = X_chunks[-1][train_idx]
+                        w_chunks[-1] = w_chunks[-1][train_idx] * train_weight_scale
+                        split_info = [
+                            (train_idx, parquet_chunks, full_path_to_save, "train", train_weight_scale),
+                        ]
+                        if final_idx is not None:
+                            X_batch_final = np.column_stack([
+                                ak.to_numpy(ak.fill_none(batch[var], -999.0))
+                                for var in vars_for_training
+                            ]).astype(np.float32)[final_idx]
+                            w_batch_final = ak.to_numpy(
+                                ak.fill_none(batch["rel_xsec_weight"], np.nan)
+                            ).astype(np.float32)[final_idx] * final_weight_scale
+                            X_chunks_final.append(X_batch_final)
+                            w_chunks_final.append(w_batch_final)
+                            split_info.append((final_idx, parquet_chunks_final, final_full_path_to_save, "final", final_weight_scale))
+                        for idx, parquet_split_chunks, path_to_save, split_name, weight_scale in split_info:
+                            arrow_table = self._scaled_arrow_table(batch, idx, weight_scale)
+                            if is_composite:
+                                parquet_split_chunks.append(arrow_table)
+                            else:
+                                if split_name == "train":
+                                    if parquet_writer is None:
+                                        parquet_writer = pq.ParquetWriter(f"{path_to_save}/events.parquet", arrow_table.schema)
+                                    parquet_writer.write_table(arrow_table)
+                                else:
+                                    if parquet_writer_final is None:
+                                        parquet_writer_final = pq.ParquetWriter(f"{path_to_save}/events.parquet", arrow_table.schema)
+                                    parquet_writer_final.write_table(arrow_table)
+                            del arrow_table
+                        del batch
 
                 if parquet_writer is not None:
                     parquet_writer.close()
+                if parquet_writer_final is not None:
+                    parquet_writer_final.close()
                 if parquet_chunks:
                     pq.write_table(
                         pa.concat_tables(parquet_chunks, promote_options="default"),
                         f"{full_path_to_save}/events.parquet"
                     )
                     del parquet_chunks
+                if parquet_chunks_final:
+                    pq.write_table(
+                        pa.concat_tables(parquet_chunks_final, promote_options="default"),
+                        f"{final_full_path_to_save}/events.parquet"
+                    )
+                    del parquet_chunks_final
 
                 if not X_chunks:
                     print(f"WARNING: No events survived selection for {samples} in {era}. Skipping.")
@@ -1011,6 +1175,23 @@ class PrepareInputs:
                 np.save(f"{full_path_to_save}/rel_w", relative_weights)
                 del X, relative_weights, mask
 
+                if X_chunks_final:
+                    X = np.concatenate(X_chunks_final)
+                    del X_chunks_final
+                    relative_weights = np.concatenate(w_chunks_final)
+                    del w_chunks_final
+
+                    print(f"INFO: Number of events in {samples} for {era} Final_split: {len(X)}")
+
+                    mask = (X < -998.0)
+                    X[mask] = np.nan
+                    X = self.standardize(X, mean, std)
+                    X = np.nan_to_num(X, nan=fill_nan)
+
+                    np.save(f"{final_full_path_to_save}/X", X)
+                    np.save(f"{final_full_path_to_save}/rel_w", relative_weights)
+                    del X, relative_weights, mask
+
         # save the training mean ans std_dev. This will be used for standardizing data
         # (save only once at the end)
         mean_std_dict = {
@@ -1020,6 +1201,8 @@ class PrepareInputs:
         with open(f"{out_path}/mean_std_dict.pkl", 'wb') as f:
             pickle.dump(mean_std_dict, f)
 
+        self._copy_training_files_to_final(inputs_path, final_inputs_path)
+
         return 0
 
 
@@ -1027,9 +1210,12 @@ class PrepareInputs:
 
         fill_nan = self.fill_nan
         training_info = self.training_info
-        inputs_path = self.outpath
+        inputs_path, final_inputs_path = self._get_split_paths()
         out_path = f"{inputs_path}/individual_samples/"
         os.makedirs(out_path, exist_ok=True)
+        final_out_path = f"{final_inputs_path}/individual_samples/"
+        if self.data_prep_split is not None:
+            os.makedirs(final_out_path, exist_ok=True)
 
         samples_path = training_info["samples_info"]["samples_path"]
 
@@ -1093,11 +1279,17 @@ class PrepareInputs:
 
                     full_path_to_save = f"{out_path}/{era}/{samples}/{sys}/"
                     os.makedirs(full_path_to_save, exist_ok=True)
+                    final_full_path_to_save = f"{final_out_path}/{era}/{samples}/{sys}/"
+                    if self.data_prep_split is not None:
+                        os.makedirs(final_full_path_to_save, exist_ok=True)
 
                     is_composite = len(file_xsec_pairs) > 1
                     X_chunks, w_chunks = [], []
+                    X_chunks_final, w_chunks_final = [], []
                     parquet_writer = None   # used for single-file samples (streaming)
+                    parquet_writer_final = None
                     parquet_chunks = []     # used for composite samples (schema unification)
+                    parquet_chunks_final = []
 
                     for file_path, xsec_name in file_xsec_pairs:
                         for batch in self._iter_file_batched(
@@ -1116,23 +1308,56 @@ class PrepareInputs:
                             w_chunks.append(ak.to_numpy(
                                 ak.fill_none(batch["rel_xsec_weight"], np.nan)
                             ).astype(np.float32))
-                            arrow_table = pa.table({field: ak.to_arrow(batch[field]) for field in batch.fields})
-                            if is_composite:
-                                parquet_chunks.append(arrow_table)
-                            else:
-                                if parquet_writer is None:
-                                    parquet_writer = pq.ParquetWriter(f"{full_path_to_save}/events.parquet", arrow_table.schema)
-                                parquet_writer.write_table(arrow_table)
-                            del batch, arrow_table
+                            train_idx, final_idx = self._data_prep_split_indices(len(X_chunks[-1]))
+                            train_weight_scale, final_weight_scale = self._data_prep_split_scales()
+                            X_chunks[-1] = X_chunks[-1][train_idx]
+                            w_chunks[-1] = w_chunks[-1][train_idx] * train_weight_scale
+                            split_info = [
+                                (train_idx, parquet_chunks, full_path_to_save, "train", train_weight_scale),
+                            ]
+                            if final_idx is not None:
+                                X_batch_final = np.column_stack([
+                                    ak.to_numpy(ak.fill_none(batch[var], -999.0))
+                                    for var in vars_for_training
+                                ]).astype(np.float32)[final_idx]
+                                w_batch_final = ak.to_numpy(
+                                    ak.fill_none(batch["rel_xsec_weight"], np.nan)
+                                ).astype(np.float32)[final_idx] * final_weight_scale
+                                X_chunks_final.append(X_batch_final)
+                                w_chunks_final.append(w_batch_final)
+                                split_info.append((final_idx, parquet_chunks_final, final_full_path_to_save, "final", final_weight_scale))
+                            for idx, parquet_split_chunks, path_to_save, split_name, weight_scale in split_info:
+                                arrow_table = self._scaled_arrow_table(batch, idx, weight_scale)
+                                if is_composite:
+                                    parquet_split_chunks.append(arrow_table)
+                                else:
+                                    if split_name == "train":
+                                        if parquet_writer is None:
+                                            parquet_writer = pq.ParquetWriter(f"{path_to_save}/events.parquet", arrow_table.schema)
+                                        parquet_writer.write_table(arrow_table)
+                                    else:
+                                        if parquet_writer_final is None:
+                                            parquet_writer_final = pq.ParquetWriter(f"{path_to_save}/events.parquet", arrow_table.schema)
+                                        parquet_writer_final.write_table(arrow_table)
+                                del arrow_table
+                            del batch
 
                     if parquet_writer is not None:
                         parquet_writer.close()
+                    if parquet_writer_final is not None:
+                        parquet_writer_final.close()
                     if parquet_chunks:
                         pq.write_table(
                             pa.concat_tables(parquet_chunks, promote_options="default"),
                             f"{full_path_to_save}/events.parquet"
                         )
                         del parquet_chunks
+                    if parquet_chunks_final:
+                        pq.write_table(
+                            pa.concat_tables(parquet_chunks_final, promote_options="default"),
+                            f"{final_full_path_to_save}/events.parquet"
+                        )
+                        del parquet_chunks_final
 
                     if not X_chunks:
                         print(f"WARNING: No events survived selection for {samples} in {era} for {sys}. Skipping.")
@@ -1154,6 +1379,23 @@ class PrepareInputs:
                     np.save(f"{full_path_to_save}/rel_w", relative_weights)
                     del X, relative_weights, mask
 
+                    if X_chunks_final:
+                        X = np.concatenate(X_chunks_final)
+                        del X_chunks_final
+                        relative_weights = np.concatenate(w_chunks_final)
+                        del w_chunks_final
+
+                        print(f"INFO: Number of events in {samples} for {era} for {sys} Final_split: {len(X)}")
+
+                        mask = (X < -998.0)
+                        X[mask] = np.nan
+                        X = self.standardize(X, mean, std)
+                        X = np.nan_to_num(X, nan=fill_nan)
+
+                        np.save(f"{final_full_path_to_save}/X", X)
+                        np.save(f"{final_full_path_to_save}/rel_w", relative_weights)
+                        del X, relative_weights, mask
+
         # save the training mean ans std_dev. This will be used for standardizing data
         # (save only once at the end)
         mean_std_dict = {
@@ -1163,6 +1405,8 @@ class PrepareInputs:
         with open(f"{out_path}/mean_std_dict.pkl", 'wb') as f:
             pickle.dump(mean_std_dict, f)
 
+        self._copy_training_files_to_final(inputs_path, final_inputs_path)
+
         return 0
     
 
@@ -1170,8 +1414,10 @@ class PrepareInputs:
 
         fill_nan = self.fill_nan
         training_info = self.training_info
-        inputs_path = self.outpath
+        inputs_path, final_inputs_path = self._get_split_paths()
         out_path = f"{inputs_path}/individual_samples_data/"
+        if self.data_prep_split is not None:
+            out_path = f"{final_inputs_path}/individual_samples_data/"
         os.makedirs(out_path, exist_ok=True)
 
         samples_path = training_info["samples_info"]["samples_path"]

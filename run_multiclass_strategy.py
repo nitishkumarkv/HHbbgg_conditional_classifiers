@@ -53,51 +53,57 @@ def perform_training(args):
         training_config = yaml.safe_load(f)
 
     do_random_search = training_config["do_random_search"]
+    data_prep_split = training_config.get("data_prep_split", None)
+    train_out_path = out_path
+    final_out_path = out_path
+    if data_prep_split is not None:
+        train_out_path = f"{out_path}/{data_prep_split.get('train_split_name', 'Train_split')}"
+        final_out_path = f"{out_path}/{data_prep_split.get('final_split_name', 'Final_split')}"
 
     # do random search
     if do_random_search:
         print('INFO: Performing random search')
-        subprocess.run(f"python3 models/random_search.py --input_path {out_path} --training_config_path {training_config_path}", shell=True)        
+        subprocess.run(f"python3 models/random_search.py --input_path {train_out_path} --training_config_path {training_config_path}", shell=True)
 
     # perform trainging
     if args.train_best_model:
         print('INFO: Training the best model')
-        subprocess.run(f"python3 models/training_utils.py --input_path {out_path} --training_config_path {training_config_path}", shell=True)
+        subprocess.run(f"python3 models/training_utils.py --input_path {train_out_path} --training_config_path {training_config_path}", shell=True)
 
     # plot the training results
     if args.plot_training_results:
         print('INFO: Getting the results plots')
-        subprocess.run(f"python3 models/mlp_plotter.py --input_path {out_path} --config_path {config_path}/training_config.yaml", shell=True)
+        subprocess.run(f"python3 models/mlp_plotter.py --input_path {train_out_path} --config_path {config_path}/training_config.yaml", shell=True)
         
     # get permutaion importance
     if args.get_permutation_importance:
         print('INFO: Getting permutation importance')
-        subprocess.run(f"python3 models/permutation_importance.py --input_path {out_path}", shell=True)
+        subprocess.run(f"python3 models/permutation_importance.py --input_path {train_out_path}", shell=True)
     
     # get the predictions
     if args.get_predictions:
         print('INFO: Getting the predictions nominal')
-        subprocess.run(f"python3 models/get_prediction.py --model_folder {out_path}/after_random_search_best1/ --samples_path {out_path} --config_path {config_path} --get_pred_nominal", shell=True)
+        subprocess.run(f"python3 models/get_prediction.py --model_folder {train_out_path}/after_random_search_best1/ --samples_path {final_out_path} --config_path {config_path} --get_pred_nominal", shell=True)
 
     # get the predictions for systematics
     if args.get_predictions_sys:
         print('INFO: Getting the predictions systematics')
-        subprocess.run(f"python3 models/get_prediction.py --model_folder {out_path}/after_random_search_best1/ --samples_path {out_path} --config_path {config_path} --get_pred_sys", shell=True)
+        subprocess.run(f"python3 models/get_prediction.py --model_folder {train_out_path}/after_random_search_best1/ --samples_path {final_out_path} --config_path {config_path} --get_pred_sys", shell=True)
 
     # get non resonant mass for different ggFHH score cuts
     if args.test_mass_sculpting:
         print('INFO: Getting non resonant mass for different ggFHH score cuts')
-        subprocess.run(f"python3 utils/test_cor_mass.py --input_path {out_path} --config_path {config_path}", shell=True)
+        subprocess.run(f"python3 utils/test_cor_mass.py --input_path {final_out_path} --config_path {config_path}", shell=True)
 
     # get the predictions for data
     if args.get_data_mc_plots:
         print('INFO: Getting data-MC plots')
-        subprocess.run(f"python3 utils/plotting_utils.py --base-path {out_path} --training_config_path {training_config_path}", shell=True)
+        subprocess.run(f"python3 utils/plotting_utils.py --base-path {out_path} --training_config_path {training_config_path} --split final", shell=True)
 
     # get score shapes for different kl samples
     if args.get_score_shape_diff_kl:
         print('INFO: Getting score shape differences')
-        subprocess.run(f"python3 utils/score_shape_diff_kl.py --folder {out_path}/individual_samples/", shell=True)
+        subprocess.run(f"python3 utils/score_shape_diff_kl.py --folder {final_out_path}/individual_samples/", shell=True)
 
 def perform_categorisation(args):
     pass
