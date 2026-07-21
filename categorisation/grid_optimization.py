@@ -33,6 +33,7 @@ import os
 import sys
 import time
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import awkward as ak
 import matplotlib.pyplot as plt
@@ -54,11 +55,11 @@ import pandas as pd
 
 # -- Mass window definitions ----------------------------------------------
 MASS_LEFT_SB = (100.0, 120.0)
-MASS_SR = (122.5, 127.0)
+MASS_SR = (120, 130)
 MASS_RIGHT_SB = (130.0, 180.0)
 
 _WIDTH_L = MASS_LEFT_SB[1] - MASS_LEFT_SB[0]  # 20.0
-_WIDTH_SR = MASS_SR[1] - MASS_SR[0]  # 4.5
+_WIDTH_SR = MASS_SR[1] - MASS_SR[0]  # 10.0
 _WIDTH_R = MASS_RIGHT_SB[1] - MASS_RIGHT_SB[0]
 _CENTROID_L = 0.5 * (MASS_LEFT_SB[0] + MASS_LEFT_SB[1])  # 110.0
 _CENTROID_SR = 0.5 * (MASS_SR[0] + MASS_SR[1])  # 124.75
@@ -156,6 +157,9 @@ class GridSearchCategorizer:
         self.vbfhh_sideband_threshold = vbfhh_sideband_threshold
         self.vbfhh_n_categories = vbfhh_n_categories
         self.vbf_thresholds = vbf_thresholds
+        self.vbf_2d_scan = False
+        self.vbfhh_nonres_threshold = None
+        self.skip_grid_search = False
 
         # -- Pre-selection flags --------------------------------------
         self.apply_preselection = True
@@ -229,11 +233,9 @@ class GridSearchCategorizer:
         Makes one contiguous reversed copy then cumsums forward on
         contiguous memory (much faster than repeated np.flip calls).
         """
-        # One contiguous reversed copy, then forward cumsum on dense memory
         rev = np.ascontiguousarray(hist[::-1, ::-1, ::-1])
         for axis in range(hist.ndim):
-            rev = np.cumsum(rev, axis=axis)
-        # Reverse view back - O(1), no copy
+            np.cumsum(rev, axis=axis, out=rev)
         return rev[::-1, ::-1, ::-1]
 
     @staticmethod
@@ -469,168 +471,144 @@ class GridSearchCategorizer:
     #  PHASE 1: COARSE GRID HISTOGRAMS + EVALUATION
     # ----------------------------------------------------------------------
 
-    def _build_coarse_histograms(self):
-        """Build 3D weighted histograms (n_bins X n_bins X n_bins).
+    @staticmethod
+    def _build_3d_hists(scores, weights, bins, configs):
+        """Build multiple 3D histograms from pre-computed bins and configs.
 
-        Uses transformed scores: [1-nonRes, 1-Res, ggHH].
-        After transformation, ALL cuts are '>' (larger is better).
-        Histogram axes: dim0=nonRes_inv, dim1=Res_inv, dim2=ggHH.
+        scores: (N, 3) array
+        weights: (N,) array
+        bins: list of 3 edge arrays
+        configs: list of (key, mask, use_weights)
 
-        Histograms built (key -> content):
-          'sig_SR'          -> signal weight in SR
-          'interp_LSB'      -> interp-sample bkg weight in left SB
-          'interp_RSB'      -> interp-sample bkg weight in right SB
-          'noninterp_SR'    -> non-interp bkg weight in SR
-          'bkg_sideband'    -> bkg weight in sidebands (excl. Data, for constraints)
+        Returns: dict of {key: 3D histogram}
         """
-        n_bins = self.n_coarse_bins
-        # Adaptive bin ranges: bg_inv scores in [0, 1], sig in [0.8, 1.0]
-        bin_range = [[0.0, 1.0], [0.0, 1.0], [0.0, 1.0]]
-        bins = [n_bins, n_bins, n_bins]
+        n0, n1, n2 = [len(b) - 1 for b in bins]
+        shape = (n0, n1, n2)
+        total_cells = n0 * n1 * n2
 
-        # Build boolean masks for efficient slicing
-        in_LSB = (self.mass_all >= MASS_LEFT_SB[0]) & (self.mass_all < MASS_LEFT_SB[1])
-        in_SR = (self.mass_all >= MASS_SR[0]) & (self.mass_all < MASS_SR[1])
-        in_RSB = (self.mass_all >= MASS_RIGHT_SB[0]) & (self.mass_all < MASS_RIGHT_SB[1])
+        idx0 = np.searchsorted(bins[0], scores[:, 0], side='right') - 1
+        idx1 = np.searchsorted(bins[1], scores[:, 1], side='right') - 1
+        idx2 = np.searchsorted(bins[2], scores[:, 2], side='right') - 1
+        in_range = (idx0 >= 0) & (idx0 < n0) & (idx1 >= 0) & (idx1 < n1) & (idx2 >= 0) & (idx2 < n2)
+        idx0 = np.clip(idx0, 0, n0 - 1)
+        idx1 = np.clip(idx1, 0, n1 - 1)
+        idx2 = np.clip(idx2, 0, n2 - 1)
+        linear_idx = idx0 * n1 * n2 + idx1 * n2 + idx2
+
+        weights_f32 = weights.astype(np.float32) if weights is not None else None
+
+        result = {}
+        for key, mask, use_weights in configs:
+            m = mask & in_range
+            if m.sum() == 0:
+                result[key] = np.zeros(shape, dtype=np.float32)
+            else:
+                h = np.bincount(linear_idx[m],
+                                weights=weights_f32[m] if use_weights else None,
+                                minlength=total_cells)
+                if not use_weights:
+                    h = h.astype(np.float32)
+                result[key] = h.reshape(shape)
+        return result
+
+    def _build_histograms(self, scores, weights, masses, labels, samples, bin_edges=None):
+        n_bins = self.n_coarse_bins
+        bin_range = [[0.0, 1.0], [0.0, 1.0], [0.0, 1.0]]
+        if bin_edges is not None:
+            bins = bin_edges
+        else:
+            bins = [np.linspace(r[0], r[1], n_bins + 1) for r in bin_range]
+
+        # Mass-region masks
+        in_LSB = (masses >= MASS_LEFT_SB[0]) & (masses < MASS_LEFT_SB[1])
+        in_SR = (masses >= MASS_SR[0]) & (masses < MASS_SR[1])
+        in_RSB = (masses >= MASS_RIGHT_SB[0]) & (masses < MASS_RIGHT_SB[1])
         in_sideband = in_LSB | in_RSB
 
-        is_signal = self.labels_all == 1
-        is_bkg = self.labels_all == 0
-        is_data = self.samples_all == "Data"
-        is_interp = np.isin(self.samples_all, list(INTERP_SAMPLES))
-        is_noninterp_bkg = np.isin(self.samples_all, self.bkg_samples) & ~is_interp
+        # Event type masks
+        is_signal = labels == 1
+        is_bkg = labels == 0
+        is_data = samples == "Data"
+        is_interp = np.isin(samples, list(INTERP_SAMPLES))
+        is_noninterp_bkg = np.isin(samples, self.bkg_samples) & ~is_interp
 
-        # Use transformed scores: [nonRes_inv, Res_inv, ggHH]
-        scores_3d = self.scores_trans[:, [0, 1, 2]]
-        weights = self.weights_all
+        hist_configs = [
+            ("sig_SR", is_signal & in_SR, True),
+            ("interp_LSB", is_interp & in_LSB, True),
+            ("interp_RSB", is_interp & in_RSB, True),
+            ("noninterp_SR", is_noninterp_bkg & in_SR, True),
+            ("bkg_sideband", is_bkg & ~is_data & in_sideband, True),
+            ("data_LSB", is_data & in_LSB, True),
+            ("data_RSB", is_data & in_RSB, True),
+            ("count", ~is_data, False),
+        ]
 
+        hist_dict = self._build_3d_hists(scores, weights, bins, hist_configs)
+
+        l=""
+        for k,m,_ in hist_configs:
+            i=f"{k}: {m.sum():,} events"
+            if l and len(l)+1+len(i)>120:print(l);l="  "+i
+            else:l+=(" "if l else"  ")+i
+        if l:print(l)
+
+        return hist_dict, bins
+
+    def _histogram_helper(self, mask = None, bin_edges = None):
+        """Helper to build histograms for a subset of events."""
+        if mask is None:
+            mask = np.ones(len(self.scores_trans), dtype=bool)
+        hist_dict, edges = self._build_histograms(
+            scores=self.scores_trans[mask][:, [0, 1, 2]],
+            weights=self.weights_all[mask],
+            masses=self.mass_all[mask],
+            labels=self.labels_all[mask],
+            samples=self.samples_all[mask],
+            bin_edges=bin_edges,
+        )
+        return hist_dict, edges
+    
+    def _histogram_modifier(self, A, B, action="subtract"):
+        """Modify histogram A by adding/subtracting histogram B in-place."""
+        if action == "subtract":
+            for key in B:
+                A[key] -= B[key]
+        elif action == "add":
+            for key in B:
+                A[key] += B[key]
+        else:
+            raise ValueError(f"Unknown action: {action}")
+        return A
+
+    def _build_coarse_histograms(self):
+        """Build 3D weighted histograms from scratch."""
+        n_bins = self.n_coarse_bins
         print(f"[Phase 1] Building 3D histograms ({n_bins}^3 = {n_bins**3:,} cells) ...")
-        print(f"  Axes: nonRes_inv in {bin_range[0]}, Res_inv in {bin_range[1]}, ggHH in {bin_range[2]}")
+        print(f"  Axes: nonRes_inv in [0.0, 1.0], Res_inv in [0.0, 1.0], ggHH in [0.0, 1.0]")
         t0 = time.time()
-
-        # -- H_sig_SR --
-        mask = is_signal & in_SR
-        print(f"  sig_SR: {mask.sum():,} events")
-        H_sig_SR, self.coarse_edges = np.histogramdd(
-            scores_3d[mask], bins=bins, range=bin_range, weights=weights[mask]
-        )
-
-        # -- H_interp_LSB --
-        mask = is_interp & in_LSB
-        print(f"  interp_LSB: {mask.sum():,} events")
-        H_interp_LSB, _ = np.histogramdd(
-            scores_3d[mask], bins=bins, range=bin_range, weights=weights[mask]
-        )
-
-        # -- H_interp_RSB --
-        mask = is_interp & in_RSB
-        print(f"  interp_RSB: {mask.sum():,} events")
-        H_interp_RSB, _ = np.histogramdd(
-            scores_3d[mask], bins=bins, range=bin_range, weights=weights[mask]
-        )
-
-        # -- H_noninterp_SR --
-        mask = is_noninterp_bkg & in_SR
-        print(f"  noninterp_SR: {mask.sum():,} events")
-        H_noninterp_SR, _ = np.histogramdd(
-            scores_3d[mask], bins=bins, range=bin_range, weights=weights[mask]
-        )
-
-        # -- H_bkg_sideband -- (exclude Data, as in original code)
-        mask = is_bkg & ~is_data & in_sideband
-        print(f"  bkg_sideband: {mask.sum():,} events")
-        H_bkg_sideband, _ = np.histogramdd(
-            scores_3d[mask], bins=bins, range=bin_range, weights=weights[mask]
-        )
-
-        # -- H_data_LSB / H_data_RSB -- split sideband for SB ratio constraint
-        mask_L = is_data & in_LSB
-        print(f"  data_LSB: {mask_L.sum():,} events")
-        H_data_LSB, _ = np.histogramdd(
-            scores_3d[mask_L], bins=bins, range=bin_range, weights=weights[mask_L]
-        )
-        mask_R = is_data & in_RSB
-        print(f"  data_RSB: {mask_R.sum():,} events")
-        H_data_RSB, _ = np.histogramdd(
-            scores_3d[mask_R], bins=bins, range=bin_range, weights=weights[mask_R]
-        )
-
-        # Event COUNT histogram (unweighted) for per-bin event retrieval
-        mask = ~is_data # should not include Data for counting either
-        H_count, _ = np.histogramdd(scores_3d[mask], bins=bins, range=bin_range)
-
-        self.coarse_histograms = {
-            "sig_SR": H_sig_SR,
-            "interp_LSB": H_interp_LSB,
-            "interp_RSB": H_interp_RSB,
-            "noninterp_SR": H_noninterp_SR,
-            "bkg_sideband": H_bkg_sideband,
-            "data_LSB": H_data_LSB,
-            "data_RSB": H_data_RSB,
-            "count": H_count,
-        }
-
+        
+        # Build histograms from all events
+        hist_dict, edges = self._histogram_helper(mask=None, bin_edges=None)
+        
+        self.coarse_histograms = hist_dict
+        self.coarse_edges = edges
+        
         dt = time.time() - t0
         print(f"[Phase 1] Histograms built in {dt:.1f}s")
 
     def _subtract_removed_events(self, mask):
         """Incrementally subtract removed events from existing histograms.
-
-        Builds histograms only for the masked subset (typically << total),
-        then subtracts them from self.coarse_histograms in-place.
-        Much faster than rebuilding all histograms from scratch.
-        The raw arrays (scores, weights, masses, etc.) must NOT have been
-        trimmed yet when this is called.
+        
+        Builds histograms only for the masked subset, then subtracts them
+        from self.coarse_histograms in-place.
         """
-        n_bins = self.n_coarse_bins
-        # Use existing coarse_edges for exact bin alignment
-        bins = self.coarse_edges
-
-        # Slice to masked events
-        s3d = self.scores_trans[mask][:, [0, 1, 2]]
-        w_sub = self.weights_all[mask]
-        m_sub = self.mass_all[mask]
-        l_sub = self.labels_all[mask]
-        sp_sub = self.samples_all[mask]
-
-        # Mass-region masks
-        in_LSB = (m_sub >= MASS_LEFT_SB[0]) & (m_sub < MASS_LEFT_SB[1])
-        in_SR = (m_sub >= MASS_SR[0]) & (m_sub < MASS_SR[1])
-        in_RSB = (m_sub >= MASS_RIGHT_SB[0]) & (m_sub < MASS_RIGHT_SB[1])
-        in_sideband = in_LSB | in_RSB
-
-        is_signal = l_sub == 1
-        is_bkg = l_sub == 0
-        is_data = sp_sub == "Data"
-        is_interp = np.isin(sp_sub, list(INTERP_SAMPLES))
-        is_noninterp_bkg = np.isin(sp_sub, self.bkg_samples) & ~is_interp
-
-        # -- Build and subtract each layer -----------------------------
+        # Build histograms for removed events using existing bin edges
+        removed_hists, _ = self._histogram_helper(mask=mask, bin_edges=self.coarse_edges)
+        
+        # Subtract in-place
         H = self.coarse_histograms
-
-        m = is_signal & in_SR
-        H["sig_SR"] -= np.histogramdd(s3d[m], bins=bins, weights=w_sub[m])[0]
-
-        m = is_interp & in_LSB
-        H["interp_LSB"] -= np.histogramdd(s3d[m], bins=bins, weights=w_sub[m])[0]
-
-        m = is_interp & in_RSB
-        H["interp_RSB"] -= np.histogramdd(s3d[m], bins=bins, weights=w_sub[m])[0]
-
-        m = is_noninterp_bkg & in_SR
-        H["noninterp_SR"] -= np.histogramdd(s3d[m], bins=bins, weights=w_sub[m])[0]
-
-        m = is_bkg & ~is_data & in_sideband
-        H["bkg_sideband"] -= np.histogramdd(s3d[m], bins=bins, weights=w_sub[m])[0]
-
-        m = is_data & in_LSB
-        H["data_LSB"] -= np.histogramdd(s3d[m], bins=bins, weights=w_sub[m])[0]
-
-        m = is_data & in_RSB
-        H["data_RSB"] -= np.histogramdd(s3d[m], bins=bins, weights=w_sub[m])[0]
-
-        m = ~is_data
-        H["count"] -= np.histogramdd(s3d[m], bins=bins)[0]
+        H = self._histogram_modifier(H, removed_hists, action="subtract")
+        self.coarse_histograms = H
 
     def _compute_coarse_cumsums(self):
         """Compute 3D reverse cumulative sums (survival function).
@@ -646,20 +624,27 @@ class GridSearchCategorizer:
         C = {}
 
         # Merge: bkg_SR = COEFF_L * interp_LSB + COEFF_R * interp_RSB + noninterp_SR
-        H_bkg_SR = (COEFF_L * H["interp_LSB"]
-                    + COEFF_R * H["interp_RSB"]
+        cL = np.float32(COEFF_L)
+        cR = np.float32(COEFF_R)
+        H_bkg_SR = (cL * H["interp_LSB"]
+                    + cR * H["interp_RSB"]
                     + H["noninterp_SR"])
 
-        # Compute cumsums only for the 4 independent layers
-        for key, data in [
+        # Parallel cumsums for the 6 independent layers
+        items = [
             ("sig_SR", H["sig_SR"]),
             ("bkg_SR", H_bkg_SR),
             ("bkg_sideband", H["bkg_sideband"]),
             ("data_LSB", H["data_LSB"]),
             ("data_RSB", H["data_RSB"]),
             ("count", H["count"]),
-        ]:
-            C[key] = self._compute_reverse_cumsum(data)
+        ]
+        n_workers = min(4, len(items))
+        with ThreadPoolExecutor(max_workers=n_workers) as ex:
+            fut_to_key = {ex.submit(self._compute_reverse_cumsum, data): key
+                          for key, data in items}
+            for f in as_completed(fut_to_key):
+                C[fut_to_key[f]] = f.result()
 
         self.coarse_cumsums = C
         dt = time.time() - t0
@@ -716,10 +701,13 @@ class GridSearchCategorizer:
             & (C["bkg_sideband"] >= self.side_band_threshold_low)
         )
         if self.require_sb_ratio:
+            _sb_ratio = np.divide(C["data_RSB"], C["data_LSB"],
+                                  out=np.full_like(C["data_RSB"], np.inf),
+                                  where=C["data_LSB"] > 0)
             candidate = (
                 candidate
                 & (C["data_LSB"] > 0)
-                & (C["data_RSB"] / C["data_LSB"] < _WIDTH_R / _WIDTH_L)
+                & (_sb_ratio < _WIDTH_R / _WIDTH_L)
             )
         idx = np.where(candidate)
         n_cand = len(idx[0])
@@ -737,7 +725,7 @@ class GridSearchCategorizer:
         # -- Compute B_total and Z only for candidate cells -------------
         S_cand = C["sig_SR"][idx]
         B_side_cand = C["bkg_sideband"][idx]
-        B_total_cand = np.maximum(C["bkg_SR"][idx], 1e-9)
+        B_total_cand = np.maximum(C["bkg_SR"][idx], np.float32(1e-9))
 
         with np.errstate(invalid="ignore", divide="ignore"):
             Z_cand = np.sqrt(
@@ -911,27 +899,18 @@ class GridSearchCategorizer:
 
         bins_3d = [fine_edges[0], fine_edges[1], fine_edges[2]]
 
-        # -- Build 3D histograms ---------------------------------------
-        m = is_signal & in_SR
-        H_sig, _ = np.histogramdd(r_s3d[m], bins=bins_3d, weights=r_w[m])
-
-        m = is_interp & in_LSB
-        H_il, _ = np.histogramdd(r_s3d[m], bins=bins_3d, weights=r_w[m])
-
-        m = is_interp & in_RSB
-        H_ir, _ = np.histogramdd(r_s3d[m], bins=bins_3d, weights=r_w[m])
-
-        m = is_noninterp_bkg & in_SR
-        H_ni, _ = np.histogramdd(r_s3d[m], bins=bins_3d, weights=r_w[m])
-
-        m = is_bkg & ~is_data & in_sideband
-        H_bs, _ = np.histogramdd(r_s3d[m], bins=bins_3d, weights=r_w[m])
-
-        # -- Split sideband for SB ratio constraint --
-        m = is_data & in_LSB
-        H_bs_L, _ = np.histogramdd(r_s3d[m], bins=bins_3d, weights=r_w[m])
-        m = is_data & in_RSB
-        H_bs_R, _ = np.histogramdd(r_s3d[m], bins=bins_3d, weights=r_w[m])
+        fine_configs = [
+            ("sig", is_signal & in_SR, True),
+            ("il", is_interp & in_LSB, True),
+            ("ir", is_interp & in_RSB, True),
+            ("ni", is_noninterp_bkg & in_SR, True),
+            ("bs", is_bkg & ~is_data & in_sideband, True),
+            ("bs_L", is_data & in_LSB, True),
+            ("bs_R", is_data & in_RSB, True),
+        ]
+        H = self._build_3d_hists(r_s3d, r_w, bins_3d, fine_configs)
+        H_sig, H_il, H_ir, H_ni, H_bs, H_bs_L, H_bs_R = \
+            [H[k] for k in ("sig", "il", "ir", "ni", "bs", "bs_L", "bs_R")]
 
         # -- Reverse cumulative sums (survival function) ---------------
         C_sig = self._compute_reverse_cumsum(H_sig)
@@ -948,16 +927,21 @@ class GridSearchCategorizer:
 
         # -- Vectorized Z evaluation over all (n_ft)^3 combos ----------
         S = C_sig
-        B_interp = COEFF_L * C_il + COEFF_R * C_ir
-        B = np.maximum(B_interp + C_ni, 1e-9)
+        cL = np.float32(COEFF_L)
+        cR = np.float32(COEFF_R)
+        B_interp = cL * C_il + cR * C_ir
+        B = np.maximum(B_interp + C_ni, np.float32(1e-9))
         B_side = C_bs
 
         valid_mask = (S > 0) & (B_side >= sb_min) & (B_side <= sb_max)
         if self.require_sb_ratio:
+            _sb_ratio = np.divide(C_bs_R, C_bs_L,
+                                  out=np.full_like(C_bs_R, np.inf),
+                                  where=C_bs_L > 0)
             valid_mask = (
                 valid_mask
                 & (C_bs_L > 0)
-                & (C_bs_R / C_bs_L < _WIDTH_R / _WIDTH_L)
+                & (_sb_ratio < _WIDTH_R / _WIDTH_L)
             )
         with np.errstate(invalid="ignore", divide="ignore"):
             Z = np.where(
@@ -1054,6 +1038,7 @@ class GridSearchCategorizer:
 
             # -- Fine histogram scan on populated bins -----------------
             best_result = None
+            best_coarse_indices = None
 
             if n_with > 0:
                 if n_with > 100:
@@ -1063,67 +1048,66 @@ class GridSearchCategorizer:
                 print(f"  Fine-scanning {n_with} populated bins "
                       f"(n_fine_bins={self.n_fine_bins}, "
                       f"{(self.n_fine_bins+1)**3:,} combos/bin) ...")
-                n_scanned = 0
-                for rec in valid_with_events:
-                    i0, i1, i2 = int(rec["i0"]), int(rec["i1"]), int(rec["i2"])
+                n_workers = min(8, n_with)
+                with ThreadPoolExecutor(max_workers=n_workers) as ex:
+                    _submits = {}
+                    for rec in valid_with_events:
+                        i0, i1, i2 = int(rec["i0"]), int(rec["i1"]), int(rec["i2"])
+                        f = ex.submit(self._fine_histogram_scan, i0, i1, i2, cat)
+                        _submits[f] = (rec, i0, i1, i2)
 
-                    fine = self._fine_histogram_scan(i0, i1, i2, cat)
+                    n_scanned = 0
+                    for f in as_completed(_submits):
+                        n_scanned += 1
+                        fine = f.result()
+                        rec, i0, i1, i2 = _submits[f]
+                        if fine is not None:
+                            th_nonRes, th_Res, th_ggHH = \
+                                self._trans_thresholds_to_original(
+                                    fine["th_inv0"], fine["th_inv1"], fine["th_sig"])
+                            fine["th_nonRes"] = th_nonRes
+                            fine["th_Res"] = th_Res
+                            fine["th_ggHH"] = th_ggHH
+                            fine["coarse_Z"] = float(rec["Z"])
 
-                    n_scanned += 1
-                    if fine is not None:
-                        th_nonRes, th_Res, th_ggHH = \
-                            self._trans_thresholds_to_original(
-                                fine["th_inv0"], fine["th_inv1"], fine["th_sig"])
-                        fine["th_nonRes"] = th_nonRes
-                        fine["th_Res"] = th_Res
-                        fine["th_ggHH"] = th_ggHH
-                        fine["coarse_Z"] = float(rec["Z"])
-
-                        if best_result is None or fine["Z"] > best_result["Z"]:
-                            best_result = fine
-
-                    if n_scanned % 100 == 0:
-                        print(f"    ... {n_scanned}/{n_with} scanned, "
-                              f"best Z={best_result['Z'] if best_result else 0:.4f}")
+                            if best_result is None or fine["Z"] > best_result["Z"]:
+                                best_result = fine
+                                best_coarse_indices = (i0, i1, i2)
+                        if n_scanned % 25 == 0 or n_scanned == len(_submits):
+                            print(f"    ... {n_scanned}/{len(_submits)} scanned, "
+                                  f"best Z={best_result['Z'] if best_result else 0:.4f}")
 
             # Fall back to best empty bin if no fine result
-            if best_result is None and n_empty > 0:
-                best_coarse = valid_empty[0]  # sorted by Z descending
-                th0, th1, th2 = self._indices_to_thresholds(
-                    int(best_coarse["i0"]), int(best_coarse["i1"]),
-                    int(best_coarse["i2"]))
-                th_nonRes, th_Res, th_ggHH = \
-                    self._trans_thresholds_to_original(th0, th1, th2)
-                best_result = {
-                    "th_inv0": th0, "th_inv1": th1, "th_sig": th2,
-                    "th_nonRes": th_nonRes, "th_Res": th_Res,
-                    "th_ggHH": th_ggHH,
-                    "Z": float(best_coarse["Z"]),
-                    "s": float(best_coarse["s"]),
-                    "b": float(best_coarse["b"]),
-                    "b_side": float(best_coarse["b_side"]),
-                    "source": "coarse-empty",
-                }
-            elif best_result is None and n_with > 0:
-                # Fine scanned all populated bins but none valid -
-                # take best coarse among them
-                best_coarse = valid_with_events[0]
-                th0, th1, th2 = self._indices_to_thresholds(
-                    int(best_coarse["i0"]), int(best_coarse["i1"]),
-                    int(best_coarse["i2"]))
-                th_nonRes, th_Res, th_ggHH = \
-                    self._trans_thresholds_to_original(th0, th1, th2)
-                best_result = {
-                    "th_inv0": th0, "th_inv1": th1, "th_sig": th2,
-                    "th_nonRes": th_nonRes, "th_Res": th_Res,
-                    "th_ggHH": th_ggHH,
-                    "Z": float(best_coarse["Z"]),
-                    "s": float(best_coarse["s"]),
-                    "b": float(best_coarse["b"]),
-                    "b_side": float(best_coarse["b_side"]),
-                    "source": "coarse-fallback",
-                }
-
+            if best_result is None:
+                if n_empty > 0:
+                    best_coarse = valid_empty[0]
+                    source = "coarse-empty"
+                elif n_with > 0:
+                    best_coarse = valid_with_events[0]
+                    source = "coarse-fallback"
+                else:
+                    best_coarse = None
+                    best_coarse_indices = None
+                if best_coarse is not None:
+                    best_coarse_indices = (int(best_coarse["i0"]), int(best_coarse["i1"]), int(best_coarse["i2"]))
+                    th0, th1, th2 = self._indices_to_thresholds(
+                        best_coarse_indices[0], best_coarse_indices[1], best_coarse_indices[2]
+                    )
+                    th_nonRes, th_Res, th_ggHH = self._trans_thresholds_to_original(th0, th1, th2)
+                    
+                    best_result = {
+                        "th_inv0": th0, "th_inv1": th1, "th_sig": th2,
+                        "th_nonRes": th_nonRes, "th_Res": th_Res, "th_ggHH": th_ggHH,
+                        "Z": float(best_coarse["Z"]),
+                        "s": float(best_coarse["s"]),
+                        "b": float(best_coarse["b"]),
+                        "b_side": float(best_coarse["b_side"]),
+                        "source": source,
+                    }
+            if best_result is None:
+                raise RuntimeError(f"Category {cat}: No valid bins found for both fine and coarse scans.")
+            best_result["best_coarse_indices"] = best_coarse_indices
+            
             # -- Report and save ------------------------------------
             meth = best_result.get("method", best_result.get("source", "?"))
             print(f"  Best ({meth}): Z={best_result['Z']:.4f}  "
@@ -1144,9 +1128,9 @@ class GridSearchCategorizer:
             # Raw-event bookkeeping
             s3d = self.scores_trans[:, [0, 1, 2]]
             mask_local = (
-                (s3d[:, 0] > best_result["th_inv0"])
-                & (s3d[:, 1] > best_result["th_inv1"])
-                & (s3d[:, 2] > best_result["th_sig"])
+                (s3d[:, 0] >= best_result["th_inv0"])
+                & (s3d[:, 1] >= best_result["th_inv1"])
+                & (s3d[:, 2] >= best_result["th_sig"])
             )
 
             if mask_local.sum() > 0:
@@ -1164,15 +1148,29 @@ class GridSearchCategorizer:
                     ((mm < MASS_LEFT_SB[1]) | (mm > MASS_RIGHT_SB[0]))
                     & (ml == 0) & (ms == "Data")
                 ].sum()
+                is_data = ms == "Data"
+                data_L = mw[is_data & (mm >= MASS_LEFT_SB[0]) & (mm < MASS_LEFT_SB[1])].sum()
+                data_R = mw[is_data & (mm >= MASS_RIGHT_SB[0]) & (mm < MASS_RIGHT_SB[1])].sum()
             else:
                 sig_peak = 0.0
                 bkg_side = 0.0
                 data_side = 0.0
+                data_L = 0.0
+                data_R = 0.0
 
             sig_peak_list.append(sig_peak)
             bkg_side_list.append(bkg_side)
+            data_ratio_str = ""
+            if self.require_sb_ratio and data_L > 0:
+                data_ratio = data_R / data_L
+                limit = _WIDTH_R / _WIDTH_L
+                data_ratio_str = f"  Data SB ratio R/L={data_R:.0f}/{data_L:.0f}={data_ratio:.2f} (limit={limit:.2f})"
+                if data_ratio >= limit:
+                    data_ratio_str += " *** EXCEEDS LIMIT ***"
+            elif self.require_sb_ratio:
+                data_ratio_str = "  Data SB ratio: N/A (no data in LSB)"
             print(f"  Signal in SR: {sig_peak:.3g}  Bkg in SB: {bkg_side:.3g}  Data in SB: {data_side:.3g} "
-                  f"Removed: {mask_local.sum():,}")
+                  f"Removed: {mask_local.sum():,}{data_ratio_str}")
             
             # if this is the last category, we don't need to remove events and rebuild
             if cat == self.n_categories:
@@ -1241,20 +1239,40 @@ class GridSearchCategorizer:
             base_cuts.append("(" + " & ".join(parts) + ")")
 
         cat_strings = {}
+        has_boosted = self.apply_boosted_veto
+        has_vbf = self.vbf_thresholds is not None
+
+        if has_boosted:
+            cat_strings["cat0"] = (
+                "is_boosted == 1"
+            )
+
+        if has_vbf:
+            vbf_col = SCORE_COLS[self.vbfhh_class]
+            vbf_parts= [f"({vbf_col} >= {self._remove_fake_digits(self.vbf_thresholds)})"]
+            if self.vbf_2d_scan and self.vbfhh_nonres_threshold is not None:
+                nonres_col = SCORE_COLS[self.bkg_classes[0]]
+                vbf_parts.append(f"({nonres_col} < {self._remove_fake_digits(self.vbfhh_nonres_threshold)})")
+            cat_strings["cat1"] = " & ".join(vbf_parts)
+
+        grid_shift = 1 if has_vbf else 0
         for i, base in enumerate(base_cuts, start=1):
             parts = [base]
             if i >= 2:
                 for j in range(i - 1):
                     parts.append(f"not({base_cuts[j]})")
-            cat_strings[f"cat{i}"] = " & ".join(parts)
+            cat_idx = i + grid_shift
+            cat_str = " & ".join(parts)
+            if has_vbf:
+                cat_str += f" & (not({cat_strings['cat1']}))"
+            cat_strings[f"cat{cat_idx}"] = cat_str
         
-        for i, base in enumerate(base_cuts, start=1):
-            if self.apply_boosted_veto:
-                cat_strings[f"cat{i}"] += " & (is_boosted == 0)"
-            if self.vbf_thresholds is not None:
-                vbf_col = SCORE_COLS[self.vbfhh_class]
-                cat_strings[f"cat{i}"] += f" & ({vbf_col} < {self.vbf_thresholds})"
-            cat_strings[f"cat{i}"] += " & (dijet_mass > 80) & (dijet_mass < 190)"
+        # post process: add is_boosted == 0 and (dijet_mass > 80) & (dijet_mass < 190) to all categories except cat0
+        for key in cat_strings.keys():
+            if key != "cat0":
+                _base_cut = " & (dijet_mass > 80) & (dijet_mass < 190)"
+                _base_cut += " & (is_boosted == 0)" if has_boosted else ""
+                cat_strings[key] = f"{cat_strings[key]}{_base_cut}"
 
         txt_path = os.path.join(cat_path, "best_cut_params.txt")
         with open(txt_path, "w") as f:
@@ -1368,66 +1386,249 @@ class GridSearchCategorizer:
 
     def optimize_vbfhh_sr(self, vbfhh_class, vbfhh_samples,
                            n_scan_points=1000, sideband_threshold=10.0):
-        """Scan VBFHH score and return best threshold."""
+        """1D scan over VBFHH_score > threshold."""
         if self.scores_all is None:
             raise RuntimeError("scores_all is not set. Call load_samples() first.")
 
-        thresholds = np.linspace(0.0, 1.0, n_scan_points + 1)[:-1]
+        scores = self.scores_all[:, vbfhh_class]
+        masses = self.mass_all
+        weights = self.weights_all
+        samples = self.samples_all
+
+        sr_low, sr_high = MASS_SR
+
+        is_vbfhh = np.isin(samples, vbfhh_samples)
+        is_interp = (~is_vbfhh) & np.isin(samples, list(INTERP_SAMPLES))
+        is_data = samples == "Data"
+
+        in_sr = (masses > sr_low) & (masses < sr_high)
+        in_side = ((masses <= sr_low) | (masses >= sr_high))
+
+        s_cond = is_vbfhh & in_sr
+        side_data_cond = is_data & in_side
+        interp_L_cond = is_interp & (masses <= sr_low)
+        interp_R_cond = is_interp & (masses >= sr_high)
+
+        bkg_noninterp = [sname for sname in self.bkg_samples if sname not in INTERP_SAMPLES]
+        b_noninterp_conds = []
+        for sname in bkg_noninterp:
+            cond = (~is_vbfhh) & (~is_interp) & (samples == sname) & in_sr
+            b_noninterp_conds.append(cond)
+
+        scores_clipped = np.clip(scores, 0.0, 1.0)
+        bins = np.linspace(0.0, 1.0, n_scan_points + 1)
+        thresholds = bins[:-1]
+        w = weights.astype(np.float64)
+
+        def get_cumsum(cond):
+            if not np.any(cond):
+                return np.zeros(n_scan_points, dtype=np.float64)
+            hist, _ = np.histogram(scores_clipped[cond], bins=bins, weights=w[cond])
+            return np.cumsum(hist[::-1])[::-1]
+
+        s_cum = get_cumsum(s_cond)
+        side_data_cum = get_cumsum(side_data_cond)
+        b_interp_L_cum = get_cumsum(interp_L_cond)
+        b_interp_R_cum = get_cumsum(interp_R_cond)
+        
+        b_total = COEFF_L * b_interp_L_cum + COEFF_R * b_interp_R_cum
+        for cond in b_noninterp_conds:
+            b_total += get_cumsum(cond)
 
         best_threshold = None
         best_z = -1.0
         best_s = 0.0
         best_b = 0.0
 
-        sr_low, sr_high = MASS_SR
-
-        for threshold in thresholds:
-            mask = self.scores_all[:, vbfhh_class] > threshold
-            if not np.any(mask):
+        for i in range(n_scan_points):
+            s = s_cum[i]
+            side = b_interp_L_cum[i] + b_interp_R_cum[i]
+            if side_data_cum[i] < sideband_threshold:
+                continue
+            if s <= 0.0 or side < sideband_threshold:
                 continue
 
-            sel_masses = self.mass_all[mask]
-            sel_weights = self.weights_all[mask]
-            sel_samples = self.samples_all[mask]
+            b = b_total[i]
+            if b <= 0.0:
+                b = 1e-9
 
-            is_vbfhh = np.isin(sel_samples, vbfhh_samples)
-
-            side_mask = ((sel_masses <= sr_low) | (sel_masses >= sr_high)) & ~is_vbfhh
-            if sel_weights[side_mask].sum() < sideband_threshold:
-                continue
-
-            sr_mask = (sel_masses > sr_low) & (sel_masses < sr_high)
-            s = sel_weights[sr_mask & is_vbfhh].sum()
-            if s <= 0.0:
-                continue
-
-            b_total = 0.0
-            interp_mask = ~is_vbfhh & np.isin(sel_samples, list(INTERP_SAMPLES))
-            if np.any(interp_mask):
-                b_interp, _ = self._sr_from_sidebands_linear(
-                    sel_masses[interp_mask], sel_weights[interp_mask]
-                )
-                b_total += b_interp
-
-            for sname in self.bkg_samples:
-                if sname in INTERP_SAMPLES:
-                    continue
-                smask = ~is_vbfhh & (sel_samples == sname)
-                if not np.any(smask):
-                    continue
-                b_total += sel_weights[smask & sr_mask].sum()
-
-            if b_total <= 0.0:
-                b_total = 1e-9
-
-            z = self.asymptotic_significance(s, b_total)
+            z = self.asymptotic_significance(s, b)
             if z > best_z:
                 best_z = z
-                best_threshold = threshold
+                best_threshold = thresholds[i]
                 best_s = s
-                best_b = b_total
+                best_b = b
+                best_side = side
+        print(f"VBFHH SR 1D: best threshold = {best_threshold:.4f}, "
+              f"Z = {best_z:.4f}, s = {best_s:.4g}, b = {best_b:.4g}, sideband = {best_side:.4g}")
 
         return best_threshold, best_z, best_s, best_b
+
+    def optimize_vbfhh_2d(self, vbfhh_class, nonres_class, vbfhh_samples,
+                           n_scan_vbfhh=1000, n_scan_nonres=500,
+                           sideband_threshold=10.0, VBF_purity_threshold=0.85):
+        """
+        2D grid scan: VBFHH_score > th_vbf AND nonRes_score < th_nonres.
+
+        Candidate points must also satisfy
+        VBF purity = VBFHH / (VBFHH + ggHH) >= VBF_purity_threshold.
+
+        Uses 2D histograms + 2D reverse cumulative sum for O(1) per-pair
+        evaluation across all (n_scan_vbfhh x n_scan_nonres) threshold combos.
+        """
+        if self.scores_all is None:
+            raise RuntimeError("scores_all is not set. Call load_samples() first.")
+
+        scores = self.scores_all
+        masses = self.mass_all
+        weights = self.weights_all.astype(np.float32)
+        samples = self.samples_all
+
+        sr_low, sr_high = MASS_SR
+
+        is_vbfhh = np.isin(samples, vbfhh_samples)
+        is_interp = (~is_vbfhh) & np.isin(samples, list(INTERP_SAMPLES))
+        is_data = samples == "Data"
+
+        in_sr = (masses > sr_low) & (masses < sr_high)
+        in_side = (masses <= sr_low) | (masses >= sr_high)
+        data_in_side = (masses <= 115) | (masses >= 135)
+
+        score_vbf = scores[:, vbfhh_class]
+        score_inv_nonres = 1.0 - scores[:, nonres_class]
+        is_ggHH = self.labels_all != 0
+
+        bins0 = np.linspace(0.0, 1.0, n_scan_vbfhh + 1)
+        bins1 = np.linspace(0.0, 1.0, n_scan_nonres + 1)
+
+        i0 = np.searchsorted(bins0, score_vbf, side='right') - 1
+        i1 = np.searchsorted(bins1, score_inv_nonres, side='right') - 1
+        in_range = ((i0 >= 0) & (i0 < n_scan_vbfhh)
+                    & (i1 >= 0) & (i1 < n_scan_nonres))
+        i0c = np.clip(i0, 0, n_scan_vbfhh - 1)
+        i1c = np.clip(i1, 0, n_scan_nonres - 1)
+        lin = i0c * n_scan_nonres + i1c
+        total = n_scan_vbfhh * n_scan_nonres
+        shape = (n_scan_vbfhh, n_scan_nonres)
+
+        def h2d(cond, use_w=True):
+            m = cond & in_range
+            if m.sum() == 0:
+                return np.zeros(shape, dtype=np.float32)
+            w = weights[m] if use_w else None
+            h = np.bincount(lin[m], weights=w, minlength=total)
+            if not use_w:
+                h = h.astype(np.float32)
+            return h.reshape(shape)
+
+        H_s = h2d(is_vbfhh & in_sr)
+        H_gg = h2d(is_ggHH & in_sr)
+        H_iL = h2d(is_interp & (masses <= sr_low))
+        H_iR = h2d(is_interp & (masses >= sr_high))
+        bkg_ni = [s for s in self.bkg_samples
+                   if s not in INTERP_SAMPLES]
+        H_ni = sum(h2d(~is_vbfhh & ~is_interp & (samples == s) & in_sr) for s in bkg_ni)
+        H_ds = h2d(is_data & data_in_side)
+
+        def cumsum2d(hist):
+            rev = np.ascontiguousarray(hist[::-1, ::-1])
+            for ax in range(2):
+                np.cumsum(rev, axis=ax, out=rev)
+            return rev[::-1, ::-1]
+
+        C_s = cumsum2d(H_s)
+        C_gg = cumsum2d(H_gg)
+        C_iL = cumsum2d(H_iL)
+        C_iR = cumsum2d(H_iR)
+        C_ni = cumsum2d(H_ni)
+        C_ds = cumsum2d(H_ds)
+
+        cL = np.float32(COEFF_L)
+        cR = np.float32(COEFF_R)
+        C_side = C_iL + C_iR
+        C_b = cL * C_iL + cR * C_iR + C_ni
+        C_purity_den = C_s + C_gg
+
+        with np.errstate(invalid="ignore", divide="ignore"):
+            C_purity = np.divide(
+                C_s,
+                C_purity_den,
+                out=np.zeros_like(C_s, dtype=np.float32),
+                where=C_purity_den > 0,
+            )
+
+        valid = (
+            (C_s > 0)
+            & (C_ds >= sideband_threshold)
+            & (C_side >= sideband_threshold)
+            & (C_b > 0)
+            & (C_purity >= VBF_purity_threshold)
+        )
+        if not np.any(valid):
+            print("VBFHH 2D: No valid cells found")
+            return None, None, 0.0, 0.0, 0.0
+
+        with np.errstate(invalid="ignore", divide="ignore"):
+            Z = np.where(
+                valid,
+                np.sqrt(2.0 * ((C_s + C_b) * np.log(1.0 + C_s / C_b) - C_s)),
+                0.0,
+            )
+
+        # -- Diagnostics ------------------------------------------------
+        print(f"  VBFHH signal: total events={is_vbfhh.sum()}, "
+              f"total weight={weights[is_vbfhh].sum():.3f}, "
+              f"SR weight={weights[is_vbfhh & in_sr].sum():.3f}")
+
+        best_flat = np.argmax(Z.ravel())
+        best_i, best_j = np.unravel_index(best_flat, Z.shape)
+        th_vbf = float(bins0[best_i])
+        th_nonres = float(1.0 - bins1[best_j])
+        best_z = float(Z[best_i, best_j])
+        best_s = float(C_s[best_i, best_j])
+        best_b = float(C_b[best_i, best_j])
+        best_purity = float(C_purity[best_i, best_j])
+
+        print(f"  Best: th_vbf={th_vbf:.4f} th_nonres={th_nonres:.4f} "
+              f"Z={best_z:.4f} s={best_s:.4g} b={best_b:.4g} "
+              f"purity={best_purity:.4f} "
+              f"Data_SB={float(C_ds[best_i, best_j]):.0f} "
+              f"interp_SB={float(C_side[best_i, best_j]):.4g}")
+
+        # Top-10 distinct combinations
+        flat_Z = Z.ravel()
+        top10 = np.argsort(flat_Z)[-10:][::-1]
+        print(f"  Top Z thresholds (vbf_th, nonres_th, Z, s, b, Data_SB, interp_SB):")
+        for idx in top10:
+            if flat_Z[idx] <= 0:
+                break
+            i, j = np.unravel_index(idx, Z.shape)
+            print(f"    th_v={bins0[i]:.4f} th_nr={1-bins1[j]:.4f} "
+                  f"Z={flat_Z[idx]:.4f} s={C_s[i,j]:.4g} b={C_b[i,j]:.4g} "
+                  f"purity={C_purity[i,j]:.4f} "
+                  f"ds={C_ds[i,j]:.0f} isb={C_side[i,j]:.4g}")
+
+        # 1D profile: Z vs VBFHH threshold (maximizing over nonRes per VBFHH bin)
+        z_vs_vbf = Z.max(axis=1)
+        best_vbf_idx = np.argmax(z_vs_vbf)
+        best_nonres_for_best_vbf = np.argmax(Z[best_vbf_idx])
+        print(f"  1D Z profile (max over nonRes per VBFHH bin): "
+              f"peak at th_vbf={bins0[best_vbf_idx]:.4f} "
+              f"Z={z_vs_vbf[best_vbf_idx]:.4f} "
+              f"th_nonres={1-bins1[best_nonres_for_best_vbf]:.4f}")
+        # Print a few points along the peak
+        step = max(n_scan_vbfhh // 10, 1)
+        for i in range(0, n_scan_vbfhh, step):
+            if z_vs_vbf[i] > 0.01:
+                best_jj = np.argmax(Z[i])
+                print(f"    th_vbf={bins0[i]:.4f} "
+                      f"Z_max={z_vs_vbf[i]:.4f} "
+                      f"th_nonres@max={1-bins1[best_jj]:.4f} "
+                      f"s={C_s[i,best_jj]:.4g} b={C_b[i,best_jj]:.4g} "
+                      f"purity={C_purity[i,best_jj]:.4f}")
+
+        return th_vbf, th_nonres, best_z, best_s, best_b
+
 
     # ----------------------------------------------------------------------
     #  MAIN ENTRY POINT
@@ -1459,6 +1660,16 @@ class GridSearchCategorizer:
                     best_vbfhh_z = 0.0001
                     best_vbfhh_s = 0.0001
                     best_vbfhh_b = 0.0001
+                elif self.vbf_2d_scan:
+                    nonres_class = self.bkg_classes[0]
+                    (best_vbfhh_threshold, best_vbfhh_nonres, best_vbfhh_z,
+                     best_vbfhh_s, best_vbfhh_b) = self.optimize_vbfhh_2d(
+                        vbfhh_class=self.vbfhh_class,
+                        nonres_class=nonres_class,
+                        vbfhh_samples=self.vbfhh_samples,
+                        sideband_threshold=self.vbfhh_sideband_threshold,
+                    )
+                    self.vbfhh_nonres_threshold = best_vbfhh_nonres
                 else:
                     (best_vbfhh_threshold, best_vbfhh_z, best_vbfhh_s,
                      best_vbfhh_b) = self.optimize_vbfhh_sr(
@@ -1474,32 +1685,43 @@ class GridSearchCategorizer:
 
                 self.vbf_thresholds = best_vbfhh_threshold
 
-                print(f"VBFHH SR {i_cat + 1}: threshold = {best_vbfhh_threshold:.4f}, "
-                      f"Z = {best_vbfhh_z:.4f}, s = {best_vbfhh_s:.4g}, "
-                      f"b = {best_vbfhh_b:.4g}")
-
-                vbfhh_mask = self.scores_all[:, self.vbfhh_class] > best_vbfhh_threshold
+                if self.vbf_2d_scan:
+                    print(f"VBFHH SR {i_cat + 1}: th_vbf={best_vbfhh_threshold:.4f}, "
+                          f"th_nonres={self.vbfhh_nonres_threshold:.4f}, "
+                          f"Z={best_vbfhh_z:.4f}, s={best_vbfhh_s:.4g}, "
+                          f"b={best_vbfhh_b:.4g}")
+                    vbfhh_mask = ((self.scores_all[:, self.vbfhh_class] > best_vbfhh_threshold)
+                                  & (self.scores_all[:, nonres_class] < best_vbfhh_nonres))
+                else:
+                    print(f"VBFHH SR {i_cat + 1}: threshold = {best_vbfhh_threshold:.4f}, "
+                          f"Z = {best_vbfhh_z:.4f}, s = {best_vbfhh_s:.4g}, "
+                          f"b = {best_vbfhh_b:.4g}")
+                    vbfhh_mask = self.scores_all[:, self.vbfhh_class] > best_vbfhh_threshold
                 sr_mass_mask = (self.mass_all > sr_low) & (self.mass_all < sr_high)
+                sb_mask = (self.mass_all <= sr_low) | (self.mass_all >= sr_high)
                 is_vbfhh = np.isin(self.samples_all, self.vbfhh_samples)
-                is_ggHH = np.array(
-                    ["GluGlutoHHto2B2G" in s for s in self.samples_all]
-                )
+                is_ggHH = self.labels_all != 0  # SM signal (1) + non-SM ggHH (-1)
                 is_interp = np.isin(self.samples_all, list(INTERP_SAMPLES))
-                is_singleH = ~is_vbfhh & ~is_ggHH & ~is_interp
+                is_data = self.samples_all == "Data"
+                is_mc = ~is_data
 
                 best_ggHH = float(
                     self.weights_all[vbfhh_mask & sr_mass_mask & is_ggHH].sum()
                 )
-                best_H = float(
-                    self.weights_all[vbfhh_mask & sr_mass_mask & is_singleH].sum()
-                )
-                sdb_mask = (
-                    (self.mass_all <= sr_low) | (self.mass_all >= sr_high)
-                ) & ~is_vbfhh
-                best_SDB = float(self.weights_all[vbfhh_mask & sdb_mask].sum())
+                best_SingleH_SR = float(self.weights_all[
+                    vbfhh_mask & sr_mass_mask & ~is_vbfhh & ~is_ggHH & ~is_interp & is_mc
+                ].sum())
+                best_interp_SB = float(self.weights_all[
+                    vbfhh_mask & sb_mask & is_interp
+                ].sum())
+                best_Data_SB = float(self.weights_all[
+                    vbfhh_mask & sb_mask & is_data
+                ].sum())
 
-                print(f"VBFHH SR {i_cat + 1}: ggHH = {best_ggHH:.4g}, "
-                      f"single-H = {best_H:.4g}, SDB = {best_SDB:.4g}")
+                print(f"VBFHH SR {i_cat + 1}: ggHH_SR={best_ggHH:.4g}, "
+                      f"SingleHiggs_SR={best_SingleH_SR:.4g}, "
+                      f"b_total(MC_estimate)={best_vbfhh_b:.4g}")
+                print(f"  interp_SB={best_interp_SB:.4g}, Data_SB={best_Data_SB:.4g}")
 
                 all_vbfhh_sr_info.append({
                     "best_threshold": float(best_vbfhh_threshold),
@@ -1507,8 +1729,9 @@ class GridSearchCategorizer:
                     "best_s": float(best_vbfhh_s),
                     "best_b": float(best_vbfhh_b),
                     "best_ggHH": best_ggHH,
-                    "best_H": best_H,
-                    "best_SDB": best_SDB,
+                    "best_SingleH_SR": best_SingleH_SR,
+                    "best_interp_SB": best_interp_SB,
+                    "best_Data_SB": best_Data_SB,
                 })
 
                 remaining = ~vbfhh_mask
@@ -1532,6 +1755,10 @@ class GridSearchCategorizer:
             with open(vbfhh_sr_json, "w") as f:
                 json.dump(all_vbfhh_sr_info, f, indent=4)
             print(f"VBFHH SR info saved to {vbfhh_sr_json}")
+
+        if self.skip_grid_search:
+            print("\n--skip-grid-search set, stopping after VBFHH optimization.")
+            return
 
         # -- Grid search SR categorization ----------------------------
         if self.n_categories > 0:
@@ -1614,6 +1841,10 @@ if __name__ == "__main__":
                         help="Number of VBFHH SR categories")
     parser.add_argument("--vbf_thresholds", type=float, default=None,
                         help="Fixed VBFHH threshold (skip scan if set)")
+    parser.add_argument("--vbfhh_2d_scan", action="store_true", default=False,
+                        help="Use 2D scan (VBFHH+nonRes) instead of 1D VBFHH-only")
+    parser.add_argument("--skip_grid_search", action="store_true", default=False,
+                        help="Stop after VBFHH optimization, skip grid search")
 
     # -- Pre-selection -----------------------------------------------
     parser.add_argument("--apply_boosted_veto", action="store_true", default=False,
@@ -1666,5 +1897,7 @@ if __name__ == "__main__":
         require_sb_ratio=args.require_sb_ratio,
     )
     categoriser.apply_boosted_veto = args.apply_boosted_veto
+    categoriser.vbf_2d_scan = args.vbfhh_2d_scan
+    categoriser.skip_grid_search = args.skip_grid_search
     categoriser.weight_scale = args.weight_scale
     categoriser.run_categorisation()
