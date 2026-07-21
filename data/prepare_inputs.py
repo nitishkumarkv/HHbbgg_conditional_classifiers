@@ -403,6 +403,9 @@ class PrepareInputs:
         # for singleH at 13.6 TeV: https://twiki.cern.ch/twiki/bin/view/LHCPhysics/LHCHWG136TeVxsec_extrap
         # for singleH at 13 TeV: https://twiki.cern.ch/twiki/bin/view/LHCPhysics/CERNYellowReportPageAt13TeV#gluon_gluon_Fusion_Process
         
+        # factor for scaling mass for Run 2 VBF samples from 125.09 to 125.38, from above link for kl samples and H BRs
+        k_mass = 1.676/1.684
+
         dict_xsec_13TeV = {
             "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": 0.030649e3 * 0.00227 * 0.576 * 2, # cross sectio of GluGluToHH * BR(HToGG) * BR(HTobb) * 2 for two combination ### have to recheck if this is correct. 
             "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": 0.068317e3 * 0.00227 * 0.576 * 2,
@@ -416,16 +419,16 @@ class PrepareInputs:
             "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_m2p00": 1.791638e3 * 0.00227 * 0.576 * 2,
             "GluGlutoHHto2B2G_kl_m20p00_kt_1p00_c2_2p24": 1.752648e3 * 0.00227 * 0.576 * 2, 
 
-            "VBFHH_CV_1_C2V_1_C3_1": 0.0017260e3 * 0.00227 * 0.576 * 2,
-            "VBFHH_CV_1_C2V_0_C3_1": 0.0270800e3 * 0.00227 * 0.576 * 2,
-            "VBFHH_CV_1p74_C2V_1p37_C3_14p4": 0.3777832e3 * 0.00227 * 0.576 * 2,
-            "VBFHH_CV_2p12_C2V_3p87_C3_m5p96": 0.6322811e3 * 0.00227 * 0.576 * 2,
-            "VBFHH_CV_m0p012_C2V_0p030_C3_10p2": 0.0000120e3 * 0.00227 * 0.576 * 2,
-            "VBFHH_CV_m0p758_C2V_1p44_C3_m19p3": 0.3340766e3 * 0.00227 * 0.576 * 2,
-            "VBFHH_CV_m0p962_C2V_0p959_C3_m1p43": 0.0009976e3 * 0.00227 * 0.576 * 2,
-            "VBFHH_CV_m1p21_C2V_1p94_C3_m0p94": 0.0033739e3 * 0.00227 * 0.576 * 2,
-            "VBFHH_CV_m1p60_C2V_2p72_C3_m1p36": 0.0105109e3 * 0.00227 * 0.576 * 2,
-            "VBFHH_CV_m1p83_C2V_3p57_C3_m3p39": 0.0149850e3 * 0.00227 * 0.576 * 2,
+            "VBFHH_CV_1_C2V_1_C3_1": 0.0017260e3 * 0.00227 * 0.576 * 2 * k_mass,
+            "VBFHH_CV_1_C2V_0_C3_1": 0.0270800e3 * 0.00227 * 0.576 * 2 * k_mass,
+            "VBFHH_CV_1p74_C2V_1p37_C3_14p4": 0.3777832e3 * 0.00227 * 0.576 * 2 * k_mass,
+            "VBFHH_CV_2p12_C2V_3p87_C3_m5p96": 0.6322811e3 * 0.00227 * 0.576 * 2 * k_mass,
+            "VBFHH_CV_m0p012_C2V_0p030_C3_10p2": 0.0000120e3 * 0.00227 * 0.576 * 2 * k_mass,
+            "VBFHH_CV_m0p758_C2V_1p44_C3_m19p3": 0.3340766e3 * 0.00227 * 0.576 * 2 * k_mass,
+            "VBFHH_CV_m0p962_C2V_0p959_C3_m1p43": 0.0009976e3 * 0.00227 * 0.576 * 2 * k_mass,
+            "VBFHH_CV_m1p21_C2V_1p94_C3_m0p94": 0.0033739e3 * 0.00227 * 0.576 * 2 * k_mass,
+            "VBFHH_CV_m1p60_C2V_2p72_C3_m1p36": 0.0105109e3 * 0.00227 * 0.576 * 2 * k_mass,
+            "VBFHH_CV_m1p83_C2V_3p57_C3_m3p39": 0.0149850e3 * 0.00227 * 0.576 * 2 * k_mass,
 
             # For singleH, XS(process) * BR(HtoGG)
             # Using mH = 125.38 for XS from: https://gitlab.cern.ch/LHCHIGGSXS/LHCHXSWG1/crosssections
