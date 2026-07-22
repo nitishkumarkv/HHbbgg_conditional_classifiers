@@ -39,10 +39,19 @@ class PrepareInputs:
         else:
             self.var_prefix = "nonResReg"
         self.fill_nan = -9
-
+        necessary_var = ['run', 'event', 'lumi']
         self.extra_vars = ["mass", "nonRes_dijet_mass", f"{self.var_prefix}_dijet_mass", f"{self.var_prefix}_dijet_mass_DNNreg", f"{self.var_prefix}_HHbbggCandidate_mass", f"{self.var_prefix}_dijet_pt", f"{self.var_prefix}_lead_bjet_pt", f"{self.var_prefix}_sublead_bjet_pt", f"{self.var_prefix}_lead_bjet_eta", f"{self.var_prefix}_DNNpair_dijet_mass", f"{self.var_prefix}_DNNpair_dijet_mass_DNNreg", f"{self.var_prefix}_lead_bjet_btagPNetB", f"{self.var_prefix}_sublead_bjet_btagPNetB", f"{self.var_prefix}_lead_bjet_btagUParTAK4B", f"{self.var_prefix}_sublead_bjet_btagUParTAK4B", "weight", "pt", "nonRes_dijet_pt", "nonRes_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "lead_eta", "lead_phi", "sublead_eta", "sublead_phi"] # "lead_genPartFlav", "sublead_genPartFlav", "weight_tot" added for sim predictions only in the dedicated functions
-
+        self.extra_vars = necessary_var + self.extra_vars
         self.vars_for_boosted = ['sublead_mvaID', 'fatjet3_tau2', 'fatjet3_particleNet_XbbVsQCD', 'fatjet4_subjet2_eta', 'sublead_eta', 'fatjet2_phi', 'fatjet1_mass', f'{self.var_prefix}_CosThetaStar_gg', 'fatjet4_particleNet_XbbVsQCD', 'lead_phi', 'fatjet4_pt', 'fatjet4_tau1', 'fatjet4_tau2', 'fatjet2_particleNet_XbbVsQCD', 'fatjet3_subjet1_eta', 'fatjet1_subjet1_eta', 'lead_eta', 'fatjet3_msoftdrop', 'fatjet4_mass', 'fatjet4_particleNet_massCorr', 'fatjet1_tau1', 'eta', 'fatjet2_pt', 'phi', 'fatjet1_subjet2_phi', 'fatjet3_eta', 'fatjet1_subjet2_eta', f'{self.var_prefix}_phosublead_PtOverM', 'fatjet4_subjet1_phi', 'fatjet3_subjet2_phi', 'fatjet3_subjet1_phi', 'fatjet2_tau2', 'n_jets', 'fatjet2_msoftdrop', 'fatjet2_subjet2_phi', 'fatjet3_pt', 'fatjet2_eta', 'fatjet3_tau1', 'fatjet4_eta', 'fatjet1_eta', 'fatjet3_mass', 'n_fatjets', 'fatjet1_pt', 'fatjet3_subjet2_eta', 'fatjet1_subjet1_phi', 'fatjet1_msoftdrop', 'lead_mvaID', 'fatjet4_subjet1_eta', f'{self.var_prefix}_pholead_PtOverM', 'fatjet2_tau1', 'fatjet2_mass', 'fatjet2_subjet2_eta', 'fatjet3_phi', 'n_leptons', 'fatjet1_particleNet_massCorr', 'fatjet2_subjet1_phi', 'fatjet4_subjet2_phi', 'fatjet1_tau2', 'fatjet1_phi', 'fatjet2_subjet1_eta', 'fatjet4_phi', 'fatjet1_particleNet_XbbVsQCD', 'fatjet3_particleNet_massCorr', 'fatjet4_msoftdrop', 'sublead_phi', 'fatjet2_particleNet_massCorr']
+        # GloParT and regressed mass columns needed by boosted eval when using --use_glopart --use_regressed_mass
+        # These only exist in 2024+ data; PyArrow iter_batches silently drops missing columns.
+        for i in range(1, 5):
+            self.vars_for_boosted += [
+                f'fatjet{i}_globalParT3_Xbb',
+                f'fatjet{i}_globalParT3_QCD',
+                f'fatjet{i}_globalParT3_massCorrX2p',
+                f'fatjet{i}_mass_raw',
+            ]
         
         # prepare process numbers for proccesses in each class
         num_process_each_class = {
@@ -95,7 +104,7 @@ class PrepareInputs:
         return -1
 
 
-    def _iter_file_batched(self, file_path, vars_to_load, save_all_columns, era, preselection_func, xsec_sample_name, apply_xsec_weights):
+    def _iter_file_batched(self, file_path, vars_to_load, save_all_columns, era, preselection_func, xsec_sample_name, apply_xsec_weights, load_all_weight_columns=True):
         """
         Generator that loads a single parquet file in 20 equal-sized row batches,
         yielding each processed batch. Peak memory is bounded to ~1/20th of the file
@@ -115,6 +124,10 @@ class PrepareInputs:
         """
         pf = pq.ParquetFile(file_path)
         batch_size = max(1, pf.metadata.num_rows // 20)
+        if load_all_weight_columns:
+            available_columns = pf.schema.names
+            all_weight_columns = [weight_col for weight_col in available_columns if weight_col.startswith("weight")]
+            vars_to_load = set(vars_to_load) | set(all_weight_columns)  # Ensure all weight columns are loaded for weighting
         columns = None if save_all_columns else vars_to_load
 
         for record_batch in pf.iter_batches(batch_size=batch_size, columns=columns):
