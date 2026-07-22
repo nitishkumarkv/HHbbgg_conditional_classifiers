@@ -104,7 +104,7 @@ class PrepareInputs:
         return -1
 
 
-    def _iter_file_batched(self, file_path, vars_to_load, save_all_columns, era, preselection_func, xsec_sample_name, apply_xsec_weights, load_all_weight_columns=False):
+    def _iter_file_batched(self, file_path, vars_to_load, save_all_columns, era, preselection_func, xsec_sample_name, apply_xsec_weights, load_all_weight_columns=True):
         """
         Generator that loads a single parquet file in 20 equal-sized row batches,
         yielding each processed batch. Peak memory is bounded to ~1/20th of the file
