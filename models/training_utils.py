@@ -35,9 +35,11 @@ class CustomDataset(Dataset):
 # Training and evaluation functions
 def train_one_epoch(model, optimizer, data_loader, loss_fn, device, scaler, scheduler=None):
     model.train()
-    batch_losses = []
-    batch_accs = []
-    batch_losses_no_abs = []
+    total_weighted_loss = 0.0
+    total_weight = 0.0
+    total_weighted_correct = 0.0
+    total_weight_no_abs = 0.0
+    total_weighted_loss_no_abs = 0.0
 
     progress_bar = tqdm(data_loader, desc=f"Epoch {epoch} [Training]", leave=False)
     for X_batch, y_batch, weights_batch, weights_batch_no in progress_bar:
@@ -53,10 +55,12 @@ def train_one_epoch(model, optimizer, data_loader, loss_fn, device, scaler, sche
         with autocast():
             y_pred = model(X_batch)
             loss = loss_fn(y_pred, y_batch)
-            weighted_loss = (loss * weights_batch).sum() / weights_batch.sum()
+            batch_weighted_loss = (loss * weights_batch).sum()
+            batch_weight = weights_batch.sum()
+            weighted_loss = batch_weighted_loss / batch_weight
 
-            # Also compute monitoring loss (no backprop needed for this)
-            weighted_loss_no_abs = (loss * weights_batch_no).sum() / weights_batch_no.sum()
+            batch_weighted_loss_no_abs = (loss * weights_batch_no).sum()
+            batch_weight_no_abs = weights_batch_no.sum()
 
         # Mixed precision backward pass
         scaler.scale(weighted_loss).backward()
@@ -69,26 +73,31 @@ def train_one_epoch(model, optimizer, data_loader, loss_fn, device, scaler, sche
 
         # compute weighted accuracy
         correct = (torch.argmax(y_pred, dim=1) == y_batch).float()
-        weighted_acc = (correct * weights_batch).sum() / weights_batch.sum()
+        batch_weighted_correct = (correct * weights_batch).sum()
 
-        batch_losses.append(weighted_loss.item())
-        batch_accs.append(weighted_acc.item())
-        batch_losses_no_abs.append(weighted_loss_no_abs.item())
+        total_weighted_loss += batch_weighted_loss.item()
+        total_weight += batch_weight.item()
+        total_weighted_correct += batch_weighted_correct.item()
+        total_weighted_loss_no_abs += batch_weighted_loss_no_abs.item()
+        total_weight_no_abs += batch_weight_no_abs.item()
 
         # Update progress bar
         progress_bar.set_postfix({
             'Loss': f'{weighted_loss.item():.4f}',
-            'Acc': f'{weighted_acc.item():.4f}',
-            'Loss_no_abs': f'{weighted_loss_no_abs.item():.4f}'
+            'Acc': f'{(batch_weighted_correct/batch_weight).item():.4f}',
+            'Loss_no_abs': f'{(batch_weighted_loss_no_abs/batch_weight_no_abs).item():.4f}'
         })
 
-    return np.mean(batch_losses), np.mean(batch_accs), np.mean(batch_losses_no_abs)
+    return (total_weighted_loss / total_weight,
+            total_weighted_correct / total_weight,
+            total_weighted_loss_no_abs / total_weight_no_abs)
 
 
 def evaluate(model, data_loader, loss_fn, device):
     model.eval()
-    val_losses = []
-    val_accs = []
+    total_weighted_loss = 0.0
+    total_weight = 0.0
+    total_weighted_correct = 0.0
     progress_bar = tqdm(data_loader, desc=f"Epoch {epoch} [Validation]", leave=False)
     with torch.no_grad():
         for X_batch, y_batch, weights_batch in progress_bar:
@@ -101,22 +110,23 @@ def evaluate(model, data_loader, loss_fn, device):
             with autocast():
                 y_pred = model(X_batch)
                 loss = loss_fn(y_pred, y_batch)
-                weighted_loss = (loss * weights_batch).sum() / weights_batch.sum()
+                batch_weighted_loss = (loss * weights_batch).sum()
+                batch_weight = weights_batch.sum()
 
-            # compute weighted accuracy
             correct = (torch.argmax(y_pred, dim=1) == y_batch).float()
-            weighted_acc = (correct * weights_batch).sum() / weights_batch.sum()
+            batch_weighted_correct = (correct * weights_batch).sum()
 
-            val_losses.append(weighted_loss.item())
-            val_accs.append(weighted_acc.item())
+            total_weighted_loss += batch_weighted_loss.item()
+            total_weight += batch_weight.item()
+            total_weighted_correct += batch_weighted_correct.item()
 
             # Update progress bar
             progress_bar.set_postfix({
-                'Loss': f'{weighted_loss.item():.4f}',
-                'Acc': f'{weighted_acc.item():.4f}'
+                'Loss': f'{(batch_weighted_loss/batch_weight).item():.4f}',
+                'Acc': f'{(batch_weighted_correct/batch_weight).item():.4f}'
             })
 
-    return np.mean(val_losses), np.mean(val_accs)
+    return total_weighted_loss / total_weight, total_weighted_correct / total_weight
 
 
 # Save the best model
@@ -262,7 +272,7 @@ if __name__ == "__main__":
     best_model = MLP(input_size, best_num_layers, best_num_nodes, output_size, best_act_fn, best_dropout_prob).to(device)
     loss_fn = nn.CrossEntropyLoss(reduction='none')
     best_optimizer = optim.Adam(best_model.parameters(), lr=best_lr, weight_decay=best_weight_decay)
-    n_epochs = 500
+    n_epochs = 10
 
     useOneCycleLR = True
     if useOneCycleLR:
