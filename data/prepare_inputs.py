@@ -13,6 +13,9 @@ import pandas as pd
 import pickle
 import gc
 from vector import register_awkward
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.kfold_helper import get_fold_values
 register_awkward()
 
 class PrepareInputs:
@@ -905,7 +908,160 @@ class PrepareInputs:
             pickle.dump(mean_std_dict, f)
 
         return 0
-    
+
+    @staticmethod
+    def _assign_kfold(event, k_folds, fold_idx):
+        fold_value = get_fold_values(event, k_folds)
+        train = fold_value != fold_idx
+        test = ~train
+        return train, test
+
+
+    def prep_inputs_for_training_kfold(self, k_folds, fold_field="event"):
+
+        fill_nan = self.fill_nan
+        out_path = self.outpath
+        os.makedirs(out_path, exist_ok=True)
+
+        comb_inputs = []
+
+        for era in self.training_info["samples_info"]["eras"]:
+            vars_config = self.load_vars(self.input_var_json)[self.model_type]
+            vars_for_training = self.substitute_var_prefix(vars_config["vars"])
+            vars_to_load = vars_for_training + self.extra_vars
+
+            for samples in self.sample_to_class.keys():
+                print(samples)
+
+                samples_path = self.training_info["samples_info"]["samples_path"]
+                parquet_path = self.training_info["samples_info"][era][samples]
+
+                events = self.load_and_process_sample(
+                    samples_path=samples_path,
+                    parquet_path=parquet_path,
+                    samples=samples,
+                    era=era,
+                    vars_to_load=vars_to_load,
+                    preselection_func=self.preselection,
+                    save_all_columns=False
+                )
+
+                print(f"INFO: Number of MC events in {samples} after selection for {era}: {len(events)}")
+                print(f"INFO: Sum of weight_tot in {samples} after selection for {era}: {sum(events.weight_tot)}")
+
+                for cls in self.classes:
+                    events[cls] = ak.zeros_like(events.eta)
+                events[self.sample_to_class[samples]] = ak.ones_like(events.pt)
+                comb_inputs.append(events)
+                events["sample_type"] = samples
+                events["process_number"] = self.process_numbers[samples]
+
+        print("INFO: Combining all the samples")
+        comb_inputs = ak.concatenate(comb_inputs, axis=0)
+
+        for cls in self.classes:
+            print("\n", f"INFO: Number of events in {cls}: {ak.sum(comb_inputs[cls])}")
+
+        print("INFO: Converting training variables to numpy arrays")
+        X_list = []
+        for var in vars_for_training:
+            var_data = ak.to_numpy(ak.fill_none(comb_inputs[var], -999.0))
+            X_list.append(var_data)
+        X = np.column_stack(X_list).astype(np.float32)
+
+        print("INFO: Converting class labels to numpy arrays")
+        Y_list = []
+        for cls in self.classes:
+            cls_data = ak.to_numpy(ak.fill_none(comb_inputs[cls], 0))
+            Y_list.append(cls_data)
+        Y = np.column_stack(Y_list).astype(np.int8)
+
+        relative_weights = ak.to_numpy(ak.fill_none(comb_inputs["rel_xsec_weight"], np.nan)).astype(np.float32)
+        process_number = ak.to_numpy(ak.fill_none(comb_inputs["process_number"], -1)).astype(np.int8)
+
+        fold_values = ak.to_numpy(ak.fill_none(comb_inputs[fold_field], -1)).astype(np.int64)
+
+        del X_list, Y_list, comb_inputs
+        gc.collect()
+
+        rng = np.random.default_rng(self.random_seed)
+        shuffle_idx = rng.permutation(len(X))
+        X = X[shuffle_idx]
+        Y = Y[shuffle_idx]
+        relative_weights = relative_weights[shuffle_idx]
+        process_number = process_number[shuffle_idx]
+        fold_values = fold_values[shuffle_idx]
+
+        mask = (X < -998.0)
+        X[mask] = np.nan
+
+        mean = np.nanmean(X, axis=0)
+        std = np.nanstd(X, axis=0)
+
+        mean_std_dict = {"mean": mean, "std_dev": std}
+        with open(f"{out_path}/mean_std_dict.pkl", 'wb') as f:
+            pickle.dump(mean_std_dict, f)
+
+        with open(f"{out_path}/input_vars.txt", 'w') as f:
+            json.dump(vars_for_training, f)
+
+        for fold_idx in range(k_folds):
+            print(f"\nINFO: Preparing fold {fold_idx}/{k_folds}")
+
+            train_mask, test_mask = self._assign_kfold(fold_values, k_folds, fold_idx)
+
+            X_train = X[train_mask]
+            y_train = Y[train_mask]
+            rel_w_train = relative_weights[train_mask]
+            proc_num_train = process_number[train_mask]
+
+            X_test = X[test_mask]
+            y_test = Y[test_mask]
+            rel_w_test = relative_weights[test_mask]
+            proc_num_test = process_number[test_mask]
+
+            X_train = self.standardize(X_train, mean, std)
+            X_train = np.nan_to_num(X_train, nan=fill_nan)
+            X_test = self.standardize(X_test, mean, std)
+            X_test = np.nan_to_num(X_test, nan=fill_nan)
+
+            true_class_weights, class_weights_for_training_abs, class_weights_only_positive = \
+                self.get_weights_for_training(y_train, rel_w_train, proc_num_train)
+            class_weights_for_val = self.get_weights_for_val_test(y_test, rel_w_test, proc_num_test)
+
+            fold_path = f"{out_path}/fold_{fold_idx}"
+            os.makedirs(fold_path, exist_ok=True)
+
+            np.save(f"{fold_path}/X_train", X_train)
+            np.save(f"{fold_path}/y_train", y_train)
+            np.save(f"{fold_path}/rel_w_train", rel_w_train)
+            np.save(f"{fold_path}/X_val", X_test)
+            np.save(f"{fold_path}/y_val", y_test)
+            np.save(f"{fold_path}/rel_w_val", rel_w_test)
+
+            true_class_weights = ak.to_numpy(true_class_weights)
+            class_weights_for_training_abs = ak.to_numpy(class_weights_for_training_abs)
+            class_weights_only_positive = ak.to_numpy(class_weights_only_positive)
+            class_weights_for_val = ak.to_numpy(class_weights_for_val)
+
+            np.save(f"{fold_path}/true_class_weights", true_class_weights)
+            np.save(f"{fold_path}/class_weights_for_training_abs", class_weights_for_training_abs)
+            np.save(f"{fold_path}/class_weights_only_positive", class_weights_only_positive)
+            np.save(f"{fold_path}/class_weights_for_val", class_weights_for_val)
+
+            # also save the mean and std_dev for this fold, even though they are the same for all folds
+            with open(f"{fold_path}/mean_std_dict.pkl", 'wb') as f:
+                pickle.dump(mean_std_dict, f)
+
+            with open(f"{fold_path}/input_vars.txt", 'w') as f:
+                json.dump(vars_for_training, f)
+
+            n_train = len(X_train)
+            n_test = len(X_test)
+            print(f"  Fold {fold_idx}: train={n_train}, test={n_test}")
+
+        return 0
+
 
     def prep_inputs_for_prediction_sim(self):
 

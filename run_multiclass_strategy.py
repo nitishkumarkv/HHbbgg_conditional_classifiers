@@ -24,8 +24,13 @@ def prepare_inputs(args):
     
     # prepare the inputs for training
     if args.prep_inputs_for_training:
-        print('INFO: Preparing the inputs for training', '\n')
-        prep_inputs.prep_inputs_for_training()
+        k_folds = getattr(args, "k_folds", 0)
+        if k_folds > 1:
+            print(f'INFO: Preparing k-fold inputs (K={k_folds})', '\n')
+            prep_inputs.prep_inputs_for_training_kfold(k_folds=k_folds)
+        else:
+            print('INFO: Preparing the inputs for training', '\n')
+            prep_inputs.prep_inputs_for_training()
 
     # prepare the inputs for prediction
     if args.prepare_inputs_pred_sim:
@@ -42,10 +47,19 @@ def prepare_inputs(args):
         print('INFO: Preparing the inputs for prediction systematics', '\n')
         prep_inputs.prep_inputs_for_prediction_sim_sys()
 
+def _run_training(input_path, training_config_path):
+    subprocess.run(
+        f"python3 models/training_utils.py --input_path {input_path} "
+        f"--training_config_path {training_config_path}",
+        shell=True
+    )
+
+
 def perform_training(args):
 
     out_path = args.out_path
     config_path = args.config_path
+    k_folds = getattr(args, "k_folds", 0)
 
     # Load the configuration yaml files
     training_config_path = f"{config_path}/training_config.yaml"
@@ -54,35 +68,68 @@ def perform_training(args):
 
     do_random_search = training_config["do_random_search"]
 
-    # do random search
+    # do random search (only once on full dataset for k-fold)
     if do_random_search:
         print('INFO: Performing random search')
-        subprocess.run(f"python3 models/random_search.py --input_path {out_path} --training_config_path {training_config_path}", shell=True)        
+        subprocess.run(f"python3 models/random_search.py --input_path {out_path} --training_config_path {training_config_path}", shell=True)
 
-    # perform trainging
+    # perform training
     if args.train_best_model:
-        print('INFO: Training the best model')
-        subprocess.run(f"python3 models/training_utils.py --input_path {out_path} --training_config_path {training_config_path}", shell=True)
+        if k_folds > 1:
+            print(f'INFO: Training K={k_folds} folds')
+            for fold_idx in range(k_folds):
+                fold_path = f"{out_path}/fold_{fold_idx}"
+                print(f'\nINFO: Training fold {fold_idx}/{k_folds}')
+                _run_training(fold_path, training_config_path)
+        else:
+            print('INFO: Training the best model')
+            _run_training(out_path, training_config_path)
 
     # plot the training results
     if args.plot_training_results:
-        print('INFO: Getting the results plots')
-        subprocess.run(f"python3 models/mlp_plotter.py --input_path {out_path} --config_path {config_path}/training_config.yaml", shell=True)
+        if k_folds > 1:
+            for fold_idx in range(k_folds):
+                fold_path = f"{out_path}/fold_{fold_idx}"
+                print(f'INFO: Getting the results plots for fold {fold_idx}/{k_folds}')
+                subprocess.run(f"python3 models/mlp_plotter.py --input_path {fold_path} --config_path {config_path}/training_config.yaml", shell=True)
+        else:
+            print('INFO: Getting the results plots')
+            subprocess.run(f"python3 models/mlp_plotter.py --input_path {out_path} --config_path {config_path}/training_config.yaml", shell=True)
         
     # get permutaion importance
     if args.get_permutation_importance:
-        print('INFO: Getting permutation importance')
-        subprocess.run(f"python3 models/permutation_importance.py --input_path {out_path}", shell=True)
+        if k_folds > 1:
+            for fold_idx in range(k_folds):
+                fold_path = f"{out_path}/fold_{fold_idx}"
+                print(f'INFO: Getting permutation importance for fold {fold_idx}/{k_folds}')
+                subprocess.run(f"python3 models/permutation_importance.py --input_path {fold_path}", shell=True)
+        else:
+            print('INFO: Getting permutation importance')
+            subprocess.run(f"python3 models/permutation_importance.py --input_path {out_path}", shell=True)
     
     # get the predictions
     if args.get_predictions:
+        pred_cmd = (
+            f"python3 models/get_prediction.py --model_folder {out_path} "
+            f"--samples_path {out_path} --config_path {config_path} "
+            f"--get_pred_nominal"
+        )
+        if k_folds > 1:
+            pred_cmd += f" --k-folds {k_folds}"
         print('INFO: Getting the predictions nominal')
-        subprocess.run(f"python3 models/get_prediction.py --model_folder {out_path}/after_random_search_best1/ --samples_path {out_path} --config_path {config_path} --get_pred_nominal", shell=True)
+        subprocess.run(pred_cmd, shell=True)
 
     # get the predictions for systematics
     if args.get_predictions_sys:
+        pred_sys_cmd = (
+            f"python3 models/get_prediction.py --model_folder {out_path} "
+            f"--samples_path {out_path} --config_path {config_path} "
+            f"--get_pred_sys"
+        )
+        if k_folds > 1:
+            pred_sys_cmd += f" --k-folds {k_folds}"
         print('INFO: Getting the predictions systematics')
-        subprocess.run(f"python3 models/get_prediction.py --model_folder {out_path}/after_random_search_best1/ --samples_path {out_path} --config_path {config_path} --get_pred_sys", shell=True)
+        subprocess.run(pred_sys_cmd, shell=True)
 
     # get non resonant mass for different ggFHH score cuts
     if args.test_mass_sculpting:
@@ -122,6 +169,7 @@ if __name__ == "__main__":
     parser.add_argument('--perform_categorisation', action='store_true', help='Perform categorisation')
     parser.add_argument('--prepare_inputs', action='store_true', help='Prepare all inputs')
     parser.add_argument('--get_score_shape_diff_kl', action='store_true', help='Get score shape differences using kl samples')
+    parser.add_argument('--k-folds', type=int, default=0, help='Number of folds for k-fold cross-validation (0 = disabled)')
     parser.add_argument('--do_all', action='store_true', help='Perform all steps')
     args = parser.parse_args()
 
