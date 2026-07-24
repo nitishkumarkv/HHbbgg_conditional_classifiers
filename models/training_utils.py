@@ -272,7 +272,7 @@ if __name__ == "__main__":
     best_model = MLP(input_size, best_num_layers, best_num_nodes, output_size, best_act_fn, best_dropout_prob).to(device)
     loss_fn = nn.CrossEntropyLoss(reduction='none')
     best_optimizer = optim.Adam(best_model.parameters(), lr=best_lr, weight_decay=best_weight_decay)
-    n_epochs = 10
+    n_epochs = 500
 
     useOneCycleLR = True
     if useOneCycleLR:
