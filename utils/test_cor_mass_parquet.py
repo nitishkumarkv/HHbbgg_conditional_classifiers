@@ -189,9 +189,9 @@ if __name__ == "__main__":
             plot_with_errorbars(data_all, rel_w, BINS, range_, "Inclusive", ax, color=COLORS.get("Inclusive", "gray"), inclusive=True)
 
             for sr_name, mask in sr_masks.items():
-                # if sr_name not in ["VBFHH-lowMhh", "VBFHH-highMhh"]:
-                #     print(f"  [WARN] Skipping '{sr_name}' for group '{group_name}' (not in this sample).")
-                #     continue
+                if sr_name not in ["VBFHH-lowMhh", "VBFHH-highMhh"]:
+                    print(f"  [WARN] Skipping '{sr_name}' for group '{group_name}' (not in this sample).")
+                    continue
                 # if sr_name not in ["ggHH-lowMhh-1", "ggHH-lowMhh-2"]:
                 #     print(f"  [WARN] Skipping '{sr_name}' for group '{group_name}' (not in this sample).")
                 #     continue
@@ -201,9 +201,9 @@ if __name__ == "__main__":
                 # if sr_name not in ["ttH-lep-1", "ttH-lep-2", "ttH-lep-3"]:
                 #     print(f"  [WARN] Skipping '{sr_name}' for group '{group_name}' (not in this sample).")
                 #     continue
-                if sr_name not in ["ttH-had-1", "ttH-had-2", "ttH-had-3"]:
-                    print(f"  [WARN] Skipping '{sr_name}' for group '{group_name}' (not in this sample).")
-                    continue
+                # if sr_name not in ["ttH-had-1", "ttH-had-2", "ttH-had-3"]:
+                #     print(f"  [WARN] Skipping '{sr_name}' for group '{group_name}' (not in this sample).")
+                #     continue
                 plot_with_errorbars(data_all[mask], rel_w[mask], BINS, range_, sr_name, ax, color=COLORS.get(sr_name, "gray"))
 
             ax.set_xlabel(xlabel)

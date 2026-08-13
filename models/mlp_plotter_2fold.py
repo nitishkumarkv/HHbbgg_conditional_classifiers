@@ -132,7 +132,7 @@ def plot_roc_one_vs_all(folders_data, labels, n_classes, path_for_plots,
     ax.tick_params(axis="both", which="major", direction="in",
                    top=True, right=True, length=8)
     ax.minorticks_on()
-    ax.legend(loc="lower right", fontsize=9)
+    ax.legend(loc="lower right", fontsize=11)
     ax.grid(True, alpha=0.3)
     # hep.cms.label(data=False, ax=ax, loc=0,
     #               fontsize=15,)
@@ -201,7 +201,7 @@ def plot_roc_signal_vs_each(folders_data, labels, n_classes, path_for_plots,
     ax.tick_params(axis="both", which="major", direction="in",
                    top=True, right=True, length=8)
     ax.minorticks_on()
-    ax.legend(loc="lower right", fontsize=9)
+    ax.legend(loc="lower right", fontsize=11)
     ax.grid(True, alpha=0.3)
     # hep.cms.label(data=False, ax=ax, loc=0,
     #               fontsize=15,)

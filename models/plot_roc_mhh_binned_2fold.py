@@ -29,12 +29,30 @@ import os
 import glob
 import numpy as np
 import matplotlib.pyplot as plt
+import mplhep as hep
 from sklearn.metrics import roc_curve, auc
 import pyarrow.parquet as pq
+
+hep.style.use("CMS")
 
 # Define which eras belong to which run
 RUN2_ERAS = ["2016preVFP", "2016postVFP", "2017", "2018"]
 RUN3_ERAS = ["preEE", "postEE", "preBPix", "postBPix", "2024", "2025"]
+
+# Explicit display labels in the order shown by the legend title:
+# (kappa_lambda, kappa_t, C_2).
+GGHH_BENCHMARK_LABELS = {
+    "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p00": "(1, 1, 0)",
+    "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_0p00": "(0, 1, 0)",
+    "GluGlutoHHto2B2G_kl_2p45_kt_1p00_c2_0p00": "(2.45, 1, 0)",
+    "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": "(5, 1, 0)",
+    "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p10": "(1, 1, 0.1)",
+    "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_0p35": "(1, 1, 0.35)",
+    "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_3p00": "(1, 1, 3)",
+    "GluGlutoHHto2B2G_kl_1p00_kt_1p00_c2_m2p00": "(1, 1, -2)",
+    "GluGlutoHHto2B2G_kl_0p00_kt_1p00_c2_1p00": "(0, 1, 1)",
+    "GluGlutoHHto2B2G_kl_m20p00_kt_1p00_c2_2p24": "(-20, 1, 2.24)",
+}
 
 
 def load_mhh_y_from_parquet(base_paths, mhh_var_name):
@@ -516,6 +534,11 @@ def plot_roc_curves_mhh_binned(
         print(f"Found {len(gghh_sample_names)} ggHH benchmark/sample(s)")
         for s in gghh_sample_names:
             print(f"  - {s}")
+            if s not in GGHH_BENCHMARK_LABELS:
+                print(
+                    "    WARNING: No display label configured; "
+                    "the full sample name will be used"
+                )
 
         # Define colors for different samples
         colors = plt.cm.tab20(np.linspace(0, 1, len(gghh_sample_names)))
@@ -550,7 +573,7 @@ def plot_roc_curves_mhh_binned(
 
             # Create one figure per mhh bin for this run
             for bin_idx in range(n_bins):
-                fig, ax = plt.subplots(figsize=(10, 8))
+                fig, ax = plt.subplots(figsize=(8, 6))
 
                 roc_data = {}
 
@@ -595,8 +618,16 @@ def plot_roc_curves_mhh_binned(
                         print(f"  WARNING: Could not compute ROC for {gghh_sample} in bin {bin_idx}: {e}")
                         continue
 
-                    ax.plot(fpr, tpr, color=colors[sample_idx], linewidth=2.5,
-                           label=f'{gghh_sample} (AUC = {roc_auc:.4f})')
+                    benchmark_label = GGHH_BENCHMARK_LABELS.get(
+                        gghh_sample, gghh_sample
+                    )
+                    ax.plot(
+                        fpr,
+                        tpr,
+                        color=colors[sample_idx],
+                        linewidth=2,
+                        label=f'{benchmark_label} (AUC={roc_auc:.4f})'
+                    )
 
                     bin_key = f"{gghh_sample}"
                     roc_data[bin_key] = {
@@ -606,24 +637,42 @@ def plot_roc_curves_mhh_binned(
                         "n_samples": int(n_in_bin)
                     }
 
-                ax.plot([0, 1], [0, 1], 'k--', linewidth=1, alpha=0.5)
+                ax.plot([0, 1], [0, 1], 'k--', linewidth=1)
                 ax.set_xlim([0.0, 1.0])
                 ax.set_ylim([0.0, 1.05])
-                ax.set_xlabel('False Positive Rate', fontsize=12)
-                ax.set_ylabel('True Positive Rate', fontsize=12)
+                ax.set_xlabel('FPR', fontsize=14)
+                ax.set_ylabel('TPR', fontsize=14)
+                ax.tick_params(
+                    axis="both", which="major", direction="in",
+                    top=True, right=True, length=8
+                )
+                ax.minorticks_on()
                 # ax.set_title(
                 #     f'{run_label} | ggHH vs non_resonant_bkg | {mhh_var_name} bin {bin_idx}: '
                 #     f'[{mhh_bins[bin_idx]:.1f}, {mhh_bins[bin_idx+1]:.1f}]',
                 #     fontsize=13
                 # )
-                ax.legend(loc="lower right", fontsize=14, ncol=1)
+                legend = ax.legend(
+                    loc="lower right",
+                    fontsize=11,
+                    ncol=2,
+                    title=r"ggHH ($\kappa_\lambda$, $\kappa_t$, $c_2$)",
+                    title_fontsize=14
+                )
+                legend.get_title().set_fontsize(13)
                 ax.grid(True, alpha=0.3)
 
                 fig.tight_layout()
 
                 outpath = f"{output_path}/roc_curve_all_gghh_vs_non_resonant_bkg_{run_label}_{mhh_var_name}_bin{bin_idx}.png"
-                fig.savefig(outpath, dpi=150)
+                fig.savefig(outpath, dpi=150, bbox_inches="tight")
                 print(f"  INFO: >>> {outpath}")
+
+                ax.set_xlim([1e-4, 1.0])
+                ax.set_xscale("log")
+                outpath_logx = f"{output_path}/roc_curve_all_gghh_vs_non_resonant_bkg_{run_label}_{mhh_var_name}_bin{bin_idx}_logx.png"
+                fig.savefig(outpath_logx, dpi=150, bbox_inches="tight")
+                print(f"  INFO: >>> {outpath_logx}")
 
                 outpath_json = f"{output_path}/roc_curve_all_gghh_vs_non_resonant_bkg_{run_label}_{mhh_var_name}_bin{bin_idx}.json"
                 with open(outpath_json, 'w', encoding="utf-8") as f:
