@@ -73,8 +73,35 @@ class PrepareInputs:
 
         self.extra_vars_out = self.extra_vars_out + vars_VBFHH_MVA
 
-        self.extra_vars_syst_2024 = ["weight_ElectronVetoSFDown", "weight_ElectronVetoSFUp", "weight_LoosePhoIDSFDown", "weight_LoosePhoIDSFUp", "weight_PileupDown", "weight_PileupUp", "weight_PreselSFDown", "weight_PreselSFUp", "weight_TriggerSFDown", "weight_TriggerSFUp", "weight_btagSFbc_2024Down", "weight_btagSFbc_2024Up", "weight_btagSFbc_correlatedDown", "weight_btagSFbc_correlatedUp", "weight_btagSFlight_2024Down", "weight_btagSFlight_2024Up", "weight_btagSFlight_correlatedDown", "weight_btagSFlight_correlatedUp", "weight_central", "weight_nominal"]
-        self.extra_vars_syst_v3 = ["weight_bTagSF_sys_hfUp", "weight_ElectronVetoSFDown", "weight_bTagSF_sys_hfstats1Down", "weight_bTagSF_sys_lfUp", "weight_TriggerSFUp", "weight_bTagSF_sys_lfstats1Down", "weight_bTagSF_sys_cferr2Down", "weight_bTagSF_sys_lfstats1Up", "weight_bTagSF_sys_lfstats2Down", "weight_TriggerSFDown", "weight_bTagSF_sys_hfstats2Up", "weight_ElectronVetoSFUp", "weight_PreselSFDown", "weight_PileupUp", "weight_bTagSF_sys_hfstats1Up", "weight_bTagSF_sys_jesDown", "weight_bTagSF_sys_lfDown", "weight_bTagSF_sys_cferr1Up", "weight_PileupDown", "weight_bTagSF_sys_lfstats2Up", "weight_bTagSF_sys_hfstats2Down", "weight_bTagSF_sys_hfDown", "weight_bTagSF_sys_cferr2Up", "weight_PreselSFUp", "weight_bTagSF_sys_cferr1Down", "weight_bTagSF_sys_jesUp"]
+        self.extra_vars_syst_common = [
+            "weight_ElectronVetoSFDown",
+            "weight_ElectronVetoSFUp",
+            "weight_LoosePhoIDSFDown",
+            "weight_LoosePhoIDSFUp",
+            "weight_PileupDown",
+            "weight_PileupUp",
+            "weight_PreselSFDown",
+            "weight_PreselSFUp",
+            "weight_TriggerSFDown",
+            "weight_TriggerSFUp",
+            "weight_btagSFbc_correlatedDown",
+            "weight_btagSFbc_correlatedUp",
+            "weight_btagSFlight_correlatedDown",
+            "weight_btagSFlight_correlatedUp",
+        ]
+
+        self.btag_sf_era_map = {
+            "2016preVFP": "2016preVFP",
+            "2016postVFP": "2016postVFP",
+            "2017": "2017",
+            "2018": "2018",
+            "preEE": "2022preEE",
+            "postEE": "2022postEE",
+            "preBPix": "2023preBPix",
+            "postBPix": "2023postBPix",
+            "2024": "2024",
+            "2025": "2025",
+        }
 
         # prepare process numbers for proccesses in each class
         num_process_each_class = {
@@ -96,8 +123,10 @@ class PrepareInputs:
         eps = self.training_info.get("event_parity_split") if self.training_info is not None else None
         if eps:
             self.train_parity = eps["train_on"]
-            self.apply_parity = "even" if self.train_parity == "odd" else "odd"
+            self.apply_parity = eps.get("eval_on")
             self.fallback_eras = eps.get("fallback_eras", [])
+            if self.apply_parity is None and self.train_parity in ("even", "odd"):
+                self.apply_parity = "even" if self.train_parity == "odd" else "odd"
         else:
             self.train_parity = None
             self.apply_parity = None
@@ -151,29 +180,65 @@ class PrepareInputs:
     def _reset_input_file_counter(self) -> None:
         self._files_processed = 0
 
-    def _parity_mask(self, events, parity, era):
+    def _fold_id(self, events, era):
         ev = ak.to_numpy(events["event"])
+        # 2024/2025 already split by even/odd
         if era in self.fallback_eras:
-            is_even = ev % 2 == 0
-            is_odd  = ev % 2 == 1
-            has_even = is_even.any()
-            has_odd  = is_odd.any()
-            if has_even and has_odd:
-                return is_even if parity == "even" else is_odd
-            elif has_even:
-                return (ev % 4 == 0) if parity == "even" else (ev % 4 == 2)
-            else:
-                return (ev % 4 == 1) if parity == "even" else (ev % 4 == 3)
-        return (ev % 2 == 0) if parity == "even" else (ev % 2 == 1)
+            return (ev // 2) % 4
+        return ev % 4
+
+    def _parity_mask(self, events, split, era):
+        ev = ak.to_numpy(events["event"])
+
+        # N-fold
+        if isinstance(split, (list, tuple)):
+            fold_id = self._fold_id(events, era)
+            folds = []
+            for item in split:
+                if not item.startswith("mod4_"):
+                    raise ValueError(
+                        f"List split only supports mod4_N, got: {item}"
+                    )
+                fold = int(item.removeprefix("mod4_"))
+                if fold not in range(4):
+                    raise ValueError(f"Invalid split: {item}")
+                folds.append(fold)
+            return np.isin(fold_id, folds)
+
+        # even/odd split
+        if split in ("even", "odd"):
+            if era in self.fallback_eras:
+                is_even = ev % 2 == 0
+                is_odd  = ev % 2 == 1
+                has_even = is_even.any()
+                has_odd  = is_odd.any()
+                if has_even and has_odd:
+                    return is_even if split == "even" else is_odd
+                elif has_even:
+                    return (ev % 4 == 0) if split == "even" else (ev % 4 == 2)
+                else:
+                    return (ev % 4 == 1) if split == "even" else (ev % 4 == 3)
+            return (ev % 2 == 0) if split == "even" else (ev % 2 == 1)
+
+        # N-fold split
+        if isinstance(split, str) and split.startswith("mod4_"):
+            fold = int(split.removeprefix("mod4_"))
+            if fold not in range(4):
+                raise ValueError(f"Invalid split: {split}")
+            return self._fold_id(events, era) == fold
+
+        raise ValueError(f"Unknown event split: {split}")
 
     def _log_parity_counts(self, events, era, sample):
         ev = ak.to_numpy(events["event"])
         n_even = int((ev % 2 == 0).sum())
-        n_odd  = int((ev % 2 == 1).sum())
-        print(f"INFO [parity] {era}/{sample}: total={len(ev)}  even={n_even}  odd={n_odd}")
-        if era in self.fallback_eras:
-            c = [int((ev % 4 == r).sum()) for r in range(4)]
-            print(f"INFO [parity] {era}/{sample}: mod4: 0={c[0]} 1={c[1]} 2={c[2]} 3={c[3]}")
+        n_odd = int((ev % 2 == 1).sum())
+        print(f"INFO [split] {era}/{sample}: total={len(ev)} even={n_even} odd={n_odd}")
+
+        fold_id = self._fold_id(events, era)
+        counts = [int((fold_id == fold).sum()) for fold in range(4)]
+        rule = "(event // 2) % 4" if era in self.fallback_eras else "event % 4"
+        print(f"INFO [split] {era}/{sample}: fold rule={rule}; mod4_0={counts[0]} mod4_1={counts[1]} mod4_2={counts[2]} mod4_3={counts[3]}")
 
     def load_vars(self, path):
         with open(path, 'r') as f:
@@ -203,7 +268,7 @@ class PrepareInputs:
         events["diphoton_PtOverM_X"] = events.pt / events.nonResReg_vbfpair_M_X
         events["nonResReg_vbfpair_dijet_PtOverM_X"] = events.nonResReg_vbfpair_dijet_pt / events.nonResReg_vbfpair_M_X
 
-        # events["nonResReg_lead_bjet_over_M_regressed"] = events.nonResReg_vbfpair_lead_bjet_pt / events.nonResReg_vbfpair_dijet_mass
+        events["nonResReg_lead_bjet_over_M_regressed"] = events.nonResReg_vbfpair_lead_bjet_pt / events.nonResReg_vbfpair_dijet_mass
         events["nonResReg_sublead_bjet_over_M_regressed"] = events.nonResReg_vbfpair_sublead_bjet_pt / events.nonResReg_vbfpair_dijet_mass
 
         # add deltaR between lead and sublead photon
@@ -518,6 +583,23 @@ class PrepareInputs:
             events["weight_tot"] = (events.weight) * dict_xsec_13p6TeV[sample_type] * lumi
         else:
             raise ValueError(f"Unknown era: {era}")
+
+        return events
+    
+    def _filter_nonfinite_weights(self, events, samples, era):
+        """Drop events whose weight_tot is inf/-inf/nan, with a warning."""
+        w = ak.to_numpy(ak.fill_none(events["weight_tot"], np.nan))
+        finite_mask = np.isfinite(w)
+        n_bad = int((~finite_mask).sum())
+
+        if n_bad > 0:
+            n_inf = int(np.isinf(w).sum())
+            n_nan = int(np.isnan(w).sum())
+            print(
+                f"WARNING [weight_tot]: {samples}/{era}: dropping {n_bad}/{len(w)} events "
+                f"with non-finite weight_tot (inf={n_inf}, nan={n_nan}). "
+            )
+            events = events[finite_mask]
 
         return events
 
@@ -894,6 +976,7 @@ class PrepareInputs:
 
                 # get relative weights according to cross section of the process
                 events = self.get_relative_xsec_weight(events, samples, era)
+                events = self._filter_nonfinite_weights(events, samples, era)
 
                 events = events[vars_to_load + ["weight_tot"]]
 
@@ -1134,12 +1217,17 @@ class PrepareInputs:
                 if any(x in era for x in ["preEE", "postEE", "preBPix", "postBPix"]):
                     vars_to_load.remove("nonResReg_vbfpair_lead_bjet_btagUParTAK4B")
                     vars_to_load.remove("nonResReg_vbfpair_sublead_bjet_btagUParTAK4B")
-                    if samples not in ["GGJets", "DDQCDGJET", "TTGG"]:
-                        vars_to_load = vars_to_load + self.extra_vars_syst_v3
 
-                if era == "2024" and samples not in ["GGJets", "DDQCDGJET", "TTGG"]:
-                    vars_to_load = vars_to_load + self.extra_vars_syst_2024
-                
+                btag_era = self.btag_sf_era_map[era]
+                if (btag_era is not None and samples not in ["GGJets", "DDQCDGJET", "TTGG"]):
+                    vars_to_load += self.extra_vars_syst_common + [
+                        f"weight_btagSFbc_{btag_era}Down",
+                        f"weight_btagSFbc_{btag_era}Up",
+                        f"weight_btagSFlight_{btag_era}Down",
+                        f"weight_btagSFlight_{btag_era}Up",
+                    ]
+
+                vars_to_load = list(dict.fromkeys(vars_to_load))
                 print(f"DEBUG: vars_to_load = {vars_to_load}")
                 
                 parquet_path = training_info["samples_info"][era][samples]
@@ -1166,6 +1254,7 @@ class PrepareInputs:
 
                 # get relative weights according to cross section of the process
                 events = self.get_relative_xsec_weight(events, samples, era)
+                events = self._filter_nonfinite_weights(events, samples, era)
 
                 # apply mHH bin filter (if configured) and skip sample if empty
                 if self.mhh_var is not None and self.mhh_range is not None:
@@ -1326,6 +1415,7 @@ class PrepareInputs:
 
                     # get relative weights according to cross section of the process
                     events = self.get_relative_xsec_weight(events, samples, era)
+                    events = self._filter_nonfinite_weights(events, samples, era)
 
                     # apply mHH bin filter (if configured) and skip sample if empty
                     if self.mhh_var is not None and self.mhh_range is not None:
@@ -1460,6 +1550,18 @@ class PrepareInputs:
             "2022_EraD": "preEE",
             "2023_EraC": "preBPix",
             "2023_EraD": "postBPix",
+            "2023_EraCv1_EG0": "preBPix",
+            "2023_EraCv1_EG1": "preBPix",
+            "2023_EraCv2_EG0": "preBPix",
+            "2023_EraCv2_EG1": "preBPix",
+            "2023_EraCv3_EG0": "preBPix",
+            "2023_EraCv3_EG1": "preBPix",
+            "2023_EraCv4_EG0": "preBPix",
+            "2023_EraCv4_EG1": "preBPix",
+            "2023_EraDv1_EG0": "postBPix",
+            "2023_EraDv1_EG1": "postBPix",
+            "2023_EraDv2_EG0": "postBPix",
+            "2023_EraDv2_EG1": "postBPix",
             "2024_EraC_EG0": "2024",
             "2024_EraC_EG1": "2024",
             "2024_EraD_EG0": "2024",
