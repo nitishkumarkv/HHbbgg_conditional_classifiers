@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import numpy as np
@@ -45,19 +46,62 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description='Plot the results of the MLP')
     parser.add_argument('--input_path', type=str, help='Path to the inputs')
+    parser.add_argument('--epoch', type=int, default=None, help='Which checkpoint epoch to load')
     args = parser.parse_args()
 
     #inputs_for_MLP = "../data/inputs_for_MLP_202411226/"
     #input_path="train_inputs_for_MLP_202411226/after_random_search_best1/"
     inputs_for_MLP = args.input_path
     input_path = f"{inputs_for_MLP}/after_random_search_best1/"
-    path_for_plots = f"{input_path}/plots/"
+    if args.epoch is not None:
+        path_for_plots = f"{input_path}/plots_epoch{args.epoch}/"
+    else:
+        path_for_plots = f"{input_path}/plots/"
     os.makedirs(path_for_plots, exist_ok=True)
-    path_to_checkpoint = f"{input_path}/mlp.pth"
+    if args.epoch is not None:
+        path_to_checkpoint = f"{input_path}/mlp_{args.epoch}.pth"
+    else:
+        path_to_checkpoint = f"{input_path}/mlp.pth"
 
     # load the checkpoint
     start_epoch, train_loss_hist, train_loss_hist_no_absolute_weights, val_loss_hist, train_acc_hist, val_acc_hist, lr_hist, best_weights, best_loss = load_checkpoint(path_to_checkpoint)
 
+    if args.epoch is not None:
+        with open(f"{input_path}/params.json", 'r') as f:
+            params = json.load(f)
+        act_fn = getattr(nn, params['act_fn_name'])
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        X_train = torch.tensor(np.load(f'{inputs_for_MLP}/X_train.npy'), dtype=torch.float32)
+        X_val = torch.tensor(np.load(f'{inputs_for_MLP}/X_val.npy'), dtype=torch.float32)
+        input_size = X_train.shape[1]
+
+        y_train_raw = np.load(f'{inputs_for_MLP}/y_train.npy')
+        output_size = y_train_raw.shape[1]
+
+        model = MLP(input_size, params['num_layers'], params['num_nodes'], output_size, act_fn, params['dropout_prob']).to(device)
+
+        raw_checkpoint = torch.load(path_to_checkpoint, map_location=device, weights_only=False)
+        model.load_state_dict(raw_checkpoint['model_state_dict'])
+        model.eval()
+
+        def predict(X):
+            preds = []
+            bs = 1024
+            for i in range(0, len(X), bs):
+                with torch.no_grad():
+                    out = model(X[i:i+bs].to(device))
+                    preds.append(F.softmax(out, dim=1).cpu().numpy())
+            return np.concatenate(preds, axis=0)
+
+        y_pred_train_new = predict(X_train)
+        y_pred_val_new = predict(X_val)
+
+        np.save(f"{input_path}/y_pred_train_{args.epoch}.npy", y_pred_train_new)
+        np.save(f"{input_path}/y_pred_val_{args.epoch}.npy", y_pred_val_new)
+        print(f"INFO: Re-generated predictions using checkpoint from epoch {raw_checkpoint['epoch']}")
+    else:
+        print("INFO: --epoch not specified, using existing y_pred_train.npy / y_pred_val.npy as-is")
 
     colors = ['royalblue', 'darkorange', 'darkviolet', 'seagreen']
 
@@ -104,7 +148,13 @@ if __name__ == "__main__":
 
 
     # load predictions
-    y_pred_val_ = np.load(f"{input_path}/y_pred_val.npy")
+    if args.epoch is not None:
+        y_pred_val_ = np.load(f"{input_path}/y_pred_val_{args.epoch}.npy")
+        y_pred_train = np.load(f"{input_path}/y_pred_train_{args.epoch}.npy")
+    else:
+        y_pred_val_ = np.load(f"{input_path}/y_pred_val.npy")
+        y_pred_train = np.load(f"{input_path}/y_pred_train.npy")
+
     y_val_ = np.load(f'{inputs_for_MLP}/y_val.npy')
     #rel_w_val = np.load(f'{inputs_for_MLP}/rel_w_val.npy')
     rel_w_val_ = np.load(f'{inputs_for_MLP}/class_weights_for_val.npy')
@@ -113,7 +163,6 @@ if __name__ == "__main__":
     rel_w_val = rel_w_val_
 
 
-    y_pred_train = np.load(f"{input_path}/y_pred_train.npy")
     y_train = np.load(f'{inputs_for_MLP}/y_train.npy')
     rel_w_train = np.load(f'{inputs_for_MLP}/true_class_weights.npy')
 

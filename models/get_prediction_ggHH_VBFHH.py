@@ -74,6 +74,7 @@ def prep_inputs_for_prediction_sim(samples_path, training_config, input_vars_txt
             parquet_path = f"individual_samples/{era}/{samples}/events.parquet"
             events = ak.from_parquet(f"{samples_path}/{parquet_path}")
 
+            print(f"DEBUG: parquet_path: {samples_path}/{parquet_path}")
             print(f"INFO: Number of events in {samples} for {era}: {len(events)}")
 
             write_chunk = training_config["write_chunk"]
@@ -128,6 +129,7 @@ def prep_inputs_for_prediction_sim_sys(samples_path, training_config, input_vars
                     print(f"WARNING: {samples} for {era} for {sys} does not exist. Skipping.: {samples_path}/{parquet_path}")
                     continue
 
+                print(f"DEBUG: parquet_path {samples_path}/{parquet_path}")
                 events = ak.from_parquet(f"{samples_path}/{parquet_path}")
 
                 print(f"INFO: Number of events in {samples} for {era} for {sys}: {len(events)}")
@@ -201,6 +203,18 @@ def prep_inputs_for_prediction_data(samples_path, training_config, input_vars_tx
             "2022_EraD": "preEE",
             "2023_EraC": "preBPix",
             "2023_EraD": "postBPix",
+            "2023_EraCv1_EG0": "preBPix",
+            "2023_EraCv1_EG1": "preBPix",
+            "2023_EraCv2_EG0": "preBPix",
+            "2023_EraCv2_EG1": "preBPix",
+            "2023_EraCv3_EG0": "preBPix",
+            "2023_EraCv3_EG1": "preBPix",
+            "2023_EraCv4_EG0": "preBPix",
+            "2023_EraCv4_EG1": "preBPix",
+            "2023_EraDv1_EG0": "postBPix",
+            "2023_EraDv1_EG1": "postBPix",
+            "2023_EraDv2_EG0": "postBPix",
+            "2023_EraDv2_EG1": "postBPix",
             "2024_EraC_EG0": "2024",
             "2024_EraC_EG1": "2024",
             "2024_EraD_EG0": "2024",
@@ -304,6 +318,7 @@ if __name__ == "__main__":
     parser.add_argument('--ggHH_model_folder', type=str, help='Path to the ggHH model folder containing the params.json and mlp.pth files')
     parser.add_argument('--samples_path', type=str, help='Path to the samples')
     parser.add_argument('--config_path', type=str, help='Path to the configuration files')
+    parser.add_argument('--epoch', type=str, default=None)
     # VBFHH model
     parser.add_argument('--VBFHH_model', type=str, help='Path to the VBFHH model')
     parser.add_argument('--VBFHH_vars_path', type=str)
@@ -317,7 +332,8 @@ if __name__ == "__main__":
 
     model_folder = args.ggHH_model_folder
     model_dict_path = f"{model_folder}/params.json"
-    model_path = f"{model_folder}/mlp.pth"
+    model_name = "mlp.pth" if args.epoch == None else f"mlp_{args.epoch}.pth"
+    model_path = f"{model_folder}/{model_name}"
 
     # load the configuration yaml files
     training_config_path = f"{args.config_path}/training_config.yaml"
@@ -333,16 +349,16 @@ if __name__ == "__main__":
             model_VBFHH_Run2 = tf.keras.models.load_model(args.VBFHH_model)
             model_VBFHH_Run3 = tf.keras.models.load_model(args.VBFHH_model)
         else:
-            print("No VBFHH model provided. Will use the default model for VBFHH MVA.")
-            model_VBFHH_Run2 = tf.keras.models.load_model("/eos/user/c/chuxue/HHbbgg/inputs_VBFMVA/VBFMVA_v6parquet.keras")            
-            model_VBFHH_Run3 = tf.keras.models.load_model("/eos/user/c/chuxue/HHbbgg/inputs_VBFMVA/VBFMVA_v6parquet.keras")
+            raise ValueError("No VBFHH model provided. Will use the default model for VBFHH MVA.") 
+            # model_VBFHH_Run2 = tf.keras.models.load_model("/eos/user/c/chuxue/HHbbgg/inputs_VBFMVA/VBFMVA_v6parquet.keras")            
+            # model_VBFHH_Run3 = tf.keras.models.load_model("/eos/user/c/chuxue/HHbbgg/inputs_VBFMVA/VBFMVA_v6parquet.keras")
 
         if args.get_pred_data:
             prep_inputs_for_prediction_data(samples_path, training_config, input_vars_txt, args.VBFHH_out_dir)
         if args.get_pred_nominal:
             prep_inputs_for_prediction_sim(samples_path, training_config, input_vars_txt, args.VBFHH_out_dir)
-        if args.get_pred_sys:
-            prep_inputs_for_prediction_sim_sys(samples_path, training_config, input_vars_txt, args.VBFHH_out_dir)
+        # if args.get_pred_sys:
+        #     prep_inputs_for_prediction_sim_sys(samples_path, training_config, input_vars_txt, args.VBFHH_out_dir)
 
     if args.get_pred_nominal:
 
@@ -471,6 +487,9 @@ if __name__ == "__main__":
             if args.MVA_choice != "ggHH_only":
                 ## VBFHH prediction
                 inputs_path_VBFHH = f"{args.VBFHH_out_dir}/individual_samples_data/{data_sample}"
+                if data_sample == "2016preVFP_EraBv1":
+                    print(f"WARNING: {data_sample} does not exist. Skipping.: {inputs_path_VBFHH}/X.npy")
+                    continue
                 X_VBFHH = np.load(f'{inputs_path_VBFHH}/X.npy').astype(np.float32)
 
                 print(f"Getting prediction for {data_sample} for VBFHH MVA")

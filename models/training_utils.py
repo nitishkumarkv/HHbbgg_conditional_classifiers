@@ -286,7 +286,7 @@ if __name__ == "__main__":
     print(f"INFO: Training for {n_epochs} epochs", '\n')
     best_loss = np.inf
     best_weights = None
-    patience = 50
+    patience = 15
     counter = 0
 
     train_loss_hist = []
@@ -338,7 +338,7 @@ if __name__ == "__main__":
                 print(f"Early stopping at epoch {epoch}")
                 break
 
-            if epoch % 20 == 0:
+            if epoch % 5 == 0:
                 save_checkpoint(epoch, best_model, best_optimizer, best_scheduler, 
                             train_loss_hist, train_loss_hist_no_absolute_weights, val_loss_hist, train_acc_hist, val_acc_hist, 
                             best_weights, best_loss, f"{path_to_checkpoint}/mlp_{epoch}.pth")
