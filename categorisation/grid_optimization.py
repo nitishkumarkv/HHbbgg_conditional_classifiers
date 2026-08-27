@@ -118,6 +118,7 @@ class GridSearchCategorizer:
         n_coarse_bins=100,
         n_fine_bins=100,
         require_sb_ratio=False,
+        data_mc_sb_bounds=None,
     ):
         # -- Paths and I/O --------------------------------------------
         self.base_path = base_path
@@ -149,6 +150,10 @@ class GridSearchCategorizer:
         self.n_coarse_bins = n_coarse_bins
         self.n_fine_bins = n_fine_bins
         self.require_sb_ratio = require_sb_ratio
+        self.data_mc_sb_bounds = None
+        if data_mc_sb_bounds is not None:
+            lo, hi = [float(x.strip()) for x in data_mc_sb_bounds.split(",")]
+            self.data_mc_sb_bounds = (lo, hi)
 
         # -- VBFHH parameters -----------------------------------------
         self.vbfhh_class = vbfhh_class
@@ -261,7 +266,7 @@ class GridSearchCategorizer:
 
     def preselection(self, events, scores):
         """Apply pre-selection cuts."""
-        mass_bool = (events.mass > 100) & (events.mass < 180)
+        mass_bool = (events.mass > MASS_LEFT_SB[0]) & (events.mass < MASS_RIGHT_SB[1])
         dijet_mass_bool = (events[self.dijet_mass_key] > 80) & (
             events[self.dijet_mass_key] < 190
         )
@@ -513,7 +518,7 @@ class GridSearchCategorizer:
 
     def _build_histograms(self, scores, weights, masses, labels, samples, bin_edges=None):
         n_bins = self.n_coarse_bins
-        bin_range = [[0.0, 1.0], [0.0, 1.0], [0.0, 1.0]]
+        bin_range = [[0.99, 1.0], [0.9, 1.0], [0.0, 1.0]]
         if bin_edges is not None:
             bins = bin_edges
         else:
@@ -709,10 +714,25 @@ class GridSearchCategorizer:
                 & (C["data_LSB"] > 0)
                 & (_sb_ratio < _WIDTH_R / _WIDTH_L)
             )
+        if self.data_mc_sb_bounds is not None:
+            lo, hi = self.data_mc_sb_bounds
+            _data_sb = C["data_LSB"] + C["data_RSB"]
+            _mc_sb = C["bkg_sideband"]
+            with np.errstate(invalid="ignore", divide="ignore"):
+                _dmc = np.divide(_data_sb, _mc_sb,
+                                 out=np.full_like(_data_sb, np.nan),
+                                 where=_mc_sb > 0)
+            candidate = (
+                candidate
+                & (_mc_sb > 0)
+                & (_dmc >= lo) & (_dmc <= hi)
+            )
         idx = np.where(candidate)
         n_cand = len(idx[0])
         pct = 100.0 * n_cand / total_combos
         sb_ratio_str = f", RSB/LSB<{_WIDTH_R/_WIDTH_L:.2f}" if self.require_sb_ratio else ""
+        if self.data_mc_sb_bounds is not None:
+            sb_ratio_str += f", data/MC_SB in [{lo:.2f},{hi:.2f}]"
         print(f"  Candidates (has events, S>0, sb>={self.side_band_threshold_low}{sb_ratio_str}): "
               f"{n_cand:,} ({pct:.2f}% of {total_combos:,})")
 
@@ -943,6 +963,19 @@ class GridSearchCategorizer:
                 & (C_bs_L > 0)
                 & (_sb_ratio < _WIDTH_R / _WIDTH_L)
             )
+        if self.data_mc_sb_bounds is not None:
+            lo, hi = self.data_mc_sb_bounds
+            _data_sb = C_bs_L + C_bs_R
+            _mc_sb = C_bs
+            with np.errstate(invalid="ignore", divide="ignore"):
+                _dmc = np.divide(_data_sb, _mc_sb,
+                                 out=np.full_like(_data_sb, np.nan),
+                                 where=_mc_sb > 0)
+            valid_mask = (
+                valid_mask
+                & (_mc_sb > 0)
+                & (_dmc >= lo) & (_dmc <= hi)
+            )
         with np.errstate(invalid="ignore", divide="ignore"):
             Z = np.where(
                 valid_mask,
@@ -1169,6 +1202,10 @@ class GridSearchCategorizer:
                     data_ratio_str += " *** EXCEEDS LIMIT ***"
             elif self.require_sb_ratio:
                 data_ratio_str = "  Data SB ratio: N/A (no data in LSB)"
+            if self.data_mc_sb_bounds is not None and bkg_side > 0:
+                lo, hi = self.data_mc_sb_bounds
+                dmr = data_side / bkg_side
+                data_ratio_str += f"  Data/MC_SB={dmr:.2f} (req [{lo:.2f},{hi:.2f}])"
             print(f"  Signal in SR: {sig_peak:.3g}  Bkg in SB: {bkg_side:.3g}  Data in SB: {data_side:.3g} "
                   f"Removed: {mask_local.sum():,}{data_ratio_str}")
             
@@ -1803,6 +1840,10 @@ if __name__ == "__main__":
                         help="Require right_sideband / left_sideband "
                              "< right_width / left_width (=%.2f)"
                              % (_WIDTH_R / _WIDTH_L))
+    parser.add_argument("--data_mc_sb_bounds", type=str, default=None,
+                        help="Require data_SB / MC_SB (sideband) ratio within [lo,hi]. "
+                             "Format 'lo,hi', e.g. '0.5,2.0'. Only candidates whose MC "
+                             "background is consistent with data in the sideband are kept.")
 
     # -- Output ------------------------------------------------------
     parser.add_argument("--output_dir", type=str, default=None,
@@ -1895,6 +1936,7 @@ if __name__ == "__main__":
         n_coarse_bins=args.n_coarse_bins,
         n_fine_bins=args.n_fine_bins,
         require_sb_ratio=args.require_sb_ratio,
+        data_mc_sb_bounds=args.data_mc_sb_bounds,
     )
     categoriser.apply_boosted_veto = args.apply_boosted_veto
     categoriser.vbf_2d_scan = args.vbfhh_2d_scan
