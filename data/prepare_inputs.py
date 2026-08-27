@@ -43,9 +43,21 @@ class PrepareInputs:
             self.data_prep_split = None
         self.fill_nan = -9
 
+        necessary_var = ['run', 'event', 'lumi']
         self.extra_vars = ["mass", "nonRes_dijet_mass", f"{self.var_prefix}_dijet_mass", f"{self.var_prefix}_dijet_mass_DNNreg", f"{self.var_prefix}_HHbbggCandidate_mass", f"{self.var_prefix}_dijet_pt", f"{self.var_prefix}_lead_bjet_pt", f"{self.var_prefix}_sublead_bjet_pt", f"{self.var_prefix}_lead_bjet_eta", f"{self.var_prefix}_DNNpair_dijet_mass", f"{self.var_prefix}_DNNpair_dijet_mass_DNNreg", f"{self.var_prefix}_lead_bjet_btagPNetB", f"{self.var_prefix}_sublead_bjet_btagPNetB", f"{self.var_prefix}_lead_bjet_btagUParTAK4B", f"{self.var_prefix}_sublead_bjet_btagUParTAK4B", "weight", "pt", "nonRes_dijet_pt", "nonRes_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "lead_eta", "lead_phi", "sublead_eta", "sublead_phi"] # "lead_genPartFlav", "sublead_genPartFlav", "weight_tot" added for sim predictions only in the dedicated functions
+        self.extra_vars = necessary_var + self.extra_vars
 
         self.vars_for_boosted = ['sublead_mvaID', 'fatjet3_tau2', 'fatjet3_particleNet_XbbVsQCD', 'fatjet4_subjet2_eta', 'sublead_eta', 'fatjet2_phi', 'fatjet1_mass', f'{self.var_prefix}_CosThetaStar_gg', 'fatjet4_particleNet_XbbVsQCD', 'lead_phi', 'fatjet4_pt', 'fatjet4_tau1', 'fatjet4_tau2', 'fatjet2_particleNet_XbbVsQCD', 'fatjet3_subjet1_eta', 'fatjet1_subjet1_eta', 'lead_eta', 'fatjet3_msoftdrop', 'fatjet4_mass', 'fatjet4_particleNet_massCorr', 'fatjet1_tau1', 'eta', 'fatjet2_pt', 'phi', 'fatjet1_subjet2_phi', 'fatjet3_eta', 'fatjet1_subjet2_eta', f'{self.var_prefix}_phosublead_PtOverM', 'fatjet4_subjet1_phi', 'fatjet3_subjet2_phi', 'fatjet3_subjet1_phi', 'fatjet2_tau2', 'n_jets', 'fatjet2_msoftdrop', 'fatjet2_subjet2_phi', 'fatjet3_pt', 'fatjet2_eta', 'fatjet3_tau1', 'fatjet4_eta', 'fatjet1_eta', 'fatjet3_mass', 'n_fatjets', 'fatjet1_pt', 'fatjet3_subjet2_eta', 'fatjet1_subjet1_phi', 'fatjet1_msoftdrop', 'lead_mvaID', 'fatjet4_subjet1_eta', f'{self.var_prefix}_pholead_PtOverM', 'fatjet2_tau1', 'fatjet2_mass', 'fatjet2_subjet2_eta', 'fatjet3_phi', 'n_leptons', 'fatjet1_particleNet_massCorr', 'fatjet2_subjet1_phi', 'fatjet4_subjet2_phi', 'fatjet1_tau2', 'fatjet1_phi', 'fatjet2_subjet1_eta', 'fatjet4_phi', 'fatjet1_particleNet_XbbVsQCD', 'fatjet3_particleNet_massCorr', 'fatjet4_msoftdrop', 'sublead_phi', 'fatjet2_particleNet_massCorr']
+        # GloParT and regressed mass columns needed by boosted eval when using --use_glopart --use_regressed_mass
+        # These only exist in 2024+ data; PyArrow iter_batches silently drops missing columns.
+        for i in range(1, 5):
+            self.vars_for_boosted += [
+                f'fatjet{i}_globalParT3_Xbb',
+                f'fatjet{i}_globalParT3_QCD',
+                f'fatjet{i}_globalParT3_massCorrX2p',
+                f'fatjet{i}_mass_raw',
+            ]
+
         
         # prepare process numbers for proccesses in each class
         num_process_each_class = {
@@ -86,17 +98,35 @@ class PrepareInputs:
             shutil.copy2(f"{train_path}/{file_name}", f"{final_path}/{file_name}")
 
 
-    def _data_prep_split_indices(self, n_events):
+    #def _data_prep_split_indices(self, n_events):
+    #    if self.data_prep_split is None:
+    #        return np.arange(n_events), None
+    #    from sklearn.model_selection import train_test_split
+    #    train_split_fraction = self._data_prep_train_split_fraction()
+    #    if train_split_fraction <= 0.0 or train_split_fraction >= 1.0:
+    #        raise ValueError("data_prep_split train_split_fraction must be between 0 and 1")
+    #    if n_events < 2:
+    #        return np.arange(n_events), np.array([], dtype=int)
+    #    idx = np.arange(n_events)
+    #    train_idx, final_idx = train_test_split(idx, train_size=train_split_fraction, shuffle=True, random_state=self.random_seed)
+    #    return train_idx, final_idx
+
+    def _data_prep_split_indices(self, event_ids):
         if self.data_prep_split is None:
-            return np.arange(n_events), None
-        from sklearn.model_selection import train_test_split
-        train_split_fraction = self._data_prep_train_split_fraction()
-        if train_split_fraction <= 0.0 or train_split_fraction >= 1.0:
-            raise ValueError("data_prep_split train_split_fraction must be between 0 and 1")
-        if n_events < 2:
-            return np.arange(n_events), np.array([], dtype=int)
-        idx = np.arange(n_events)
-        train_idx, final_idx = train_test_split(idx, train_size=train_split_fraction, shuffle=True, random_state=self.random_seed)
+            return np.arange(len(event_ids)), None
+        # Ensure event_ids is a numpy array for vectorized math
+        events = np.asarray(event_ids)
+        if len(events) < 2:
+            return np.arange(len(events)), np.array([], dtype=int)
+        # Apply your deterministic logic: (event // 2) % 4
+        split_metric = (events // 2) % 4
+        # Odd results for training, Even results for final
+        train_mask = (split_metric % 2 != 0)
+        final_mask = (split_metric % 2 == 0)
+        # Convert the boolean masks back to positional indices
+        idx = np.arange(len(events))
+        train_idx = idx[train_mask]
+        final_idx = idx[final_mask]
         return train_idx, final_idx
 
 
@@ -124,7 +154,9 @@ class PrepareInputs:
 
 
     def _split_events_for_data_prep(self, events):
-        train_idx, final_idx = self._data_prep_split_indices(len(events))
+        event_ids = events['event']
+        #train_idx, final_idx = self._data_prep_split_indices(len(events))
+        train_idx, final_idx = self._data_prep_split_indices(event_ids)
         train_weight_scale, final_weight_scale = self._data_prep_split_scales()
         train_events = self._scale_event_weights(events[train_idx], train_weight_scale)
         final_events = None
@@ -181,7 +213,7 @@ class PrepareInputs:
         return -1
 
 
-    def _iter_file_batched(self, file_path, vars_to_load, save_all_columns, era, preselection_func, xsec_sample_name, apply_xsec_weights):
+    def _iter_file_batched(self, file_path, vars_to_load, save_all_columns, era, preselection_func, xsec_sample_name, apply_xsec_weights, load_all_weight_columns=True):
         """
         Generator that loads a single parquet file in 20 equal-sized row batches,
         yielding each processed batch. Peak memory is bounded to ~1/20th of the file
@@ -201,6 +233,10 @@ class PrepareInputs:
         """
         pf = pq.ParquetFile(file_path)
         batch_size = max(1, pf.metadata.num_rows // 20)
+        if load_all_weight_columns:
+            available_columns = pf.schema.names
+            all_weight_columns = [weight_col for weight_col in available_columns if weight_col.startswith("weight")]
+            vars_to_load = set(vars_to_load) | set(all_weight_columns)  # Ensure all weight columns are loaded for weighting
         columns = None if save_all_columns else vars_to_load
 
         for record_batch in pf.iter_batches(batch_size=batch_size, columns=columns):
@@ -219,14 +255,21 @@ class PrepareInputs:
                     batch = self.get_relative_xsec_weight(batch, xsec_sample_name, era)
                     #print(f"  [MEM] after xsec weights:       {self._mem_mb():.0f} MB")
 
+                    finite_weight = np.isfinite(ak.to_numpy(ak.fill_none(batch["rel_xsec_weight"], np.nan)))
+                    n_bad = len(batch) - int(np.sum(finite_weight))
+                    if n_bad > 0:
+                        print(f"WARNING: {xsec_sample_name} ({era}): dropping {n_bad}/{len(batch)} event(s) with non-finite weight (NaN/Inf)")
+                        batch = batch[finite_weight]
+
                 # Convert float64 fields to float32 to save memory
                 for field in batch.fields:
                     if hasattr(batch[field], 'dtype') and batch[field].dtype == np.float64:
                         batch[field] = ak.values_astype(batch[field], np.float32)
                 #print(f"  [MEM] after float32 cast:       {self._mem_mb():.0f} MB")
 
-                yield batch
-                #print(f"  [MEM] after caller consumed batch: {self._mem_mb():.0f} MB")
+                if len(batch) > 0:
+                    yield batch
+                    #print(f"  [MEM] after caller consumed batch: {self._mem_mb():.0f} MB")
 
 
     def load_and_process_sample(self, samples_path, parquet_path, samples, era, vars_to_load, preselection_func, save_all_columns=False, systematic=None, apply_xsec_weights=True):

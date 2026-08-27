@@ -264,7 +264,7 @@ if __name__ == "__main__":
     best_optimizer = optim.Adam(best_model.parameters(), lr=best_lr, weight_decay=best_weight_decay)
     n_epochs = 500
 
-    useOneCycleLR = True
+    useOneCycleLR = False
     if useOneCycleLR:
         # OneCycleLR scheduler with warmup for faster convergence
         # max_lr is set higher than base lr for better exploration during warmup
