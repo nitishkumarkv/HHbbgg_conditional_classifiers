@@ -44,7 +44,39 @@ class PrepareInputs:
         self.fill_nan = -9
 
         self.extra_vars = ["mass", "nonRes_dijet_mass", f"{self.var_prefix}_dijet_mass", f"{self.var_prefix}_dijet_mass_DNNreg", f"{self.var_prefix}_HHbbggCandidate_mass", f"{self.var_prefix}_dijet_pt", f"{self.var_prefix}_lead_bjet_pt", f"{self.var_prefix}_sublead_bjet_pt", f"{self.var_prefix}_lead_bjet_eta", f"{self.var_prefix}_DNNpair_dijet_mass", f"{self.var_prefix}_DNNpair_dijet_mass_DNNreg", f"{self.var_prefix}_lead_bjet_btagPNetB", f"{self.var_prefix}_sublead_bjet_btagPNetB", f"{self.var_prefix}_lead_bjet_btagUParTAK4B", f"{self.var_prefix}_sublead_bjet_btagUParTAK4B", "weight", "pt", "nonRes_dijet_pt", "nonRes_HHbbggCandidate_mass", "eta", "nBTight","nBMedium","nBLoose", "nonRes_lead_bjet_pt", "nonRes_sublead_bjet_pt", "lead_isScEtaEB", "lead_isScEtaEE", "sublead_isScEtaEB", "sublead_isScEtaEE", "lead_mvaID", "sublead_mvaID", "lead_eta", "lead_phi", "sublead_eta", "sublead_phi"] # "lead_genPartFlav", "sublead_genPartFlav", "weight_tot" added for sim predictions only in the dedicated functions
+        self.extra_vars += [
+            'weight_ElectronVetoSFDown', 'weight_ElectronVetoSFUp', 
+            'weight_LHEPdf', 'weight_LHEScale', 
+            'weight_LoosePhoIDSFDown', 'weight_LoosePhoIDSFUp', 
+            'weight_PileupDown', 'weight_PileupUp', 
+            'weight_PreselSFDown', 'weight_PreselSFUp', 
+            'weight_TriggerSFDown', 'weight_TriggerSFUp', 
+            'weight_btagSFbc_correlatedDown', 'weight_btagSFbc_correlatedUp', 
+            'weight_btagSFlight_correlatedDown', 'weight_btagSFlight_correlatedUp'
+            ]
+        self.extra_vars += [
+            'weight_btagSFbc_2016preVFPDown', 'weight_btagSFbc_2016preVFPUp', 
+            'weight_btagSFbc_2016postVFPDown', 'weight_btagSFbc_2016postVFPUp',
+            'weight_btagSFbc_2017Down', 'weight_btagSFbc_2017Up',
+            'weight_btagSFbc_2018Down', 'weight_btagSFbc_2018Up',
+            'weight_btagSFbc_2022preEEDown', 'weight_btagSFbc_2022preEEUp',
+            'weight_btagSFbc_2022postEEDown', 'weight_btagSFbc_2022postEEUp',
+            'weight_btagSFbc_2023preBPixDown', 'weight_btagSFbc_2023preBPixUp',
+            'weight_btagSFbc_2023postBPixDown', 'weight_btagSFbc_2023postBPixUp',
+            'weight_btagSFbc_2024Down', 'weight_btagSFbc_2024Up',
+            'weight_btagSFbc_2025Down', 'weight_btagSFbc_2025Up',
 
+            'weight_btagSFlight_2016preVFPDown', 'weight_btagSFlight_2016preVFPUp', 
+            'weight_btagSFlight_2016postVFPDown', 'weight_btagSFlight_2016postVFPUp',
+            'weight_btagSFlight_2017Down', 'weight_btagSFlight_2017Up',
+            'weight_btagSFlight_2018Down', 'weight_btagSFlight_2018Up',
+            'weight_btagSFlight_2022preEEDown', 'weight_btagSFlight_2022preEEUp',
+            'weight_btagSFlight_2022postEEDown', 'weight_btagSFlight_2022postEEUp',
+            'weight_btagSFlight_2023preBPixDown', 'weight_btagSFlight_2023preBPixUp',
+            'weight_btagSFlight_2023postBPixDown', 'weight_btagSFlight_2023postBPixUp',
+            'weight_btagSFlight_2024Down', 'weight_btagSFlight_2024Up',
+            'weight_btagSFlight_2025Down', 'weight_btagSFlight_2025Up',
+            ]
         self.vars_for_boosted = ['sublead_mvaID', 'fatjet3_tau2', 'fatjet3_particleNet_XbbVsQCD', 'fatjet4_subjet2_eta', 'sublead_eta', 'fatjet2_phi', 'fatjet1_mass', f'{self.var_prefix}_CosThetaStar_gg', 'fatjet4_particleNet_XbbVsQCD', 'lead_phi', 'fatjet4_pt', 'fatjet4_tau1', 'fatjet4_tau2', 'fatjet2_particleNet_XbbVsQCD', 'fatjet3_subjet1_eta', 'fatjet1_subjet1_eta', 'lead_eta', 'fatjet3_msoftdrop', 'fatjet4_mass', 'fatjet4_particleNet_massCorr', 'fatjet1_tau1', 'eta', 'fatjet2_pt', 'phi', 'fatjet1_subjet2_phi', 'fatjet3_eta', 'fatjet1_subjet2_eta', f'{self.var_prefix}_phosublead_PtOverM', 'fatjet4_subjet1_phi', 'fatjet3_subjet2_phi', 'fatjet3_subjet1_phi', 'fatjet2_tau2', 'n_jets', 'fatjet2_msoftdrop', 'fatjet2_subjet2_phi', 'fatjet3_pt', 'fatjet2_eta', 'fatjet3_tau1', 'fatjet4_eta', 'fatjet1_eta', 'fatjet3_mass', 'n_fatjets', 'fatjet1_pt', 'fatjet3_subjet2_eta', 'fatjet1_subjet1_phi', 'fatjet1_msoftdrop', 'lead_mvaID', 'fatjet4_subjet1_eta', f'{self.var_prefix}_pholead_PtOverM', 'fatjet2_tau1', 'fatjet2_mass', 'fatjet2_subjet2_eta', 'fatjet3_phi', 'n_leptons', 'fatjet1_particleNet_massCorr', 'fatjet2_subjet1_phi', 'fatjet4_subjet2_phi', 'fatjet1_tau2', 'fatjet1_phi', 'fatjet2_subjet1_eta', 'fatjet4_phi', 'fatjet1_particleNet_XbbVsQCD', 'fatjet3_particleNet_massCorr', 'fatjet4_msoftdrop', 'sublead_phi', 'fatjet2_particleNet_massCorr']
         
         # prepare process numbers for proccesses in each class
@@ -262,7 +294,10 @@ class PrepareInputs:
             for path in parquet_path:
                 # Apply systematic replacement if needed
                 if systematic is not None:
-                    path = path.replace("nominal", systematic)
+                    if "/nominal/" in path:
+                        path = path.replace("/nominal/", f"/{systematic}/")
+                    else:
+                        path = os.path.join(os.path.dirname(path), systematic, os.path.basename(path))
                     # Check if file exists
                     if not os.path.exists(f"{samples_path}/{path}"):
                         print(f"WARNING: {samples} for {era} for {systematic} does not exist. Skipping.: {samples_path}/{path}")
@@ -295,7 +330,12 @@ class PrepareInputs:
         else:
             # Apply systematic replacement if needed
             if systematic is not None:
-                parquet_path = parquet_path.replace("nominal", systematic)
+                if "/nominal/" in parquet_path:
+                    parquet_path = parquet_path.replace("/nominal/", f"/{systematic}/")
+                else:
+                    parquet_path = os.path.join(
+                        os.path.dirname(parquet_path), systematic, os.path.basename(parquet_path)
+                    )
                 # Check if file exists
                 if not os.path.exists(f"{samples_path}/{parquet_path}"):
                     print(f"WARNING: {samples} for {era} for {systematic} does not exist. Skipping.: {samples_path}/{parquet_path}")
@@ -1077,10 +1117,12 @@ class PrepareInputs:
         out_path = f"{inputs_path}/individual_samples/"
         os.makedirs(out_path, exist_ok=True)
         final_out_path = f"{final_inputs_path}/individual_samples/"
-        if self.data_prep_split is not None:
-            os.makedirs(final_out_path, exist_ok=True)
+        os.makedirs(final_out_path, exist_ok=True)
 
-        samples_path = training_info["samples_info"]["samples_path"]
+
+        samples_path = training_info["samples_info"].get(
+            "systematics_samples_path", training_info["samples_info"]["samples_path"]
+        )
 
         # Load mean/std once for all samples
         scale_file = f"{inputs_path}/mean_std_dict.pkl"
@@ -1130,24 +1172,16 @@ class PrepareInputs:
                     train_events, final_events = self._split_events_for_data_prep(events)
                     del events
 
-                    print(f"INFO: Number of events in {samples} for {era} for {sys}: {len(train_events)}")
+                    print(f"INFO: Number of events in {samples} for {era}: {len(train_events)}")
 
+                    print("INFO: saving inputs for mlp")
                     self._save_prediction_events(train_events, vars_for_training, mean, std, fill_nan, full_path_to_save)
                     del train_events
 
                     if final_events is not None:
-                        print(f"INFO: Number of events in {samples} for {era} for {sys} Final_split: {len(final_events)}")
+                        print(f"INFO: Number of events in {samples} for {era} Final_split: {len(final_events)}")
                         self._save_prediction_events(final_events, vars_for_training, mean, std, fill_nan, final_full_path_to_save)
                         del final_events
-
-        # save the training mean ans std_dev. This will be used for standardizing data
-        # (save only once at the end)
-        mean_std_dict = {
-            "mean": mean,
-            "std_dev": std
-        }
-        with open(f"{out_path}/mean_std_dict.pkl", 'wb') as f:
-            pickle.dump(mean_std_dict, f)
 
         self._copy_training_files_to_final(inputs_path, final_inputs_path)
 

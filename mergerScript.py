@@ -25,7 +25,24 @@ ff_sampledict = {
     "GluGlutoHHto2B2G_kl_5p00_kt_1p00_c2_0p00": "GluGluToHH_kl-5p00_kt-1p00_c2-0p00",
     "VBFHH_CV_1p000_C2V_1p000_C3_1p000": "VBFHH_CV-1p000_C2V-1p000_C3-1p000",
 }
-
+weight_systematics = [
+    "weight_PreselSFUp",
+    "weight_PreselSFDown",
+    "weight_LoosePhoIDSFUp",
+    "weight_LoosePhoIDSFDown",
+    "weight_ElectronVetoSFDown",
+    "weight_ElectronVetoSFUp",
+    "weight_PileupDown",
+    "weight_PileupUp",
+    "weight_TriggerSFDown",
+    "weight_TriggerSFUp",
+    "weight_btagSFbc_correlatedDown",
+    "weight_btagSFbc_correlatedUp",
+    "weight_btagSFlight_correlatedDown",
+    "weight_btagSFlight_correlatedUp",
+    "weight_btagSFAK8Up",
+    "weight_btagSFAK8Down"
+]
 def load_samples(base_path, samples, classes, var_prefix, eras, no_syst_samples, data=False, syst="", save_all_columns=False, per_sample=False):
     """Load predictions and weights, scaling weights by luminosity.
 
@@ -43,6 +60,7 @@ def load_samples(base_path, samples, classes, var_prefix, eras, no_syst_samples,
                     os.path.join(base_path, "individual_samples", era, sample, syst))
             #candidate = os.path.join(path, "events.parquet")
             candidate = os.path.join(path, "events_boostedCat.parquet")
+            print(f"Checking for example parquet file at {candidate}")
             if os.path.exists(candidate):
                 example_file = candidate
                 break
@@ -59,7 +77,11 @@ def load_samples(base_path, samples, classes, var_prefix, eras, no_syst_samples,
     score_keys = [f"{cls}_score" for cls in classes]
 
     #selected_columns = ["lumi", "event", "run", "mass", dijet_mass_key]
-    selected_columns = ["lumi", "event", "run", "mass", dijet_mass_key, "is_boosted", "y_proba"]
+    selected_columns = [
+        # "lumi", 
+        # "event", 
+        # "run", 
+        "mass", "lead_mvaID", "sublead_mvaID", dijet_mass_key, "is_boosted"]
     columns_to_load = selected_columns + weight_columns  # weight_columns always included
 
     sample_dfs = {}  # (era, sample) -> DataFrame
@@ -72,6 +94,8 @@ def load_samples(base_path, samples, classes, var_prefix, eras, no_syst_samples,
         for sample in samples:
             if sample in no_syst_samples and syst != "":
                 continue
+            elif sample not in ["TTGG", "TTG_10_100", "TTG_100_200", "TTG_200", "GGJets", "DDQCDGJET"] and syst == "":
+                syst = 'nominal'
 
             if data:
                 path = os.path.join(base_path, "individual_samples_data", era, sample)
@@ -83,10 +107,15 @@ def load_samples(base_path, samples, classes, var_prefix, eras, no_syst_samples,
             if not os.path.exists(y_path):
                 print(f"Missing y for {path}. Skipping.")
                 continue
+            
+            if syst == "nominal" and sample not in ["TTGG", "TTG_10_100", "TTG_100_200", "TTG_200", "GGJets", "DDQCDGJET"]:
+                columns_to_load += weight_systematics + [f"weight_btagSFbc_{era}Down", f"weight_btagSFbc_{era}Up", f"weight_btagSFlight_{era}Down", f"weight_btagSFlight_{era}Up"]
 
             #events = ak.from_parquet(os.path.join(path, 'events.parquet'),
+            print(f"Loading events from {os.path.join(path, 'events_boostedCat.parquet')}")
             events = ak.from_parquet(os.path.join(path, 'events_boostedCat.parquet'),
                                      columns=None if save_all_columns else columns_to_load)
+            print([f for f in events.fields if 'weight_' in f])
             y = np.load(y_path)
 
             display_sample = sample
@@ -127,9 +156,14 @@ def load_samples(base_path, samples, classes, var_prefix, eras, no_syst_samples,
                     acc[col] = np.array(events[col])
                 for weight in weight_columns:
                     if weight in events.fields:
-                        acc[weight] = np.array(events[weight])
+                        acc[weight] = events[weight].to_numpy()
                     else:
                         acc[weight] = np.array(ak.ones_like(events['mass']))  # Default weight if not provided
+                if syst == "nominal" and sample not in ["TTGG", "TTG_10_100", "TTG_100_200", "TTG_200", "GGJets", "DDQCDGJET"]:
+                    for weight in weight_systematics + [f"weight_btagSFbc_{era}Down", f"weight_btagSFbc_{era}Up", f"weight_btagSFlight_{era}Down", f"weight_btagSFlight_{era}Up"]:
+                        if weight in events.fields:
+                            acc[weight.replace('weight_', 'weight_syst_')] = events[weight].to_numpy() #Some weights are missing for some years
+                        
 
             acc["score"] = list(y)
             for i, key in enumerate(score_keys):
@@ -157,7 +191,11 @@ def save_per_sample(sample_dfs, base_path, syst="", data=False, merged=False):
             parts.append(syst)
         out_dir = os.path.join(*parts)
         os.makedirs(out_dir, exist_ok=True)
-        sample_dfs.to_parquet(os.path.join(out_dir, "merged_scored_events.parquet"), engine='pyarrow')
+        if len(syst) == 0:
+            sample_dfs.to_parquet(os.path.join(out_dir, "merged_scored_events.parquet"), engine='pyarrow')
+        else:
+            snew = ''.join(syst.split('_')).replace('up', 'Up').replace('down', 'Down').replace('jer', 'Jer').replace('syst', 'Syst')
+            sample_dfs.to_parquet(os.path.join(out_dir, f"merged_scored_events_{snew}01.parquet"), engine='pyarrow')
     else:
         subdir = "scored_samples/data" if data else "scored_samples/sim"
         for (era, sample), df in sample_dfs.items():
