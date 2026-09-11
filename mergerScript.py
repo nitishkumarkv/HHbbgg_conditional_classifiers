@@ -161,8 +161,16 @@ def load_samples(base_path, samples, classes, var_prefix, eras, no_syst_samples,
                         acc[weight] = np.array(ak.ones_like(events['mass']))  # Default weight if not provided
                 if syst == "nominal" and sample not in ["TTGG", "TTG_10_100", "TTG_100_200", "TTG_200", "GGJets", "DDQCDGJET"]:
                     for weight in weight_systematics + [f"weight_btagSFbc_{era}Down", f"weight_btagSFbc_{era}Up", f"weight_btagSFlight_{era}Down", f"weight_btagSFlight_{era}Up"]:
+                        newname = weight.replace('weight_', 'weight_syst_')
+                        newname = newname.replace('2016preVFP', '_run2').replace('2016postVFP', '_run2').replace('2017', '_run2').replace('2018', '_run2')
+                        newname = newname.replace('2022preEE', '_run3').replace('2022postEE', '_run3').replace('2023preBPix', '_run3').replace('2023postBPix', '_run3').replace('2024', '_run3').replace('2025', '_run3')
+                        newname = newname.replace('2016', '_run2').replace('2022', '_run3').replace('2023', '_run3')
                         if weight in events.fields:
-                            acc[weight.replace('weight_', 'weight_syst_')] = events[weight].to_numpy() #Some weights are missing for some years
+                            acc[newname] = events[weight].to_numpy() #Some weights are missing for some years
+                        elif sample in ["TTGG", "TTG_10_100", "TTG_100_200", "TTG_200", "GGJets", "DDQCDGJET"]:
+                            acc[weight.replace('weight_', 'weight_syst_')] = np.ones_like(events.mass)
+                        else:
+                            acc[weight.replace('weight_', 'weight_syst_')] = np.ones_like(events.mass)  # Default weight if not provided
                         
 
             acc["score"] = list(y)
@@ -187,15 +195,13 @@ def save_per_sample(sample_dfs, base_path, syst="", data=False, merged=False):
     if merged:
         subdir = "scored_samples/merged"
         parts = [base_path, subdir]
-        if syst:
-            parts.append(syst)
         out_dir = os.path.join(*parts)
         os.makedirs(out_dir, exist_ok=True)
         if len(syst) == 0:
             sample_dfs.to_parquet(os.path.join(out_dir, "merged_scored_events.parquet"), engine='pyarrow')
         else:
-            snew = ''.join(syst.split('_')).replace('up', 'Up').replace('down', 'Down').replace('jer', 'Jer').replace('syst', 'Syst')
-            sample_dfs.to_parquet(os.path.join(out_dir, f"merged_scored_events_{snew}01.parquet"), engine='pyarrow')
+            snew = ''.join(syst.split('_')).replace('up', 'Up').replace('down', 'Down').replace('jer', 'Jer').replace('jec', 'Jec').replace('syst', 'Syst')
+            sample_dfs.to_parquet(os.path.join(out_dir, f"merged_scored_events_{snew}01sigma.parquet"), engine='pyarrow')
     else:
         subdir = "scored_samples/data" if data else "scored_samples/sim"
         for (era, sample), df in sample_dfs.items():
@@ -248,7 +254,7 @@ if __name__ == "__main__":
     for syst in systs:
         print(syst)
         result_MC = load_samples(base_path, samples, classes, var_prefix, mc_eras, no_syst_samples,
-                                 syst=syst, save_all_columns=save_all_columns_sim_systematics, per_sample=args.per_sample)
+                                syst=syst, save_all_columns=save_all_columns_sim_systematics, per_sample=args.per_sample)
         if args.per_sample:
             save_per_sample(result_MC, base_path, syst=syst)
         else:
